@@ -1,0 +1,124 @@
+<!doctype html>
+<!-- SOLUNA mic — koe-claude のリアルタイム送話ページ (iPhone/Mac/何でも)
+     送話: マイク → SL2 push (ch=koe) → Mac の koe-soluna-bridge → 声コマンド
+     受話: ch=koe-reply を listen → Claude の返答(本人声)がこの端末でも鳴る
+     URL: /mic?token=XXXX  (koe* チャンネルはトークン必須)
+     注意: iOS Safari のマイクは HTTPS か localhost のみ。LAN の http では
+     トンネル経由の https URL を使う。 -->
+<html lang="ja"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SOLUNA mic — koe-claude</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0b0f14; color:#dfe7ef; font-family:-apple-system,sans-serif;
+         min-height:100vh; display:flex; flex-direction:column; align-items:center;
+         justify-content:center; gap:22px; text-align:center; }
+  h1 { font-size:15px; font-weight:600; letter-spacing:.2em; color:#7fd4e4; margin:0; }
+  #orb { width:150px; height:150px; border-radius:50%; border:none; cursor:pointer;
+         background:radial-gradient(circle at 35% 35%, #1f3944, #0e1a20);
+         box-shadow:0 0 40px #0b2a33; color:#cfe; font-size:44px;
+         transition:box-shadow .15s, transform .1s; }
+  #orb.on { background:radial-gradient(circle at 35% 35%, #135b6e, #0b2f3a);
+            box-shadow:0 0 60px #17707f; }
+  #orb:active { transform:scale(.96); }
+  #st { font-size:13px; color:#8aa3b5; min-height:2.4em; white-space:pre-line; }
+  #lvl { width:220px; height:6px; border-radius:3px; background:#152029; overflow:hidden; }
+  #lvlbar { height:100%; width:0%; background:linear-gradient(90deg,#2ab3c9,#7fe0a8); }
+  .tag { font-size:11px; color:#57707f; }
+</style></head><body>
+<h1>SOLUNA × KOE-CLAUDE</h1>
+<button id="orb">🎙</button>
+<div id="lvl"><div id="lvlbar"></div></div>
+<div id="st">タップで送話開始</div>
+<div class="tag" id="tg"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const TOKEN = q.get("token") || "";
+const WSBASE = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+const st = t => document.getElementById("st").textContent = t;
+const orb = document.getElementById("orb");
+const lvlbar = document.getElementById("lvlbar");
+let ctx = null, running = false, seq = 0, pushWs = null, replyWs = null, playhead = 0;
+
+function sl2(pcm16) {                       // 22byteヘッダ + int16 PCM (mono)
+  const buf = new ArrayBuffer(22 + pcm16.length * 2);
+  const dv = new DataView(buf);
+  dv.setUint8(0, 0x53); dv.setUint8(1, 0x4c); dv.setUint8(2, 0x32); // "SL2"
+  dv.setUint8(3, 2); dv.setUint8(4, 1); dv.setUint8(5, 0);          // ver,nchan,pad
+  dv.setUint32(6, seq++ >>> 0, true);
+  dv.setUint32(10, pcm16.length, true);
+  dv.setFloat64(14, 0, true);                                        // playAt(server埋め)
+  new Int16Array(buf, 22).set(pcm16);
+  return buf;
+}
+
+async function start() {
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+  } catch (e) {
+    st("マイクが使えません: " + e.name +
+       (location.protocol === "http:" ? "\n(iPhoneはhttpsのURLで開いてください)" : ""));
+    return;
+  }
+  // 送話WS
+  pushWs = new WebSocket(`${WSBASE}/audio?role=push&ch=koe&token=${TOKEN}`);
+  pushWs.binaryType = "arraybuffer";
+  pushWs.onopen = () => {
+    pushWs.send(JSON.stringify({ t: "hello", map: ["L"], sr: ctx.sampleRate }));
+    st("🎙 送話中 — 「クロード、〜」で話しかけて");
+    document.getElementById("tg").textContent =
+      `sr=${ctx.sampleRate} → Mac (ch=koe)`;
+  };
+  pushWs.onclose = () => { if (running) st("接続が切れました。再タップで再開"); stop(); };
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(2048, 1, 1);
+  src.connect(proc); proc.connect(ctx.destination);
+  proc.onaudioprocess = e => {
+    if (!running || !pushWs || pushWs.readyState !== 1) return;
+    const f32 = e.inputBuffer.getChannelData(0);
+    let peak = 0;
+    const i16 = new Int16Array(f32.length);
+    for (let i = 0; i < f32.length; i++) {
+      const v = Math.max(-1, Math.min(1, f32[i]));
+      i16[i] = v * 32767; peak = Math.max(peak, Math.abs(v));
+    }
+    lvlbar.style.width = Math.min(100, peak * 140) + "%";
+    pushWs.send(sl2(i16));
+  };
+  // 受話WS: Claudeの返答(本人声)がこの端末でも鳴る
+  replyWs = new WebSocket(`${WSBASE}/audio?role=listen&ch=koe-reply&pos=C&token=${TOKEN}`);
+  replyWs.binaryType = "arraybuffer";
+  replyWs.onmessage = ev => {
+    if (typeof ev.data === "string") return;
+    const dv = new DataView(ev.data);
+    const nsamp = dv.getUint32(10, true);
+    const i16 = new Int16Array(ev.data, 22, nsamp);
+    const f32 = new Float32Array(nsamp);
+    for (let i = 0; i < nsamp; i++) f32[i] = i16[i] / 32768;
+    const buf = ctx.createBuffer(1, nsamp, 48000);
+    buf.copyToChannel(f32, 0);
+    const s = ctx.createBufferSource();
+    s.buffer = buf; s.connect(ctx.destination);
+    const t = Math.max(ctx.currentTime + 0.08, playhead);
+    s.start(t); playhead = t + buf.duration;
+  };
+  running = true;
+  orb.classList.add("on");
+  window._cleanup = () => { stream.getTracks().forEach(t => t.stop()); proc.disconnect(); src.disconnect(); };
+}
+
+function stop() {
+  running = false; orb.classList.remove("on"); lvlbar.style.width = "0%";
+  if (window._cleanup) { window._cleanup(); window._cleanup = null; }
+  if (pushWs) { try { pushWs.close(); } catch (e) {} pushWs = null; }
+  if (replyWs) { try { replyWs.close(); } catch (e) {} replyWs = null; }
+  st("停止中 — タップで送話開始");
+}
+
+orb.onclick = () => running ? stop() : start();
+</script></body></html>
