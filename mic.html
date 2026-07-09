@@ -28,18 +28,62 @@
   .tag { font-size:11px; color:#57707f; }
 </style></head><body>
 <h1>SOLUNA × KOE-CLAUDE</h1>
-<button id="orb">🎙</button>
-<div id="lvl"><div id="lvlbar"></div></div>
-<div id="st">タップで送話開始</div>
+<div id="setup" style="display:none;">
+  <div style="display:flex; flex-direction:column; gap:10px; width:240px;">
+    <input id="inId" placeholder="なまえ / ID (例: kenny)" autocapitalize="off"
+           style="padding:12px; border-radius:10px; border:1px solid #24404d; background:#101a21; color:#dfe7ef; font-size:16px;">
+    <input id="inTok" placeholder="アクセスキー (招待リンクなら不要)" autocapitalize="off"
+           style="padding:12px; border-radius:10px; border:1px solid #24404d; background:#101a21; color:#dfe7ef; font-size:16px;">
+    <button id="go" style="padding:13px; border-radius:10px; border:none; background:#17707f; color:#eaffff; font-size:16px;">はじめる</button>
+  </div>
+</div>
+<button id="orb" style="display:none;">🎙</button>
+<div id="lvl" style="display:none;"><div id="lvlbar"></div></div>
+<div id="st">読み込み中…</div>
 <div class="tag" id="tg"></div>
+<div class="tag"><a id="logout" href="#" style="color:#3d5a68; display:none;">ログアウト(ID/キーを消す)</a></div>
 <script>
 const q = new URLSearchParams(location.search);
-const TOKEN = q.get("token") || "";
+// 招待リンク(?token=)で開いたらキーを保存 → 以後は素のURLでもログイン済み
+if (q.get("token")) localStorage.setItem("koeTok", q.get("token"));
+if (q.get("id")) localStorage.setItem("koeId", q.get("id"));
+let TOKEN = localStorage.getItem("koeTok") || "";
+let MYID = localStorage.getItem("koeId") || "";
 const WSBASE = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
 const st = t => document.getElementById("st").textContent = t;
 const orb = document.getElementById("orb");
 const lvlbar = document.getElementById("lvlbar");
+const $ = id => document.getElementById(id);
 let ctx = null, running = false, seq = 0, pushWs = null, replyWs = null, playhead = 0;
+
+function ui() {
+  const ready = TOKEN && MYID;
+  $("setup").style.display = ready ? "none" : "flex";
+  orb.style.display = ready ? "" : "none";
+  $("lvl").style.display = ready ? "" : "none";
+  $("logout").style.display = ready ? "" : "none";
+  if (ready) {
+    st(`${MYID} でログイン中 — タップで送話開始`);
+  } else {
+    st("はじめまして。なまえを入れてください");
+    $("inTok").style.display = TOKEN ? "none" : "";
+    if (MYID) $("inId").value = MYID;
+  }
+}
+$("go").onclick = () => {
+  const id = $("inId").value.trim();
+  const tok = TOKEN || $("inTok").value.trim();
+  if (!id) { st("なまえ / ID を入れてください"); return; }
+  if (!tok) { st("アクセスキーが必要です(招待リンクで開くか入力)"); return; }
+  MYID = id; TOKEN = tok;
+  localStorage.setItem("koeId", id); localStorage.setItem("koeTok", tok);
+  ui(); start();                       // タップ起点なのでマイク許可もこの流れで出る
+};
+$("logout").onclick = e => {
+  e.preventDefault(); stop();
+  localStorage.removeItem("koeId"); localStorage.removeItem("koeTok");
+  MYID = ""; TOKEN = ""; ui();
+};
 
 function sl2(pcm16) {                       // 22byteヘッダ + int16 PCM (mono)
   const buf = new ArrayBuffer(22 + pcm16.length * 2);
@@ -65,12 +109,12 @@ async function start() {
        (location.protocol === "http:" ? "\n(iPhoneはhttpsのURLで開いてください)" : ""));
     return;
   }
-  // 送話WS
-  pushWs = new WebSocket(`${WSBASE}/audio?role=push&ch=koe&token=${TOKEN}`);
+  // 送話WS (node=IDで誰の声か分かるように)
+  pushWs = new WebSocket(`${WSBASE}/audio?role=push&ch=koe&token=${TOKEN}&node=${encodeURIComponent(MYID)}`);
   pushWs.binaryType = "arraybuffer";
   pushWs.onopen = () => {
     pushWs.send(JSON.stringify({ t: "hello", map: ["L"], sr: ctx.sampleRate }));
-    st("🎙 送話中 — 「クロード、〜」で話しかけて");
+    st(`🎙 ${MYID} 送話中 — 「クロード、〜」で話しかけて`);
     document.getElementById("tg").textContent =
       `sr=${ctx.sampleRate} → Mac (ch=koe)`;
   };
@@ -121,4 +165,5 @@ function stop() {
 }
 
 orb.onclick = () => running ? stop() : start();
+ui();
 </script></body></html>
