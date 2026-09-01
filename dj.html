@@ -62,7 +62,7 @@
       <input type="file" id="file" accept="audio/*">
     </div>
     <div class="row">
-      <div><label>SERVER(wss://…)</label><input id="server" placeholder="wss://host 例: 空欄=このホスト"></div>
+      <div><label>SERVER</label><input id="server" placeholder="空欄 = このホストに配信"></div>
     </div>
     <div class="row mt">
       <div><label>CHANNEL</label><input id="ch" value="festival"></div>
@@ -85,7 +85,7 @@
 
 <script>
 const $=id=>document.getElementById(id);
-let ctx=null, ws=null, running=false, seq=0, srcNode=null, procNode=null, mediaEl=null, stream=null;
+let ctx=null, ws=null, running=false, seq=0, srcNode=null, procNode=null, mediaEl=null, stream=null, wakeLock=null;
 $('server').value = localStorage.getItem('dj_server')||'';
 $('ch').value = localStorage.getItem('dj_ch')||'festival';
 $('tok').value = localStorage.getItem('dj_tok')||'';
@@ -118,6 +118,7 @@ async function start(){
   try{
     ctx = new (window.AudioContext||window.webkitAudioContext)();
     await ctx.resume();
+    try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
     if (mode==='mic'){
       stream = await navigator.mediaDevices.getUserMedia({audio:{
         echoCancellation:false, noiseSuppression:false, autoGainControl:false}, video:false});
@@ -174,6 +175,7 @@ function reconnect(){ stopAudioKeep(); start(); }
 function stopAudioKeep(){ try{ws&&ws.close()}catch(e){} ws=null; }
 function stop(){
   setLive(false);
+  try{ wakeLock?.release(); }catch(e){} wakeLock=null;
   try{ws&&ws.close()}catch(e){} ws=null;
   try{procNode&&procNode.disconnect()}catch(e){}
   try{srcNode&&srcNode.disconnect()}catch(e){}
@@ -184,6 +186,10 @@ function stop(){
 }
 $('go').onclick=start;
 $('stopBtn').onclick=stop;
+document.addEventListener('visibilitychange', ()=>{   // 画面復帰時にaudio/wakeLock回復
+  if (!document.hidden && running && ctx){ ctx.resume();
+    navigator.wakeLock?.request('screen').then(w=>wakeLock=w).catch(()=>{}); }
+});
 setInterval(async ()=>{
   try{
     const base = $('server').value.trim().replace(/^wss/,'https').replace(/^ws(?!s)/,'http') || '';

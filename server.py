@@ -395,6 +395,10 @@ async def dj_page(request):
     return web.FileResponse(os.path.join(HERE, "dj.html"))
 
 
+async def favicon(request):
+    return web.FileResponse(os.path.join(HERE, "icons", "icon-192.png"))
+
+
 async def manifest(request):
     return web.FileResponse(os.path.join(HERE, "manifest.webmanifest"))
 
@@ -416,6 +420,7 @@ def main():
         web.get("/", index),
         web.get("/admin", admin_page),
         web.get("/dj", dj_page),
+        web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),
         web.get("/sw.js", sw),
         web.get("/mic", mic),

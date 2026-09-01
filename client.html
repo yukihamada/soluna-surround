@@ -56,14 +56,19 @@
   <div class="picker" id="picker"></div>
   <button class="main" id="btn">▶ 音に参加する</button>
   <div class="vol">🔉 <input type="range" id="vol" min="0" max="100" value="80"> 🔊</div>
-  <div class="grid">
-    <span><span class="dot" id="dot"></span><span data-i18n="status">状態</span></span><b id="st">停止中</b>
-    <span data-i18n="zoneDelay">ゾーン遅延</span><b id="dly">—</b>
-    <span data-i18n="clock">クロック誤差</span><b id="off">—</b>
-    <span>RTT</span><b id="rtt">—</b>
-    <span data-i18n="cueL">キュー</span><b id="cue">—</b>
-    <span data-i18n="liveL">ライブ受信</span><b id="fr">0</b>
+  <div style="display:flex;align-items:center;gap:8px;font-size:.78rem;color:rgba(244,232,208,.6)">
+    <span class="dot" id="dot"></span><b id="st" style="color:#f4e8d0">停止中</b>
   </div>
+  <details style="font-size:.72rem;color:rgba(244,232,208,.45)">
+    <summary style="cursor:pointer;list-style:none" data-i18n="details">詳細</summary>
+    <div class="grid" style="margin-top:8px">
+      <span data-i18n="zoneDelay">ゾーン遅延</span><b id="dly">—</b>
+      <span data-i18n="clock">クロック誤差</span><b id="off">—</b>
+      <span>RTT</span><b id="rtt">—</b>
+      <span data-i18n="cueL">キュー</span><b id="cue">—</b>
+      <span data-i18n="liveL">ライブ受信</span><b id="fr">0</b>
+    </div>
+  </details>
   <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
 
   <div id="lightLayer"></div>
@@ -81,12 +86,12 @@ const I18N = {
         clock:'クロック誤差', cueL:'キュー', liveL:'ライブ受信',
         hint:'近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。',
         join:'▶ 音に参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
-        ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける' },
+        ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'CLOCK OFFSET', cueL:'CUE', liveL:'LIVE FRAMES',
         hint:'Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
         join:'▶ JOIN THE SOUND', leave:'■ LEAVE', idle:'idle', conn:'connected',
-        ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE' },
+        ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details' },
 };
 const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
 const T = I18N[LANG];
@@ -96,7 +101,9 @@ document.querySelectorAll('[data-i18n]').forEach(el => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 let ZONE = (qs.get('zone') || qs.get('pos') || 'A').toUpperCase();
-let zones = {A:15};                       // name -> delay_ms (server config で上書き)
+// 接続前でもQRのゾーンを選べるよう、サーバ既定と同じA–Fを初期値に持つ
+// (delay_ms = 距離/343*1000 + 15ms。接続後はサーバconfigが正)
+let zones = {A:15.0, B:58.7, C:102.5, D:146.2, E:189.9, F:248.2};
 let baseMs = 0;                           // ハウスPA位相合わせの一括トリム(config)
 const customD = qs.get('d');              // ?d=<m> 距離を直接指定(スタッフ用)
 
