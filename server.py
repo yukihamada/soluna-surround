@@ -387,6 +387,23 @@ async def api_zones(request):
     return web.json_response({"ok": True, "zones": state["zones"]})
 
 
+async def api_upload(request):
+    """FOHの音源/映像アップロード → /assets/<name> で配信。body=生バイト。
+    注意: コンテナFSなので再デプロイで消える(本番当日は開演前に上げ直す)。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = os.path.basename(request.query.get("name", "").strip())
+    if not name or name.startswith("."):
+        raise web.HTTPBadRequest(text="?name=<filename> required")
+    data = await request.read()
+    if not data:
+        raise web.HTTPBadRequest(text="empty body")
+    os.makedirs(ASSETS, exist_ok=True)
+    with open(os.path.join(ASSETS, name), "wb") as f:
+        f.write(data)
+    return web.json_response({"ok": True, "url": f"/assets/{name}", "bytes": len(data)})
+
+
 async def api_assets(request):
     """assets/ 配下の音源一覧(キューコンソールのファイルピッカー用)。"""
     if not _admin_ok(request):
@@ -460,7 +477,7 @@ async def mic(request):
 def main():
     port = int(os.environ.get("PORT", "8900"))
     os.makedirs(ASSETS, exist_ok=True)
-    app = web.Application()
+    app = web.Application(client_max_size=256 * 1024 * 1024)   # 映像アップロード対応
     app.add_routes([
         web.get("/", index),
         web.get("/screen", index),   # プロジェクター/LEDウォール用(同じclient・screenモード)
@@ -478,6 +495,7 @@ def main():
         web.post("/api/light", api_light),
         web.post("/api/geo", api_geo),
         web.get("/api/assets", api_assets),
+        web.post("/api/upload", api_upload),
         web.static("/assets", ASSETS),
         web.static("/icons", os.path.join(HERE, "icons")),
     ])
