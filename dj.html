@@ -4,45 +4,70 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SOLUNA DJ</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
   :root{--ink:#0a0507;--panel:#161014;--line:#2c2320;--txt:#f2e7d3;--dim:#9d8d76;
-        --gold:#d4af37;--gold2:#f0d47a;--ok:#4ade80;--bad:#f87171}
+        --gold:#d4af37;--gold2:#f0d47a;--ok:#4ade80;--bad:#f87171;
+        --sans:"Zen Kaku Gothic New","Hiragino Sans",system-ui,sans-serif;
+        --mono:"IBM Plex Mono",ui-monospace,monospace}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{background:var(--ink);color:var(--txt);font-family:system-ui,-apple-system,sans-serif;
-       font-size:15px;max-width:520px;margin:0 auto;padding:20px 18px 80px}
-  .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-variant-numeric:tabular-nums}
-  h1{font-size:.75rem;letter-spacing:.34em;color:var(--gold);font-weight:800;text-align:center;
-     margin:14px 0 4px}
-  .sub{text-align:center;font-size:.72rem;color:var(--dim);margin-bottom:18px}
-  section{background:var(--panel);border:1px solid var(--line);border-radius:16px;
-     padding:16px;margin-top:14px}
-  h2{font-size:.64rem;letter-spacing:.22em;color:var(--gold);font-weight:800;margin-bottom:12px}
-  label{font-size:.62rem;letter-spacing:.1em;color:var(--dim);display:block;margin-bottom:4px}
-  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
-     background:var(--ink);color:var(--txt);font-size:.95rem}
+  body{background:var(--ink);color:var(--txt);font-family:var(--sans);
+       font-size:15px;max-width:520px;margin:0 auto;padding:20px 18px 80px;
+       transition:background .6s}
+  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
+       background:radial-gradient(60% 40% at 50% -8%, rgba(212,175,55,.13), transparent 70%);
+       transition:background .6s}
+  body.onair-bg::before{
+       background:radial-gradient(60% 40% at 50% -8%, rgba(248,113,113,.14), transparent 70%)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  h1{font-size:.75rem;letter-spacing:.4em;color:var(--gold);font-weight:700;text-align:center;
+     margin:14px 0 4px;font-family:var(--mono);text-indent:.4em}
+  .sub{text-align:center;font-size:.72rem;color:var(--dim);margin-bottom:18px;letter-spacing:.06em}
+  section{background:linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--panel);
+     border:1px solid var(--line);border-radius:18px;padding:18px;margin-top:14px;
+     box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  h2{font-size:.62rem;letter-spacing:.26em;color:var(--gold);font-weight:700;margin-bottom:14px;
+     font-family:var(--mono)}
+  label{font-size:.62rem;letter-spacing:.1em;color:var(--dim);display:block;margin-bottom:5px}
+  input,select{width:100%;padding:12px 13px;border-radius:11px;border:1px solid var(--line);
+     background:var(--ink);color:var(--txt);font-size:.95rem;font-family:var(--sans);
+     transition:border-color .2s}
+  input:focus,select:focus{outline:none;border-color:rgba(212,175,55,.55)}
   .row{display:flex;gap:10px}.row>div{flex:1}
   .row.mt{margin-top:12px}
-  button{border:none;border-radius:12px;padding:14px;font-weight:800;cursor:pointer;
-     font-size:.9rem;background:#241b17;color:var(--txt);border:1px solid var(--line);width:100%}
-  button:active{transform:scale(.98)}
-  .gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none}
-  .red{background:rgba(248,113,113,.15);color:var(--bad);border:1px solid rgba(248,113,113,.3)}
-  .onair{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0 12px}
-  .onair .dot{width:12px;height:12px;border-radius:50%;background:#444}
-  .onair.live .dot{background:var(--bad);box-shadow:0 0 14px var(--bad);animation:bl 1.2s infinite}
-  @keyframes bl{50%{opacity:.4}}
-  .onair b{font-size:1.05rem;letter-spacing:.18em}
-  #meter{height:10px;border-radius:5px;background:var(--ink);border:1px solid var(--line);
-     overflow:hidden;margin-top:12px}
-  #meterBar{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--gold),var(--bad))}
-  .stat{display:flex;justify-content:space-between;font-size:.74rem;color:var(--dim);margin-top:10px}
+  button{border:none;border-radius:13px;padding:14px;font-weight:700;cursor:pointer;
+     font-size:.9rem;background:#221a16;color:var(--txt);border:1px solid var(--line);width:100%;
+     font-family:var(--sans);letter-spacing:.04em;transition:transform .12s ease}
+  button:active{transform:scale(.975)}
+  .gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none;
+     box-shadow:0 5px 24px rgba(212,175,55,.3), inset 0 1px 0 rgba(255,255,255,.35)}
+  .red{background:rgba(248,113,113,.13);color:var(--bad);border:1px solid rgba(248,113,113,.3)}
+  .onair{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 14px}
+  .onair .dot{width:12px;height:12px;border-radius:50%;background:#3d3531;transition:background .3s}
+  .onair.live .dot{background:var(--bad);box-shadow:0 0 16px var(--bad)}
+  @media (prefers-reduced-motion:no-preference){
+    .onair.live .dot{animation:bl 1.2s infinite}
+    @keyframes bl{50%{opacity:.35}}
+  }
+  .onair b{font-size:1.1rem;letter-spacing:.26em;font-family:var(--mono);text-indent:.26em}
+  .onair.live b{color:var(--bad);text-shadow:0 0 22px rgba(248,113,113,.5)}
+  #meter{height:12px;border-radius:6px;background:var(--ink);border:1px solid var(--line);
+     overflow:hidden;margin-top:14px}
+  #meterBar{height:100%;width:0%;border-radius:6px;
+     background:linear-gradient(90deg,var(--ok) 60%,var(--gold) 82%,var(--bad));
+     transition:width .06s linear}
+  .stat{display:flex;justify-content:space-between;font-size:.72rem;color:var(--dim);margin-top:12px;
+     font-family:var(--mono)}
   .stat b{color:var(--txt)}
-  .seg{display:flex;gap:8px;margin-bottom:12px}
-  .seg button{flex:1;padding:11px;font-size:.82rem}
-  .seg button.on{background:var(--gold);color:var(--ink);border-color:var(--gold)}
-  .hint{font-size:.68rem;color:var(--dim);line-height:1.7;margin-top:10px}
-  .check{display:flex;align-items:center;gap:10px;font-size:.8rem;margin-top:12px;color:var(--txt)}
-  .check input{width:auto}
+  .seg{display:flex;gap:0;margin-bottom:14px;border:1px solid var(--line);border-radius:13px;
+     overflow:hidden;background:var(--ink)}
+  .seg button{flex:1;padding:12px;font-size:.84rem;border:none;border-radius:0;background:none}
+  .seg button.on{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);
+     font-weight:700}
+  .hint{font-size:.68rem;color:var(--dim);line-height:1.8;margin-top:12px}
+  .check{display:flex;align-items:center;gap:10px;font-size:.8rem;margin-top:14px;color:var(--txt)}
+  .check input{width:18px;height:18px;accent-color:var(--gold)}
 </style>
 </head>
 <body>
@@ -129,6 +154,7 @@ function sl2(pcm16){
 function setLive(on){
   running=on;
   $('onair').classList.toggle('live',on);
+  document.body.classList.toggle('onair-bg',on);
   $('onairTxt').textContent=on?'ON AIR':'OFF AIR';
   $('go').style.display=on?'none':'';
   $('stopBtn').style.display=on?'':'none';
