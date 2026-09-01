@@ -262,11 +262,13 @@ async def api_cue(request):
         return web.json_response({"ok": True, "stopped": True,
                                   "listeners": len(state["listeners"])})
 
-    url = body.get("url")
-    if not url:
-        raise web.HTTPBadRequest(text="url required")
+    url = body.get("url")            # 音声(WebAudio=サンプル精度)
+    video = body.get("video")        # 映像(video要素=クロックにドリフト補正で追従)
+    if not url and not video:
+        raise web.HTTPBadRequest(text="url (audio) and/or video required")
 
     if body.get("preload"):
+        url = url or video
         # 事前配布: 全端末がDL/デコードだけ済ませる(再生しない)。本番のFIREは
         # 一斉DLバーストなしで頭から揃う。開演30分前に打っておくのが正。
         state["preload"] = url
@@ -279,11 +281,14 @@ async def api_cue(request):
         at = time.time() + float(body.get("lead") or CUE_LEAD)
     cue = {
         "id": body.get("id") or f"cue-{int(at * 1000)}",
-        "url": url,
         "at": at,                                # server-epoch seconds (sample 0)
         "gain": float(body.get("gain", 1.0)),
         "loop": bool(body.get("loop", False)),
     }
+    if url:
+        cue["url"] = url
+    if video:
+        cue["video"] = video
     state["cue"] = cue
     await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
     return web.json_response({"ok": True, "cue": cue,
@@ -458,6 +463,7 @@ def main():
     app = web.Application()
     app.add_routes([
         web.get("/", index),
+        web.get("/screen", index),   # プロジェクター/LEDウォール用(同じclient・screenモード)
         web.get("/admin", admin_page),
         web.get("/dj", dj_page),
         web.get("/favicon.ico", favicon),

@@ -89,6 +89,21 @@
   #lightLayer{position:fixed;inset:0;z-index:99;display:none;background:#000;
        transition:none;touch-action:manipulation}
   #lightLayer.on{display:block}
+  /* 動画CUE: ライトの下のレイヤー。スクリーンモードではcoverで満たす */
+  #videoLayer{position:fixed;inset:0;z-index:98;display:none;width:100%;height:100%;
+       background:#000;object-fit:contain}
+  #videoLayer.on{display:block}
+  body.screen #videoLayer{object-fit:cover}
+  #vHint{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:101;
+       display:none;background:rgba(10,5,7,.75);border:1px solid rgba(212,175,55,.4);
+       border-radius:99px;padding:10px 20px;font-size:.85rem;color:#f4e8d0}
+  #vHint.show{display:block}
+  /* スクリーンモード(/screen): プロジェクター/LEDウォール向け。UIを消し黒に徹する */
+  body.screen{cursor:none}
+  body.screen.started .orb, body.screen.started .picker, body.screen.started .vol,
+  body.screen.started details, body.screen.started .hint, body.screen.started h1,
+  body.screen.started .zonelabel, body.screen.started .main{display:none}
+  body.screen .main{min-width:300px;padding:24px 60px;font-size:1.25rem}
   #lightHud{position:fixed;left:0;right:0;bottom:34px;z-index:100;display:none;
        text-align:center;pointer-events:none}
   #lightHud.show{display:block}
@@ -124,6 +139,8 @@
   <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
   <div class="hint" data-i18n="hint2">音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。</div>
 
+  <video id="videoLayer" playsinline webkit-playsinline preload="auto"></video>
+  <div id="vHint">🔇 タップで音を出す</div>
   <div id="lightLayer"></div>
   <div id="lightHud"><span class="chip">ZONE <b id="hudZone">A</b> <span id="hudPat"></span>
     <button id="lightFull" style="pointer-events:auto;border:none;background:rgba(212,175,55,.2);color:#d4af37;border-radius:99px;padding:8px 14px;font-weight:800;font-size:.8rem">⛶</button>
@@ -159,6 +176,21 @@ document.querySelectorAll('[data-i18n]').forEach(el => {
   el.textContent = T[el.dataset.i18n] || el.textContent;
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
+
+// ---- スクリーンモード(/screen): プロジェクター/LEDウォール向け ----------------
+// 開始後はUIを消して黒に徹し、動画はcoverで満たす。マウスを動かすと3秒だけHUD。
+const SCREEN = location.pathname === '/screen' || qs.get('screen') === '1';
+if (SCREEN){
+  document.body.classList.add('screen');
+  let hudTimer = null;
+  document.addEventListener('mousemove', ()=>{
+    document.body.style.cursor = 'auto';
+    $('lightHud').classList.add('show');
+    clearTimeout(hudTimer);
+    hudTimer = setTimeout(()=>{ $('lightHud').classList.remove('show');
+      document.body.style.cursor = ''; }, 3000);
+  });
+}
 
 let ZONE = (qs.get('zone') || qs.get('pos') || 'A').toUpperCase();
 // 接続前でもQRのゾーンを選べるよう、サーバ既定と同じA–Fを初期値に持つ
@@ -292,6 +324,71 @@ function renderZones(){
   $('dly').textContent = delayMs().toFixed(1)+'ms';
 }
 
+// ---- VIDEO CUE: 映像をクロックへドリフト補正で追従 ----------------------------
+// 音は WebAudio(サンプル精度)、映像は video.currentTime を同期時刻と照らして
+// |ズレ|>0.5s=ハードシーク / それ以下=playbackRate(±6%)で滑らかに吸い付ける。
+// 音声付きcueと同時なら映像はミュート(音はWebAudio側が正)。
+const vEl = $('videoLayer');
+let videoCue=null, videoRAF=0, videoBlobUrl=null, videoBlobSrc=null;
+const isVideoUrl = u => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u||'');
+async function loadVideo(url){
+  if (videoBlobSrc === url && videoBlobUrl) return;
+  $('cue').textContent = T.ready;
+  const res = await fetch(url);
+  const blob = await res.blob();
+  if (videoBlobUrl) URL.revokeObjectURL(videoBlobUrl);
+  videoBlobUrl = URL.createObjectURL(blob); videoBlobSrc = url;
+  vEl.src = videoBlobUrl;
+  await new Promise(r=>{ vEl.onloadedmetadata=r; vEl.onerror=r; });
+}
+function videoTargetSec(){
+  const now = serverNowSec(); if (now===null || !videoCue) return null;
+  let t = now - videoCue.at - delayMs()/1000;
+  if (videoCue.loop && vEl.duration > 0) t = ((t % vEl.duration)+vEl.duration)%vEl.duration;
+  return t;
+}
+function videoTick(){
+  if (!videoCue){ videoRAF=0; return; }
+  const t = videoTargetSec();
+  if (t !== null){
+    if (t < 0){                                   // 開始前: 頭で待機
+      if (!vEl.paused) vEl.pause();
+      if (Math.abs(vEl.currentTime) > 0.05) vEl.currentTime = 0;
+    } else if (!videoCue.loop && vEl.duration > 0 && t >= vEl.duration){
+      stopVideo(); return;
+    } else {
+      const diff = vEl.currentTime - t;
+      if (Math.abs(diff) > 0.5) vEl.currentTime = t + 0.08;   // シーク時間ぶん先へ
+      else vEl.playbackRate = Math.max(0.94, Math.min(1.06, 1 - diff*0.5));
+      if (vEl.paused){
+        vEl.play().catch(()=>{                    // iOSの無音制約 → ミュートで再生継続
+          if (!vEl.muted){ vEl.muted = true; $('vHint').classList.add('show');
+            vEl.play().catch(()=>{}); }
+        });
+      }
+    }
+  }
+  videoRAF = requestAnimationFrame(videoTick);
+}
+function armVideo(m){
+  videoCue = m;
+  vEl.muted = !!m.url;                            // 音声cue併用時は映像側はミュート
+  vEl.classList.add('on');
+  if (!videoRAF) videoTick();
+}
+function stopVideo(){
+  videoCue=null;
+  if (videoRAF){ cancelAnimationFrame(videoRAF); videoRAF=0; }
+  try{ vEl.pause(); }catch(e){}
+  vEl.classList.remove('on');
+  $('vHint').classList.remove('show');
+}
+vEl.addEventListener('click', ()=>{
+  if (vEl.muted && videoCue && !videoCue.url){ vEl.muted=false; $('vHint').classList.remove('show'); }
+  else $('lightHud').classList.toggle('show');
+});
+$('vHint').onclick = ()=>{ vEl.muted=false; $('vHint').classList.remove('show'); };
+
 // ---- CUE MODE: 事前配布ファイルを playAt で一斉スケジュール -------------------
 async function loadTrack(url){
   if (cueBufUrl === url && cueBuf) return;
@@ -303,18 +400,24 @@ async function loadTrack(url){
   if (light) energyEnv = buildEnergyEnv(cueBuf);
 }
 async function onPreload(m){                    // 開演前DL: 再生はしない
-  try{ await loadTrack(m.url); $('cue').textContent = T.preloaded; }
-  catch(e){ $('cue').textContent = T.fail; }
+  try{
+    if (isVideoUrl(m.url)) await loadVideo(m.url); else await loadTrack(m.url);
+    $('cue').textContent = T.preloaded;
+  }catch(e){ $('cue').textContent = T.fail; }
 }
 async function onCue(m){
   $('cue').textContent = T.ready;
   pendingCue = m;
-  await loadTrack(m.url);
   lastCueId = m.id;
-  if (offsetMs !== null) armCue();
+  if (m.video){ await loadVideo(m.video); armVideo(m); }
+  else stopVideo();
+  if (m.url){
+    await loadTrack(m.url);
+    if (offsetMs !== null) armCue();
+  }
 }
 function armCue(){
-  const m = pendingCue; if (!m || !cueBuf || !ctx) return;
+  const m = pendingCue; if (!m || !m.url || !cueBuf || !ctx) return;
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
   const src = ctx.createBufferSource();
   src.buffer = cueBuf; src.loop = !!m.loop;
@@ -345,6 +448,7 @@ function armCue(){
 function onCueStop(){
   pendingCue=null; lastCueId=null;
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
+  stopVideo();
   $('cue').textContent = '—';
 }
 
@@ -514,7 +618,8 @@ function setLive(on){
 // 状態を感情で伝える: 接続中→「音を待っています」/ 鳴っている間は「♪ 再生中」
 setInterval(()=>{
   if (!active) return;
-  const playing = (cueSrc && pendingCue) || (performance.now() - lastFrameT < 1500);
+  const playing = (cueSrc && pendingCue) || (videoCue && !vEl.paused)
+    || (performance.now() - lastFrameT < 1500);
   $('st').textContent = playing ? T.playing : T.waiting;
 }, 1000);
 
@@ -529,6 +634,10 @@ async function start(){
   active = true; frames=0; $('fr').textContent=0;
   connect();
   if (stageGeo && autoZone) startGeoWatch();   // 参加タップ=ユーザー起点で位置許可を出す
+  if (SCREEN){
+    document.body.classList.add('started');
+    document.documentElement.requestFullscreen?.().catch(()=>{});
+  }
 }
 function stop(){
   active=false; onCueStop(); onLightStop(); stopGeoWatch();
@@ -536,6 +645,7 @@ function stop(){
   if(ctx){try{ctx.close()}catch(e){}} ctx=null;
   try{ wakeLock?.release(); }catch(e){}
   clearInterval(pingTimer);
+  document.body.classList.remove('started');
   setLive(false);
 }
 $('btn').onclick = ()=> active ? stop() : start();

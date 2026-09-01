@@ -136,10 +136,14 @@
     <h2>CUE <small>事前配布音源の一斉再生(スマホ層)</small></h2>
     <div class="assets" id="assets"><div class="asset ghost">読み込み中…(TOKENを入れると一覧が出ます)</div></div>
     <div class="row">
-      <div><label>URL(手入力可)</label><input id="url" type="text" style="width:240px" placeholder="/assets/opening.mp3"></div>
+      <div><label>AUDIO URL(手入力可)</label><input id="url" type="text" style="width:240px" placeholder="/assets/opening.mp3"></div>
       <div><label>LEAD s</label><input id="clead" type="number" value="5" min="3" style="width:70px"></div>
       <div><label>GAIN</label><input id="gain" type="number" value="1.0" step="0.1" min="0" max="2" style="width:70px"></div>
       <div><label>LOOP</label><select id="loop"><option value="">no</option><option value="1">yes</option></select></div>
+    </div>
+    <div class="row mt">
+      <div><label>VIDEO URL(任意 — 全端末+/screenで映像も同期。音声と併用時は映像側ミュート)</label>
+      <input id="vurl" type="text" placeholder="/assets/opening.mp4"></div>
     </div>
     <div class="row mt">
       <button id="preload" style="flex:1">📥 PRELOAD — 先に全端末へ配布(再生しない)</button>
@@ -274,9 +278,13 @@ async function loadAssets(){
     box.appendChild(d);
   }
 }
-$('preload').onclick = ()=> call('/api/cue', {url: $('url').value, preload:true});
+$('preload').onclick = async ()=>{
+  for (const u of [$('url').value, $('vurl').value])
+    if (u) await call('/api/cue', {url: u, preload:true});
+};
 $('fire').onclick = ()=> call('/api/cue', {
-  url: $('url').value, lead: parseFloat($('clead').value||5),
+  url: $('url').value || undefined, video: $('vurl').value || undefined,
+  lead: parseFloat($('clead').value||5),
   gain: parseFloat($('gain').value||1), loop: !!$('loop').value });
 // 本番の音/光を落とすボタンは誤タップ1発で死なないよう確認を挟む
 $('stop').onclick = ()=>{ if (confirm('全端末のキュー再生を停止します。OK?')) call('/api/cue', {stop:true}); };
