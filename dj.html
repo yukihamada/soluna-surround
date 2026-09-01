@@ -95,7 +95,7 @@
     </div>
     <div class="row mt">
       <div><label>CHANNEL</label><input id="ch" value="festival"></div>
-      <div><label>TOKEN(koe*等のみ必須)</label><input id="tok" type="password" placeholder="通常は空欄"></div>
+      <div><label>TOKEN(本番サーバでは必須)</label><input id="tok" type="password" placeholder="主催者から受け取る"></div>
     </div>
     <label class="check"><input type="checkbox" id="fusion">
       既存PAと融合(有線/低遅延 lead 0.08s) — 単体運用はOFFのまま</label>
@@ -117,6 +117,10 @@ const $=id=>document.getElementById(id);
 let ctx=null, ws=null, running=false, seq=0, srcNode=null, procNode=null, mediaEl=null, stream=null, wakeLock=null;
 $('server').value = localStorage.getItem('dj_server')||'';
 $('ch').value = localStorage.getItem('dj_ch')||'festival';
+// 招待リンク(/dj?token=…)で開いたらトークンを保存 → 以後は素のURLでもOK
+const qtok = new URLSearchParams(location.search).get('token');
+if (qtok){ localStorage.setItem('dj_tok', qtok);
+  history.replaceState(null,'',location.pathname); }   // URLからは消す
 $('tok').value = localStorage.getItem('dj_tok')||'';
 
 let mode='mic';
@@ -188,14 +192,23 @@ async function start(){
     const tok = $('tok').value ? `&token=${encodeURIComponent($('tok').value)}` : '';
     ws = new WebSocket(`${base}/audio?role=push&ch=${encodeURIComponent($('ch').value)}${tok}&node=dj`);
     ws.binaryType='arraybuffer';
+    let opened = false;
     ws.onopen = ()=>{
+      opened = true;
       const lead = $('fusion').checked ? 0.08 : 0.6;
       ws.send(JSON.stringify({t:'hello',map:['L'],sr:ctx.sampleRate,lead}));
       $('sr').textContent = ctx.sampleRate;
       setLive(true);
     };
-    ws.onclose = ()=>{ if(running){ $('err').textContent='接続が切れました — 再接続します';
-      setTimeout(()=>{ if(running) reconnect(); }, 1500);} };
+    ws.onclose = ()=>{
+      if (!opened){    // 一度も開けず即クローズ=ほぼ認証拒否(403)。リトライしない
+        stop();
+        $('err').textContent = 'このサーバは配信トークンが必要です。TOKEN欄に入力して(主催者から受け取る)、もう一度 ON AIR を押してください。';
+        return;
+      }
+      if(running){ $('err').textContent='接続が切れました — 再接続します';
+        setTimeout(()=>{ if(running) reconnect(); }, 1500);}
+    };
     // 取り込み: AudioWorklet(別スレッド=メインスレッドの重さで音を落とさない)。
     // 非対応ブラウザは ScriptProcessor にフォールバック。~2048サンプルに束ねて送信。
     let sent=0, acc=new Float32Array(0);
