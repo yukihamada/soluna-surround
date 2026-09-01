@@ -1,9 +1,12 @@
 # SOLUNA Surround
 
-**Turn a whole festival into one phase-aligned speaker.**
+**Turn a whole festival into one phase-aligned speaker — and one giant light show.**
 Clock-synced distributed audio for crowds — cheap speaker nodes on a grid, plus every
-phone in the audience, all playing in sync with zone-based delay alignment. Works
-standalone or blended into an existing house PA.
+phone in the audience, all playing in sync with zone-based delay alignment. Phones can
+also become a venue-wide synced light display (SOLUNA mode). Works standalone or
+blended into an existing house PA, with a DJ broadcasting from any device's browser.
+
+Live demo: **https://soluna-sound.fly.dev** (audience `/?zone=B` · DJ `/dj` · FOH `/admin`)
 
 *(日本語は下にあります → [日本語](#日本語))*
 
@@ -58,6 +61,26 @@ python3 play.py C --zone D --server ws://<host>:8900   # native client, no brows
 python3 source.py --file set.mp3                        # push a file
 python3 source.py --input --lead 0.08                   # LIVE: capture FOH matrix out
 ```
+
+### SOLUNA mode — the crowd becomes a light show
+
+Colors are never streamed. `/api/light` broadcasts only *pattern + epoch*; every device
+computes its color locally from (zone position, synced clock) — zero bandwidth, unlimited
+devices, and the light wave sweeps across zones in perfect phase with the sound.
+
+```bash
+curl -X POST "http://<host>:8900/api/light?ch=festival" \
+  -H "x-soluna-admin: $SOLUNA_ADMIN" \
+  -d '{"pattern":"wave","colors":["#d4af37","#7fc9a2"],"bpm":124}'
+# patterns: solid | pulse | wave | plasma | strobe (capped at 3Hz for
+# photosensitivity) | audio (client-side RMS envelope of the cue track)
+```
+
+### DJ from any device
+
+Open `/dj` on a phone or laptop: mic/line input (music-grade, echo cancellation off)
+or a local file, pushed as SL2 over WebSocket. Toggle "PA fusion" for 80 ms lead when
+blending with a house system; leave it off for standalone parties.
 
 ### Blend with an existing house PA
 
