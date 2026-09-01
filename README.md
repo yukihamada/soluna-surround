@@ -15,6 +15,13 @@ takes that idea to its logical extreme: put many small speakers *inside* the cro
 delay each one by `distance/343 + 15ms` (Haas offset), and the image still comes from
 the stage — but everyone hears a nearby speaker at a comfortable level.
 
+<p align="center">
+  <img src="media/how-it-works.svg" width="760"
+       alt="Animated diagram: the stage wavefront expands at 343 m/s and each grid node fires exactly as the wavefront passes it, so the sound image stays on stage while pressure comes from nearby">
+</p>
+<p align="center"><sub>Each node fires the instant the stage wavefront reaches it —
+the ear localizes to the stage (Haas effect) while loudness comes from the speaker next to you.</sub></p>
+
 Two transports, one clock:
 
 | Mode | Use | Scale | Bandwidth |
