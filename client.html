@@ -134,6 +134,9 @@
       <span data-i18n="cueL">キュー</span><b id="cue">—</b>
       <span data-i18n="geoL">ステージ距離</span><b id="geo">—</b>
       <span data-i18n="liveL">ライブ受信</span><b id="fr">0</b>
+      <span data-i18n="trimL">微調整(耳合わせ)</span>
+      <b><input type="range" id="trim" min="-50" max="50" step="1" value="0"
+           style="width:110px;vertical-align:middle"> <span id="trimV">0ms</span></b>
     </div>
   </details>
   <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
@@ -158,7 +161,7 @@ const I18N = {
         hint:'近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。',
         join:'▶ 音に参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
         ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細',
-        autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離',
+        autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離', trimL:'微調整(耳合わせ)',
         preloaded:'準備OK', hint2:'音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。',
         waiting:'つながっています — 音を待っています', playing:'♪ 再生中' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
@@ -166,7 +169,7 @@ const I18N = {
         hint:'Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
         join:'▶ JOIN THE SOUND', leave:'■ LEAVE', idle:'idle', conn:'connected',
         ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details',
-        autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST',
+        autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST', trimL:'FINE TRIM',
         preloaded:'ready', hint2:'No sound? On iPhone, flip the silent switch off and turn the volume up.',
         waiting:'connected — waiting for sound', playing:'♪ playing' },
 };
@@ -215,8 +218,11 @@ function onPong(m){
   const off = (m.s + rtt/2) - now;        // serverEpochMs = perfNow + off
   syncWin.push({rtt, off});
   if (syncWin.length > 30) syncWin.shift();
-  const best = syncWin.reduce((a,b)=> b.rtt<a.rtt ? b : a);
-  offsetMs = best.off;
+  // 最小RTT側3点の中央値: 1点採用より経路非対称のブレに強い
+  const low3 = [...syncWin].sort((a,b)=>a.rtt-b.rtt).slice(0,3)
+                            .map(s=>s.off).sort((a,b)=>a-b);
+  offsetMs = low3[Math.floor(low3.length/2)];
+  const best = [...syncWin].sort((a,b)=>a.rtt-b.rtt)[0];
   pingCount++;
   if (pingCount === 10){                  // 収束後はサーバ負荷を下げる(5000台対策)
     clearInterval(pingTimer); pingTimer = setInterval(sendPing, 3000);
@@ -229,6 +235,7 @@ function onPong(m){
 const serverNowSec = () => (performance.now() + offsetMs) / 1000;
 
 // ---- zone delay -------------------------------------------------------------
+let trimMs = parseFloat(localStorage.getItem('soluna_trim')||'0') || 0;  // 耳で合わせる微調整
 function delayMs(){
   let z;
   if (customD !== null && customD !== undefined && customD !== '')
@@ -237,7 +244,11 @@ function delayMs(){
     z = autoDist/343*1000 + 15;                          // 📍AUTO: 距離から連続計算
   else
     z = zones[ZONE] ?? 15;                               // ゾーン旗(フォールバック)
-  return Math.max(0, z + baseMs);
+  return Math.max(0, z + baseMs + trimMs);
+}
+// 端末固有の出力レイテンシ(スピーカーまでのHWバッファ)。機種差10〜30msを打ち消す
+function outLatSec(){
+  return (ctx && (ctx.outputLatency || ctx.baseLatency)) || 0;
 }
 
 // ---- GPS自動(ゾーン不要) ------------------------------------------------------
@@ -426,18 +437,20 @@ function armCue(){
   src.connect(g); g.connect(ctx.destination);
   cueGainNode = g;
 
-  // sample0 が鳴るべきローカル実時間 = at + ゾーン遅延
+  // sample0 が「耳に届く」べき実時間 = at + ゾーン遅延。
+  // start時刻からさらに端末固有の出力レイテンシぶん早めて機種差を打ち消す。
   const targetSec = m.at + delayMs()/1000;
   const perfAtCtx = performance.now(), ctxNow = ctx.currentTime;
   const ctxTimeFor = perfMs => ctxNow + (perfMs - perfAtCtx)/1000;
   const targetPerfMs = targetSec*1000 - offsetMs;
+  const oL = outLatSec();
 
   if (targetPerfMs > performance.now() + 50){
-    src.start(ctxTimeFor(targetPerfMs), 0);            // これから始まる → 予約
+    src.start(Math.max(ctxNow, ctxTimeFor(targetPerfMs) - oL), 0);   // 予約(早め出し)
   } else {
     const startCtx = ctxNow + 0.20;                    // 途中参加 → 曲中同期で合流
     const startPerfMs = perfAtCtx + 200;
-    let intoSec = (startPerfMs + offsetMs)/1000 - targetSec;
+    let intoSec = (startPerfMs + offsetMs)/1000 - targetSec + oL;
     if (m.loop) intoSec = intoSec % cueBuf.duration;
     if (intoSec >= cueBuf.duration && !m.loop){ $('cue').textContent=T.done; return; }
     src.start(startCtx, Math.max(0, intoSec));
@@ -584,7 +597,7 @@ function onFrame(buf){
   const src = ctx.createBufferSource();
   src.buffer = ab; src.connect(ctx.destination);
   const playAtPerfMs = (playAt + delayMs()/1000)*1000 - offsetMs;
-  const deltaSec = (playAtPerfMs - performance.now())/1000;
+  const deltaSec = (playAtPerfMs - performance.now())/1000 - outLatSec();
   const startAt = ctx.currentTime + deltaSec;
   if (startAt < ctx.currentTime + 0.003) return;       // 位相ズレは鳴らさない
   src.start(startAt);
@@ -662,6 +675,17 @@ function stop(){
 }
 $('btn').onclick = ()=> active ? stop() : start();
 $('vol').oninput = ()=>{ if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100); };
+// 微調整: 動かすと250ms後に新しい遅延で曲中同期し直す(±50ms)
+$('trim').value = trimMs; $('trimV').textContent = trimMs + 'ms';
+let trimTimer = null;
+$('trim').oninput = ()=>{
+  trimMs = parseFloat($('trim').value) || 0;
+  $('trimV').textContent = trimMs + 'ms';
+  localStorage.setItem('soluna_trim', trimMs);
+  $('dly').textContent = delayMs().toFixed(1)+'ms';
+  clearTimeout(trimTimer);
+  trimTimer = setTimeout(()=>{ if (cueBuf && pendingCue) armCue(); }, 250);
+};
 document.addEventListener('visibilitychange', ()=>{      // 画面復帰時に再同期
   if (!document.hidden && active && ctx){ ctx.resume(); sendPing(); if (cueBuf && pendingCue) armCue(); }
 });
