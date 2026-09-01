@@ -7,10 +7,14 @@ Modes:
                     so you can HEAR the sound move across the 3 devices.
   --file song.mp3   decode via ffmpeg to 48k stereo, derive 3 positional channels
                     (L=left, R=right, C=mid). Add --rotate to overlay a moving blip.
+  --input [dev]     LIVE: オーディオIF入力(=既存ハウスPAのFOH matrix/aux out)を
+                    リアルタイム送出。--lead 0.08 と併用してハウスPAと融合する。
+                    dev省略=デフォルト入力。一覧: python3 -c "import sounddevice;print(sounddevice.query_devices())"
 
 Usage:
   python3 source.py --test  --ch festival --server ws://192.168.0.194:8900
   python3 source.py --file ~/Music/x.mp3 --ch festival
+  python3 source.py --input --lead 0.08 --ch festival      # FOHフィード融合
 """
 import argparse
 import asyncio
@@ -92,7 +96,10 @@ async def run(args):
     if tok:                       # koe* チャンネルのトークンゲート対応
         url += f"&token={tok}"
     async with websockets.connect(url, max_size=None) as ws:
-        await ws.send(json.dumps({"t": "hello", "map": POSMAP, "sr": SR}))
+        hello = {"t": "hello", "map": POSMAP, "sr": SR}
+        if args.lead is not None:
+            hello["lead"] = args.lead
+        await ws.send(json.dumps(hello))
         safe = url.split("&token=")[0]      # トークンをログに出さない
         print(f"[source] connected {safe} map={POSMAP}")
 
@@ -100,7 +107,36 @@ async def run(args):
         loop = asyncio.get_event_loop()
         start = loop.time()
 
-        if args.file:
+        if args.input is not None:
+            import queue as _queue
+            import sounddevice as sd
+            q: "_queue.Queue" = _queue.Queue(maxsize=64)
+
+            def cb(indata, nframes, t, status):
+                if status:
+                    print(f"[source] input status: {status}", file=sys.stderr)
+                try:
+                    q.put_nowait(indata.copy())
+                except _queue.Full:
+                    pass                    # 送出が詰まったら古い方を捨てる側で吸収
+
+            dev = args.input if args.input != "" else None
+            try:
+                dev = int(dev) if dev is not None else None
+            except ValueError:
+                pass
+            with sd.InputStream(samplerate=SR, channels=2, dtype="float32",
+                                blocksize=FRAME, device=dev, callback=cb):
+                print(f"[source] LIVE input dev={dev or 'default'} "
+                      f"lead={args.lead or 'server default'} — Ctrl-C to stop.")
+                while True:
+                    block2 = await asyncio.to_thread(q.get)
+                    Lc, Rc = block2[:, 0], block2[:, 1]
+                    block = np.stack([Lc, Rc, 0.5 * (Lc + Rc)], axis=1)
+                    i16 = (np.clip(block, -1, 1) * 32767).astype(np.int16)
+                    await ws.send(pack_frame(seq, i16))
+                    seq += 1
+        elif args.file:
             st = ffmpeg_stereo(args.file)
             L, R = st[:, 0], st[:, 1]
             C = 0.5 * (L + R)
@@ -153,6 +189,10 @@ if __name__ == "__main__":
     ap.add_argument("--server", default="ws://192.168.0.194:8900")
     ap.add_argument("--ch", default="festival")
     ap.add_argument("--file")
+    ap.add_argument("--input", nargs="?", const="",
+                    help="ライブ入力デバイス(名前/番号。省略=デフォルト)")
+    ap.add_argument("--lead", type=float,
+                    help="サーバ先読み秒(有線LAN+ハウスPA融合=0.08推奨)")
     ap.add_argument("--rotate", action="store_true")
     ap.add_argument("--test", action="store_true")
     a = ap.parse_args()

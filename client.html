@@ -3,150 +3,239 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>SOLUNA Surround</title>
+<title>SOLUNA SOUND</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:#0a0507;color:#f4e8d0;font-family:system-ui,-apple-system,sans-serif;
        min-height:100vh;display:flex;flex-direction:column;align-items:center;
-       justify-content:center;padding:24px;text-align:center;gap:18px}
+       justify-content:center;padding:24px;text-align:center;gap:16px}
   h1{font-size:.8rem;letter-spacing:.35em;color:#d4af37;font-weight:800}
-  .pos{font-size:6rem;font-weight:900;line-height:1;
+  .zone{font-size:5rem;font-weight:900;line-height:1;
        background:linear-gradient(135deg,#d4af37,#f5d16b);-webkit-background-clip:text;
        -webkit-text-fill-color:transparent}
-  .poslabel{font-size:.7rem;letter-spacing:.2em;color:rgba(244,232,208,.5)}
-  .picker{display:flex;gap:10px}
-  .picker a{display:flex;width:54px;height:54px;align-items:center;justify-content:center;
-       border-radius:50%;border:1px solid rgba(212,175,55,.3);color:#d4af37;
-       text-decoration:none;font-weight:800;font-size:1.1rem}
-  .picker a.on{background:#d4af37;color:#0a0507;border-color:#d4af37}
-  button{appearance:none;border:none;border-radius:99px;padding:18px 48px;font-size:1.1rem;
+  .zonelabel{font-size:.7rem;letter-spacing:.2em;color:rgba(244,232,208,.5)}
+  .picker{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:320px}
+  .picker button{display:flex;width:46px;height:46px;align-items:center;justify-content:center;
+       border-radius:50%;border:1px solid rgba(212,175,55,.3);color:#d4af37;background:none;
+       font-weight:800;font-size:1rem;cursor:pointer;min-width:0;padding:0}
+  .picker button.on{background:#d4af37;color:#0a0507;border-color:#d4af37}
+  .main{appearance:none;border:none;border-radius:99px;padding:18px 48px;font-size:1.1rem;
        font-weight:800;cursor:pointer;background:linear-gradient(135deg,#d4af37,#f5d16b);
-       color:#0a0507;min-width:220px}
-  button.stop{background:rgba(255,80,80,.25);color:#ff8a8a}
+       color:#0a0507;min-width:230px}
+  .main.stop{background:rgba(255,80,80,.25);color:#ff8a8a}
   .grid{display:grid;grid-template-columns:auto auto;gap:4px 16px;font-size:.72rem;
        color:rgba(244,232,208,.55);font-variant-numeric:tabular-nums}
   .grid b{color:#f4e8d0;font-weight:700}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#555;margin-right:6px}
   .dot.live{background:#34d399;box-shadow:0 0 10px #34d399}
   .hint{font-size:.66rem;color:rgba(244,232,208,.35);max-width:300px;line-height:1.7}
+  input[type=range]{width:200px;accent-color:#d4af37}
+  .vol{display:flex;align-items:center;gap:10px;font-size:.7rem;color:rgba(244,232,208,.5)}
 </style>
 </head>
 <body>
-  <h1>S O L U N A &nbsp;·&nbsp; S U R R O U N D</h1>
-  <div class="poslabel">この端末のポジション</div>
-  <div class="pos" id="posBig">L</div>
-  <div class="picker" id="picker">
-    <a href="?pos=L" data-p="L">L</a>
-    <a href="?pos=C" data-p="C">C</a>
-    <a href="?pos=R" data-p="R">R</a>
-  </div>
-  <button id="btn">▶ 再生する</button>
+  <h1>S O L U N A &nbsp;·&nbsp; S O U N D</h1>
+  <div class="zonelabel">あなたのゾーン(近くの旗の色/記号)</div>
+  <div class="zone" id="zoneBig">A</div>
+  <div class="picker" id="picker"></div>
+  <button class="main" id="btn">▶ 音に参加する</button>
+  <div class="vol">🔉 <input type="range" id="vol" min="0" max="100" value="80"> 🔊</div>
   <div class="grid">
     <span><span class="dot" id="dot"></span>状態</span><b id="st">停止中</b>
+    <span>ゾーン遅延</span><b id="dly">—</b>
     <span>クロック誤差</span><b id="off">—</b>
     <span>RTT</span><b id="rtt">—</b>
-    <span>受信フレーム</span><b id="fr">0</b>
-    <span>遅延スキップ</span><b id="late">0</b>
-    <span>ストリーム時刻</span><b id="stream">—</b>
+    <span>キュー</span><b id="cue">—</b>
+    <span>ライブ受信</span><b id="fr">0</b>
   </div>
-  <div class="hint">3台を部屋の左・中央・右に置いて、それぞれ L / C / R で再生。同じ瞬間に音が揃い、ブリップが端末間を移動します。</div>
+  <div class="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
 
 <script>
 const SR = 48000, HEADER = 22;
 const qs = new URLSearchParams(location.search);
-let POS = (qs.get('pos') || 'L').toUpperCase();
-document.getElementById('posBig').textContent = POS;
-for (const a of document.querySelectorAll('#picker a')) {
-  if (a.dataset.p === POS) a.classList.add('on');
-}
-
-let ctx=null, ws=null, active=false;
-let offsetMs=null, bestRtt=Infinity;          // serverEpochMs = perfNow + offsetMs
-let playHead=0, frames=0, late=0, lastStreamT=0;
-
 const $ = id => document.getElementById(id);
 
-function setLive(on){
-  $('dot').classList.toggle('live', on);
-  $('st').textContent = on ? '受信中' : '停止中';
-  $('btn').textContent = on ? '■ 停止' : '▶ 再生する';
-  $('btn').classList.toggle('stop', on);
-}
+let ZONE = (qs.get('zone') || qs.get('pos') || 'A').toUpperCase();
+let zones = {A:15};                       // name -> delay_ms (server config で上書き)
+let baseMs = 0;                           // ハウスPA位相合わせの一括トリム(config)
+const customD = qs.get('d');              // ?d=<m> 距離を直接指定(スタッフ用)
 
-// ---- clock sync ----------------------------------------------------------
+let ctx=null, ws=null, active=false, wakeLock=null;
+let frames=0, lastCueId=null;
+let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null;
+
+// ---- clock sync: 直近windowの最小RTTサンプルのoffsetを採用 ------------------
+const syncWin = [];                       // {rtt, off}
+let offsetMs = null, pingCount = 0, pingTimer = null;
 function sendPing(){
   if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'ping', c:performance.now()}));
 }
 function onPong(m){
   const now = performance.now();
   const rtt = now - m.c;
-  const serverAtRecv = m.s + rtt/2;            // ms, server epoch at this instant
-  if (rtt < bestRtt || offsetMs===null){       // keep the lowest-jitter sample
-    bestRtt = Math.min(bestRtt, rtt);
-    offsetMs = serverAtRecv - now;             // serverEpoch = perfNow + offsetMs
+  const off = (m.s + rtt/2) - now;        // serverEpochMs = perfNow + off
+  syncWin.push({rtt, off});
+  if (syncWin.length > 30) syncWin.shift();
+  const best = syncWin.reduce((a,b)=> b.rtt<a.rtt ? b : a);
+  offsetMs = best.off;
+  pingCount++;
+  if (pingCount === 10){                  // 収束後はサーバ負荷を下げる(5000台対策)
+    clearInterval(pingTimer); pingTimer = setInterval(sendPing, 3000);
   }
-  $('off').textContent = offsetMs===null ? '—' : (offsetMs>=0?'+':'') + offsetMs.toFixed(1)+'ms';
+  $('off').textContent = (offsetMs>=0?'+':'') + offsetMs.toFixed(1)+'ms';
   $('rtt').textContent = rtt.toFixed(1)+'ms';
+  if (pendingCue && cueBuf) armCue();     // 同期がとれた時点で保留キューを発火
+}
+const serverNowSec = () => (performance.now() + offsetMs) / 1000;
+
+// ---- zone delay -------------------------------------------------------------
+function delayMs(){
+  const z = (customD !== null && customD !== undefined && customD !== '')
+    ? parseFloat(customD)/343*1000 + 15
+    : (zones[ZONE] ?? 15);
+  return Math.max(0, z + baseMs);
+}
+function renderZones(){
+  const p = $('picker'); p.innerHTML='';
+  for (const z of Object.keys(zones)){
+    const b = document.createElement('button');
+    b.textContent = z;
+    if (z===ZONE) b.classList.add('on');
+    b.onclick = ()=>{ ZONE=z; renderZones();
+      if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
+      if (cueBuf && lastCueId) armCue();   // ゾーン変更 → 遅延を替えて即リスケジュール
+    };
+    p.appendChild(b);
+  }
+  $('zoneBig').textContent = customD ? customD+'m' : ZONE;
+  $('dly').textContent = delayMs().toFixed(1)+'ms';
 }
 
-// ---- audio ---------------------------------------------------------------
+// ---- CUE MODE: 事前配布ファイルを playAt で一斉スケジュール -------------------
+async function onCue(m){
+  $('cue').textContent = '準備中…';
+  pendingCue = m;
+  if (cueBufUrl !== m.url){
+    const res = await fetch(m.url);
+    const raw = await res.arrayBuffer();
+    cueBuf = await ctx.decodeAudioData(raw);
+    cueBufUrl = m.url;
+  }
+  lastCueId = m.id;
+  if (offsetMs !== null) armCue();
+}
+function armCue(){
+  const m = pendingCue; if (!m || !cueBuf || !ctx) return;
+  if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
+  const src = ctx.createBufferSource();
+  src.buffer = cueBuf; src.loop = !!m.loop;
+  const g = ctx.createGain();
+  g.gain.value = (m.gain ?? 1) * ($('vol').value/100);
+  src.connect(g); g.connect(ctx.destination);
+  cueGainNode = g;
+
+  // sample0 が鳴るべきローカル実時間 = at + ゾーン遅延
+  const targetSec = m.at + delayMs()/1000;
+  const perfAtCtx = performance.now(), ctxNow = ctx.currentTime;
+  const ctxTimeFor = perfMs => ctxNow + (perfMs - perfAtCtx)/1000;
+  const targetPerfMs = targetSec*1000 - offsetMs;
+
+  if (targetPerfMs > performance.now() + 50){
+    src.start(ctxTimeFor(targetPerfMs), 0);            // これから始まる → 予約
+  } else {
+    const startCtx = ctxNow + 0.20;                    // 途中参加 → 曲中同期で合流
+    const startPerfMs = perfAtCtx + 200;
+    let intoSec = (startPerfMs + offsetMs)/1000 - targetSec;
+    if (m.loop) intoSec = intoSec % cueBuf.duration;
+    if (intoSec >= cueBuf.duration && !m.loop){ $('cue').textContent='終了済み'; return; }
+    src.start(startCtx, Math.max(0, intoSec));
+  }
+  cueSrc = src;
+  $('cue').textContent = m.id;
+}
+function onCueStop(){
+  pendingCue=null; lastCueId=null;
+  if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
+  $('cue').textContent = '—';
+}
+
+// ---- LIVE MODE (SL2 PCM) — スピーカーノード/近距離WiFi向け ------------------
 function onFrame(buf){
   if (!ctx || !active || offsetMs===null) return;
   if (buf.byteLength <= HEADER) return;
   const dv = new DataView(buf);
-  // magic@0(3) ver@3 nchan@4 pad@5 seq@6 nsamp@10 playAt@14(f64 LE)
   const nsamp = dv.getUint32(10, true);
-  const playAt = dv.getFloat64(14, true);      // server-epoch seconds
+  const playAt = dv.getFloat64(14, true);
   const pcm = new Int16Array(buf, HEADER, nsamp);
   const f32 = new Float32Array(nsamp);
-  for (let i=0;i<nsamp;i++) f32[i] = pcm[i] / 32768;
+  const vol = $('vol').value/100;
+  for (let i=0;i<nsamp;i++) f32[i] = pcm[i] / 32768 * vol;
   const ab = ctx.createBuffer(1, nsamp, SR);
   ab.copyToChannel(f32, 0);
   const src = ctx.createBufferSource();
-  src.buffer = ab;
-  src.connect(ctx.destination);
-
-  // map server playAt -> local performance.now() -> AudioContext time
-  const playAtPerfMs = playAt*1000 - offsetMs;
+  src.buffer = ab; src.connect(ctx.destination);
+  const playAtPerfMs = (playAt + delayMs()/1000)*1000 - offsetMs;
   const deltaSec = (playAtPerfMs - performance.now())/1000;
-  let startAt = ctx.currentTime + deltaSec;
-  if (startAt < ctx.currentTime + 0.003){       // arrived too late to be in sync
-    late++; $('late').textContent = late;
-    return;                                      // drop, never play out of phase
-  }
+  const startAt = ctx.currentTime + deltaSec;
+  if (startAt < ctx.currentTime + 0.003) return;       // 位相ズレは鳴らさない
   src.start(startAt);
-  frames++; lastStreamT = playAt;
-  $('fr').textContent = frames;
+  frames++; $('fr').textContent = frames;
 }
 
+// ---- conn -------------------------------------------------------------------
 function connect(){
   const proto = location.protocol==='https:' ? 'wss:' : 'ws:';
   const ch = qs.get('ch') || 'festival';
-  ws = new WebSocket(`${proto}//${location.host}/audio?role=listen&ch=${encodeURIComponent(ch)}&pos=${POS}`);
+  ws = new WebSocket(`${proto}//${location.host}/audio?role=listen&ch=${encodeURIComponent(ch)}&zone=${ZONE}&pos=${qs.get('pos')||''}`);
   ws.binaryType = 'arraybuffer';
-  ws.onopen = ()=>{ setLive(true); sendPing(); };
+  ws.onopen = ()=>{ setLive(true); syncWin.length=0; pingCount=0;
+    clearInterval(pingTimer); pingTimer=setInterval(sendPing, 500); sendPing(); };
   ws.onmessage = e=>{
-    if (typeof e.data === 'string'){ const m=JSON.parse(e.data); if(m.t==='pong') onPong(m); }
-    else onFrame(e.data);
+    if (typeof e.data === 'string'){
+      const m = JSON.parse(e.data);
+      if (m.t==='pong') onPong(m);
+      else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0; renderZones();
+        if (cueBuf && pendingCue) armCue(); }
+      else if (m.t==='cue') onCue(m).catch(err=>{ $('cue').textContent='取得失敗'; console.error(err); });
+      else if (m.t==='cue_stop') onCueStop();
+    } else onFrame(e.data);
   };
-  ws.onclose = ()=>{ setLive(false); if(active) setTimeout(connect, 800); };
+  ws.onclose = ()=>{ setLive(false); if(active) setTimeout(connect, 800 + Math.random()*1200); };
   ws.onerror = ()=>{};
+}
+
+function setLive(on){
+  $('dot').classList.toggle('live', on);
+  $('st').textContent = on ? '接続中' : '停止中';
+  $('btn').textContent = on ? '■ 抜ける' : '▶ 音に参加する';
+  $('btn').classList.toggle('stop', on);
 }
 
 async function start(){
   ctx = new (window.AudioContext||window.webkitAudioContext)({sampleRate:SR});
   await ctx.resume();
-  active = true; frames=0; late=0; bestRtt=Infinity; offsetMs=null;
-  $('fr').textContent=0; $('late').textContent=0;
+  // iOSは無音を一度流すとバックグラウンド化に強くなる
+  const silent = ctx.createBufferSource();
+  silent.buffer = ctx.createBuffer(1, SR, SR); silent.loop = true;
+  silent.connect(ctx.destination); silent.start();
+  try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
+  active = true; frames=0; $('fr').textContent=0;
   connect();
 }
 function stop(){
-  active=false; if(ws){try{ws.close()}catch(e){}} if(ctx){try{ctx.close()}catch(e){}} ctx=null;
+  active=false; onCueStop();
+  if(ws){try{ws.close()}catch(e){}}
+  if(ctx){try{ctx.close()}catch(e){}} ctx=null;
+  try{ wakeLock?.release(); }catch(e){}
+  clearInterval(pingTimer);
   setLive(false);
 }
 $('btn').onclick = ()=> active ? stop() : start();
-setInterval(sendPing, 500);
-setInterval(()=>{ $('stream').textContent = active ? lastStreamT.toFixed(2)+'s' : '—'; }, 250);
+$('vol').oninput = ()=>{ if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100); };
+document.addEventListener('visibilitychange', ()=>{      // 画面復帰時に再同期
+  if (!document.hidden && active && ctx){ ctx.resume(); sendPing(); if (cueBuf && pendingCue) armCue(); }
+});
+renderZones();
 </script>
 </body>
 </html>

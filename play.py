@@ -23,8 +23,11 @@ PAN = {"L": (1.0, 0.0), "C": (0.7071, 0.7071), "R": (0.0, 1.0)}
 
 
 class Player:
-    def __init__(self, pos):
+    def __init__(self, pos, zone=None):
         self.pos = pos
+        self.zone = (zone or "").upper() or None
+        self.zones = {}            # サーバconfig: zone -> delay_ms
+        self.base_ms = 0.0         # ハウスPA位相合わせトリム
         self.gl, self.gr = PAN.get(pos.upper(), (0.7071, 0.7071))
         self.ring = np.zeros((RING, 2), dtype=np.float32)
         self.lock = threading.Lock()
@@ -49,12 +52,18 @@ class Player:
     def stream_sample_for_wall(self, wall):
         return int(round((self.t0_stream + (wall - self.t0_wall)) * SR))
 
+    def delay_sec(self):
+        z = self.zones.get(self.zone, 0.0) if self.zone else 0.0
+        return max(0.0, (z + self.base_ms) / 1000.0)
+
     def schedule(self, mono_f32, play_at):
-        if self.t0_stream is None or self.epoch_off is None:
+        delay = self.delay_sec()
+        eo, t0s, t0w = self.epoch_off, self.t0_stream, self.t0_wall
+        if t0s is None or t0w is None or eo is None:
             return
-        target_wall = play_at - self.epoch_off
+        target_wall = play_at + delay - eo
         start = self.stream_sample_for_wall(target_wall)
-        now_stream = int(round((self.t0_stream + (time.time() - self.t0_wall)) * SR))
+        now_stream = int(round((t0s + (time.time() - t0w)) * SR))
         if start < now_stream + 64:        # too late to place in sync
             self.stats["late"] += 1
             return
@@ -68,6 +77,8 @@ class Player:
 
 async def net(player, server, ch):
     url = f"{server}/audio?role=listen&ch={ch}&pos={player.pos}"
+    if player.zone:
+        url += f"&zone={player.zone}"
     best_rtt = float("inf")
     async with websockets.connect(url, max_size=None) as ws:
         async def pinger():
@@ -79,7 +90,13 @@ async def net(player, server, ch):
             async for msg in ws:
                 if isinstance(msg, str):
                     m = json.loads(msg)
-                    if m.get("t") == "pong":
+                    if m.get("t") == "config":
+                        player.zones = {k.upper(): float(v)
+                                        for k, v in (m.get("zones") or {}).items()}
+                        player.base_ms = float(m.get("base_ms", 0.0))
+                        print(f"[play {player.pos}] config zone={player.zone} "
+                              f"delay={player.delay_sec()*1000:.1f}ms")
+                    elif m.get("t") == "pong":
                         now = time.time() * 1000
                         rtt = now - m["c"]
                         nonlocal_best = rtt < best_rtt
@@ -103,8 +120,9 @@ def main():
     ap.add_argument("pos", choices=["L", "C", "R", "l", "c", "r"])
     ap.add_argument("--server", default="ws://127.0.0.1:8900")
     ap.add_argument("--ch", default="festival")
+    ap.add_argument("--zone", help="ゾーン名(A..F等)。サーバのzone表の遅延を適用")
     a = ap.parse_args()
-    player = Player(a.pos.upper())
+    player = Player(a.pos.upper(), zone=a.zone)
 
     stream = sd.OutputStream(samplerate=SR, channels=2, dtype="float32",
                              blocksize=480, callback=player.callback)

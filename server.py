@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-SOLUNA Surround server (v2) — clock-synced, position-routed audio fanout.
+SOLUNA Surround server (v3) — clock-synced, position-routed, festival-scale.
 
-Extends the original SOLUNA audio protocol (mono broadcast over /ws/soluna-audio)
-into a real multi-device surround system:
+v2 まで: 1ソース→N端末のライブPCM同期 (SL2 バイナリ, playAt=サーバ時刻)。
+v3 追加 (5000人フェス対応):
 
-  * One PUSH source sends interleaved N-channel PCM (48kHz s16le).
-  * Each LISTEN device claims a position (L / R / C / ...). The server extracts
-    only that device's channel and forwards a mono frame.
-  * Every forwarded frame carries `playAt` = a server-clock epoch (seconds) at
-    which sample 0 of that frame must be heard. playAt is driven by a running
-    sample counter, NOT by arrival time, so network jitter never shifts it.
-  * Listeners run a ping/pong clock-sync against the server, so all devices map
-    the SAME playAt to the SAME wall-clock instant -> phase-aligned surround.
+  * CUE MODE — 音源ファイルを事前配布し、サーバは「いつ・何を・どの音量で
+    鳴らすか」だけを JSON で一斉ブロードキャストする。帯域はほぼゼロなので
+    リスナー数に上限がない (5000台のスマホ = 5000個のスピーカー)。
+    途中参加した端末にも接続時に進行中キューを渡す → 曲の途中から位相同期で合流。
+  * ZONES — ステージからの距離ごとのゾーン表 (delay_ms) をサーバが持ち、
+    接続時 config として配る。各端末は自ゾーンの遅延をかけて再生する
+    (遅延 = 距離/343s + ハース系オフセット) → どこで聴いても音は
+    「ステージから」聞こえたまま、目の前のスピーカーの音量で済む。
+  * ADMIN API — x-soluna-admin ヘッダ (SOLUNA_ADMIN env) でキュー発火/停止・
+    ゾーン更新。/admin に操作ページ。/assets/ 配下で音源を静的配信。
 
-Wire format (binary, little-endian), header = 22 bytes:
+Wire format (binary, little-endian), header = 22 bytes:  ※v2から不変
     magic   3s   b"SL2"
     version B    = 2
     nchan   B    channels in THIS frame (1 after server extraction)
@@ -25,10 +27,14 @@ Wire format (binary, little-endian), header = 22 bytes:
   payload: int16 interleaved PCM, nchan * nsamp samples.
 
 HTTP:
-    GET /                 -> player (client.html), ?pos=L|R|C
-    GET /status           -> JSON channel/listener state (for verification)
-    WS  /audio?role=push&ch=<name>     (source; first sends JSON hello {map,sr})
-    WS  /audio?role=listen&ch=<name>&pos=L
+    GET  /                 -> player (client.html), ?zone=A..F|?d=<meters>
+    GET  /admin            -> cue console (admin.html)
+    GET  /status           -> JSON channel/listener state
+    GET  /assets/<file>    -> 事前配布する音源 (mp3/aac/opus)
+    POST /api/cue?ch=X     -> {url, at?, gain?, loop?} or {stop:true}   [admin]
+    POST /api/zones?ch=X   -> {zones:{A:0, B:44, ...}}  (delay_ms)      [admin]
+    WS   /audio?role=push&ch=<name>     (source; first sends JSON hello {map,sr})
+    WS   /audio?role=listen&ch=<name>&pos=L|&zone=B|&d=35
 """
 import asyncio
 import json
@@ -38,9 +44,20 @@ import os
 from aiohttp import web, WSMsgType
 
 SR = 48000
-LEAD = 0.6                      # seconds: schedule playback this far ahead of "now"
+# live mode: schedule this far ahead of "now"。既存ハウスPAとの融合時は
+# 「パイプライン遅延 ≦ グリッド最前ゾーンの物理遅延(d/343)」が条件なので
+# 有線LANなら SOLUNA_LEAD=0.08 程度まで詰める。push hello {"lead":..} でも上書き可。
+LEAD = float(os.environ.get("SOLUNA_LEAD", "0.6"))
+CUE_LEAD = 3.0                  # cue mode: default lead so every device can arm
 HEADER = struct.Struct("<3sBBBIId")
 HERE = os.path.dirname(os.path.abspath(__file__))
+ASSETS = os.path.join(HERE, "assets")
+
+# 既定ゾーン: ステージからの距離[m] → delay_ms = d/343*1000 + 15ms (Haas)。
+# 実会場では /api/zones で実測距離に合わせて上書きする。
+def default_zones():
+    return {z: round(d / 343.0 * 1000.0 + 15.0, 1)
+            for z, d in {"A": 0, "B": 15, "C": 30, "D": 45, "E": 60, "F": 80}.items()}
 
 # channel_name -> state
 channels: dict = {}
@@ -49,12 +66,16 @@ channels: dict = {}
 def _chan(name):
     return channels.setdefault(name, {
         "source": None,           # push ws
-        "map": ["L", "R", "C"],   # position -> index order
+        "map": ["L", "R", "C"],   # position -> index order (live mode)
         "sr": SR,
         "epoch": None,            # server-epoch for sample 0 of the stream
         "played": 0,              # cumulative samples emitted
         "seq": 0,
-        "listeners": {},          # ws -> pos
+        "listeners": {},          # ws -> {"pos":..., "zone":..., "d":...}
+        "zones": default_zones(),
+        "base_ms": 0.0,           # 全ゾーン一括トリム(既存ハウスPAとの位相合わせ)
+        "lead": LEAD,
+        "cue": None,              # active cue dict (途中参加者へ再送する)
     })
 
 
@@ -63,7 +84,6 @@ def _pos_index(state, pos):
     pos = (pos or "").upper()
     if pos in m:
         return m.index(pos)
-    # numeric fallback
     try:
         i = int(pos)
         if 0 <= i < len(m):
@@ -71,6 +91,28 @@ def _pos_index(state, pos):
     except (ValueError, TypeError):
         pass
     return 0
+
+
+def _config_msg(state):
+    return json.dumps({"t": "config", "zones": state["zones"], "sr": state["sr"],
+                       "base_ms": state["base_ms"],
+                       "server_ms": time.time() * 1000.0})
+
+
+async def _broadcast_text(state, text):
+    dead = []
+    for ws in list(state["listeners"].keys()):
+        try:
+            await ws.send_str(text)
+        except Exception:
+            dead.append(ws)
+    for ws in dead:
+        state["listeners"].pop(ws, None)
+
+
+def _admin_ok(request):
+    tok = os.environ.get("SOLUNA_ADMIN")
+    return bool(tok) and request.headers.get("x-soluna-admin") == tok
 
 
 async def audio_ws(request):
@@ -81,7 +123,7 @@ async def audio_ws(request):
     tok = os.environ.get("SOLUNA_TOKEN")
     if tok and name.startswith("koe") and request.query.get("token") != tok:
         raise web.HTTPForbidden(text="token required for koe* channels")
-    ws = web.WebSocketResponse(max_msg_size=8 * 1024 * 1024)
+    ws = web.WebSocketResponse(max_msg_size=8 * 1024 * 1024, heartbeat=30)
     await ws.prepare(request)
     state = _chan(name)
 
@@ -99,7 +141,10 @@ async def audio_ws(request):
                         if hello.get("t") == "hello":
                             state["map"] = [p.upper() for p in hello.get("map", state["map"])]
                             state["sr"] = int(hello.get("sr", SR))
-                            print(f"[push] ch={name} map={state['map']} sr={state['sr']}")
+                            if hello.get("lead") is not None:
+                                state["lead"] = max(0.02, float(hello["lead"]))
+                            print(f"[push] ch={name} map={state['map']} "
+                                  f"sr={state['sr']} lead={state['lead']}")
                     except Exception:
                         pass
                 elif msg.type == WSMsgType.BINARY:
@@ -113,10 +158,15 @@ async def audio_ws(request):
         return ws
 
     # role == listen
-    pos = request.query.get("pos", "L")
-    state["listeners"][ws] = pos
-    print(f"[listen] +{pos} ch={name} (n={len(state['listeners'])})")
+    meta = {"pos": request.query.get("pos", "L"),
+            "zone": (request.query.get("zone") or "").upper() or None,
+            "d": request.query.get("d")}
+    state["listeners"][ws] = meta
+    print(f"[listen] +{meta} ch={name} (n={len(state['listeners'])})")
     try:
+        await ws.send_str(_config_msg(state))
+        if state["cue"]:                      # 途中参加 → 進行中キューを渡す
+            await ws.send_str(json.dumps({"t": "cue", **state["cue"]}))
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 try:
@@ -124,17 +174,19 @@ async def audio_ws(request):
                 except Exception:
                     continue
                 if m.get("t") == "ping":
-                    # echo client time + stamp server epoch (ms) for clock sync
                     await ws.send_str(json.dumps({
                         "t": "pong", "c": m.get("c"), "s": time.time() * 1000.0
                     }))
                 elif m.get("t") == "pos":
-                    state["listeners"][ws] = m.get("pos", pos)
+                    meta["pos"] = m.get("pos", meta["pos"])
+                elif m.get("t") == "zone":
+                    meta["zone"] = (m.get("zone") or "").upper() or None
             elif msg.type == WSMsgType.ERROR:
                 break
     finally:
         state["listeners"].pop(ws, None)
-        print(f"[listen] -{pos} ch={name} (n={len(state['listeners'])})")
+        print(f"[listen] -{meta.get('zone') or meta.get('pos')} ch={name} "
+              f"(n={len(state['listeners'])})")
     return ws
 
 
@@ -146,7 +198,6 @@ async def _fanout(name, state, data: bytes):
         return
     body = memoryview(data)[HEADER.size:]
     total = nchan * nsamp
-    # int16 view of payload
     import array
     pcm = array.array("h")
     pcm.frombytes(body[: total * 2].tobytes())
@@ -155,7 +206,7 @@ async def _fanout(name, state, data: bytes):
 
     now = time.time()
     if state["epoch"] is None:
-        state["epoch"] = now + LEAD
+        state["epoch"] = now + state["lead"]
         state["played"] = 0
     play_at = state["epoch"] + state["played"] / float(state["sr"])
     state["played"] += nsamp
@@ -164,8 +215,8 @@ async def _fanout(name, state, data: bytes):
     # Build one mono frame per distinct position in use, then send.
     cache = {}
     dead = []
-    for ws, pos in list(state["listeners"].items()):
-        idx = _pos_index(state, pos)
+    for ws, meta in list(state["listeners"].items()):
+        idx = _pos_index(state, meta.get("pos"))
         if idx >= nchan:
             idx = 0
         frame = cache.get(idx)
@@ -182,25 +233,119 @@ async def _fanout(name, state, data: bytes):
         state["listeners"].pop(ws, None)
 
 
+# ---- admin API -------------------------------------------------------------
+
+async def api_cue(request):
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch", "festival")
+    state = _chan(name)
+    body = await request.json()
+
+    if body.get("stop"):
+        state["cue"] = None
+        await _broadcast_text(state, json.dumps({"t": "cue_stop"}))
+        return web.json_response({"ok": True, "stopped": True,
+                                  "listeners": len(state["listeners"])})
+
+    url = body.get("url")
+    if not url:
+        raise web.HTTPBadRequest(text="url required")
+    if body.get("at"):                       # サーバepoch秒を直接指定
+        at = float(body["at"])
+    else:                                    # lead秒後(サーバ時計基準・推奨)
+        at = time.time() + float(body.get("lead") or CUE_LEAD)
+    cue = {
+        "id": body.get("id") or f"cue-{int(at * 1000)}",
+        "url": url,
+        "at": at,                                # server-epoch seconds (sample 0)
+        "gain": float(body.get("gain", 1.0)),
+        "loop": bool(body.get("loop", False)),
+    }
+    state["cue"] = cue
+    await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
+    return web.json_response({"ok": True, "cue": cue,
+                              "listeners": len(state["listeners"])})
+
+
+async def api_align(request):
+    """既存ハウスPAとの位相合わせ: 全ゾーン一括トリム(ms, 負値=早める方向)。
+    サウンドチェックでクリックをハウスPA+グリッド同時に鳴らし、フラム感が
+    消えるまで ±5ms 刻みで追い込む。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch", "festival")
+    state = _chan(name)
+    body = await request.json()
+    state["base_ms"] = float(body.get("base_ms", 0.0))
+    await _broadcast_text(state, _config_msg(state))
+    return web.json_response({"ok": True, "base_ms": state["base_ms"],
+                              "listeners": len(state["listeners"])})
+
+
+async def api_zones(request):
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch", "festival")
+    state = _chan(name)
+    body = await request.json()
+    zones = body.get("zones")
+    zones_m = body.get("zones_m")            # 距離[m]指定 → delay自動計算
+    if isinstance(zones_m, dict) and zones_m:
+        zones = {k: float(v) / 343.0 * 1000.0 + 15.0 for k, v in zones_m.items()}
+    if not isinstance(zones, dict) or not zones:
+        raise web.HTTPBadRequest(
+            text='{"zones":{"A":15.0,...}} (delay_ms) or {"zones_m":{"A":15,...}} (距離m)')
+    state["zones"] = {str(k).upper(): round(float(v), 1) for k, v in zones.items()}
+    await _broadcast_text(state, _config_msg(state))
+    return web.json_response({"ok": True, "zones": state["zones"]})
+
+
+async def api_assets(request):
+    """assets/ 配下の音源一覧(キューコンソールのファイルピッカー用)。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    files = []
+    if os.path.isdir(ASSETS):
+        for f in sorted(os.listdir(ASSETS)):
+            p = os.path.join(ASSETS, f)
+            if os.path.isfile(p) and not f.startswith("."):
+                files.append({"name": f, "url": f"/assets/{f}",
+                              "bytes": os.path.getsize(p)})
+    return web.json_response({"ok": True, "assets": files})
+
+
 async def status(request):
     out = {}
     for name, st in channels.items():
+        zones_n = {}
+        for meta in st["listeners"].values():
+            key = meta.get("zone") or meta.get("pos") or "?"
+            zones_n[key] = zones_n.get(key, 0) + 1
         out[name] = {
             "source": st["source"] is not None,
             "map": st["map"],
             "sr": st["sr"],
             "seq": st["seq"],
-            "played_samples": st["played"],
             "stream_t": (None if st["epoch"] is None
                          else round(st["played"] / float(st["sr"]), 2)),
-            "listeners": sorted(st["listeners"].values()),
+            "listeners": len(st["listeners"]),
+            "by_zone": zones_n,
+            "zones": st["zones"],
+            "base_ms": st["base_ms"],
+            "live_lead": st["lead"],
+            "cue": st["cue"],
         }
     return web.json_response({"server_epoch_ms": time.time() * 1000.0,
-                              "lead": LEAD, "channels": out})
+                              "lead": LEAD, "cue_lead": CUE_LEAD, "channels": out})
 
 
 async def index(request):
     return web.FileResponse(os.path.join(HERE, "client.html"))
+
+
+async def admin_page(request):
+    return web.FileResponse(os.path.join(HERE, "admin.html"))
 
 
 async def mic(request):
@@ -210,18 +355,24 @@ async def mic(request):
 
 def main():
     port = int(os.environ.get("PORT", "8900"))
+    os.makedirs(ASSETS, exist_ok=True)
     app = web.Application()
     app.add_routes([
         web.get("/", index),
+        web.get("/admin", admin_page),
         web.get("/mic", mic),
         web.get("/status", status),
         web.get("/audio", audio_ws),
+        web.post("/api/cue", api_cue),
+        web.post("/api/zones", api_zones),
+        web.post("/api/align", api_align),
+        web.get("/api/assets", api_assets),
+        web.static("/assets", ASSETS),
     ])
-    ip = os.environ.get("LAN_IP", "192.168.0.194")
-    print(f"\n🔊 SOLUNA Surround  http://{ip}:{port}/")
-    print(f"   L  http://{ip}:{port}/?pos=L")
-    print(f"   R  http://{ip}:{port}/?pos=R")
-    print(f"   C  http://{ip}:{port}/?pos=C\n")
+    ip = os.environ.get("LAN_IP", "127.0.0.1")
+    print(f"\n🔊 SOLUNA Surround v3  http://{ip}:{port}/")
+    print(f"   client http://{ip}:{port}/?zone=A   admin http://{ip}:{port}/admin")
+    print(f"   assets: {ASSETS}\n")
     web.run_app(app, host="0.0.0.0", port=port, print=None)
 
 
