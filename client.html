@@ -141,17 +141,24 @@ const serverNowSec = () => (performance.now() + offsetMs) / 1000;
 
 // ---- zone delay -------------------------------------------------------------
 function delayMs(){
-  const z = (customD !== null && customD !== undefined && customD !== '')
-    ? parseFloat(customD)/343*1000 + 15
-    : (zones[ZONE] ?? 15);
+  let z;
+  if (customD !== null && customD !== undefined && customD !== '')
+    z = parseFloat(customD)/343*1000 + 15;              // スタッフの距離直指定
+  else if (autoDist !== null)
+    z = autoDist/343*1000 + 15;                          // 📍AUTO: 距離から連続計算
+  else
+    z = zones[ZONE] ?? 15;                               // ゾーン旗(フォールバック)
   return Math.max(0, z + baseMs);
 }
 
-// ---- GPSゾーン自動選択 --------------------------------------------------------
-// サーバconfigのステージ座標(geo)がある場合、GPS距離→最寄りゾーンへ自動スナップ。
-// ・精度>30mの測位は捨てる ・2回連続で同じ候補になったら切替(フラッピング防止)
+// ---- GPS自動(ゾーン不要) ------------------------------------------------------
+// サーバconfigのステージ座標(geo)がある場合、GPS距離から遅延を「連続値」で直接
+// 計算する — ゾーン分け自体が不要になる。ゾーン旗はGPS不可時のフォールバック。
+// ・精度>30mの測位は捨てる ・直近5点の中央値でスムージング
+// ・3.5m(=10ms)以上動いた時だけ、最短8秒間隔で再スケジュール(音を途切れさせない)
 // ・QRでゾーン指定して開いた場合は旗が正なので初期OFF(📍タップでON)
-let stageGeo=null, geoWatchId=null, geoInfo='—', autoCand=null, autoCandN=0;
+let stageGeo=null, geoWatchId=null, geoInfo='—';
+let autoDist=null, geoFixes=[], lastApplyT=0;
 let autoZone = !qs.get('zone') && !qs.get('pos');
 function havM(a,b){
   const R=6371000, r=x=>x*Math.PI/180;
@@ -174,15 +181,20 @@ function onGeoFix(pos){
   const d = havM({lat:pos.coords.latitude, lng:pos.coords.longitude}, stageGeo);
   geoInfo = `${d.toFixed(0)}m ±${acc.toFixed(0)}m`;
   $('geo') && ($('geo').textContent = geoInfo);
-  if (acc > 30) return;                            // 粗い測位でゾーンを揺らさない
-  const cand = zoneFromDistance(d);
-  if (!cand || cand === ZONE){ autoCand=null; autoCandN=0; return; }
-  if (cand === autoCand){ autoCandN++; } else { autoCand=cand; autoCandN=1; }
-  if (autoCandN >= 2){                             // 2回連続で確定
-    ZONE = cand; autoCand=null; autoCandN=0;
+  if (acc > 30) return;                            // 粗い測位で遅延を揺らさない
+  geoFixes.push(d);
+  if (geoFixes.length > 5) geoFixes.shift();
+  const med = [...geoFixes].sort((a,b)=>a-b)[Math.floor(geoFixes.length/2)];
+  const now = performance.now();
+  const moved = autoDist===null || Math.abs(med - autoDist) > 3.5;   // 3.5m ≒ 10ms
+  if (moved && (autoDist===null || now - lastApplyT > 8000)){
+    autoDist = med; lastApplyT = now;
+    const z = zoneFromDistance(med);               // FOH集計用に最寄りゾーンを報告
+    if (z && z !== ZONE){ ZONE = z;
+      if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
+    }
     renderZones();
-    if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
-    if (cueBuf && lastCueId) armCue();
+    if (cueBuf && lastCueId) armCue();             // 新しい遅延で曲中同期し直す
   }
 }
 function startGeoWatch(){
@@ -204,13 +216,13 @@ function renderZones(){
     const b = document.createElement('button');
     b.textContent = z;
     if (z===ZONE) b.classList.add('on');
-    b.onclick = ()=>{ ZONE=z; autoZone=false; renderZones();   // 手動選択=自動OFF
+    b.onclick = ()=>{ ZONE=z; autoZone=false; autoDist=null; geoFixes=[]; renderZones();   // 手動選択=自動OFF
       if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
       if (cueBuf && lastCueId) armCue();   // ゾーン変更 → 遅延を替えて即リスケジュール
     };
     p.appendChild(b);
   }
-  if (stageGeo && navigator.geolocation){       // 📍 = GPSでゾーン自動選択
+  if (stageGeo && navigator.geolocation){       // 📍 = GPSで遅延を自動計算(ゾーン不要)
     const b = document.createElement('button');
     b.textContent = '📍';
     b.title = T.autoZone;
@@ -218,7 +230,8 @@ function renderZones(){
     b.onclick = ()=>{ autoZone=true; renderZones(); startGeoWatch(); };
     p.appendChild(b);
   }
-  $('zoneBig').textContent = customD ? customD+'m' : ZONE;
+  $('zoneBig').textContent = customD ? customD+'m'
+    : (autoZone && autoDist!==null) ? `📍${autoDist.toFixed(0)}m` : ZONE;
   $('dly').textContent = delayMs().toFixed(1)+'ms';
 }
 
@@ -349,7 +362,8 @@ function lightLoop(){
 function onLight(m){
   light = m;
   $('lightLayer').classList.add('on');
-  $('hudZone').textContent = customD ? customD+'m' : ZONE;
+  $('hudZone').textContent = customD ? customD+'m'
+    : (autoZone && autoDist!==null) ? `📍${autoDist.toFixed(0)}m` : ZONE;
   $('hudPat').textContent = m.pattern;
   if (cueBuf && !energyEnv) energyEnv = buildEnergyEnv(cueBuf);
   if (!lightRAF) lightLoop();

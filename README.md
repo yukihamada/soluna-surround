@@ -44,7 +44,7 @@ comes from right next to you. Everyone stands in the sweet spot.
 |---|---|
 | 🔊 **Cue engine** | Audio is pre-fetched; the server broadcasts only *what to play and when* (server-clock epoch). Bandwidth ≈ zero, so device count is effectively unlimited. Latecomers join mid-track, already in phase. |
 | 🌈 **SOLUNA mode** | Phones become a synced light show. Colors are never streamed — each device computes its color from *(zone position, synced clock)*: waves and plasma sweep the crowd, `audio` mode pulses to a client-side RMS envelope of the track. Strobe is capped at 3 Hz for photosensitivity. |
-| 📍 **Auto-zoning by GPS** | Register the stage location once from the FOH console; every phone measures its own distance and snaps to the right delay zone as it moves — with hysteresis, accuracy gating, and manual override. |
+| 📍 **Zone-free auto delay** | Register the stage location once from the FOH console; every phone measures its own GPS distance and computes its delay *continuously* (`d/343 + 15ms`) — no zones, no flags, it follows you as you move (median smoothing, accuracy gating, re-syncs mid-track only when you've moved >3.5 m). Zone flags remain as the fallback when location is off. |
 | 🎧 **DJ from anything** | Open `/dj` on any phone or laptop: mic, line-in (music-grade, echo cancellation off) or a local file becomes the venue-wide source. |
 | 🎚 **House-PA fusion** | Feed the FOH desk's matrix out into `source.py --input --lead 0.08` (80 ms measured pipeline), then kill the flam with the console's ±1 ms ALIGN trim, broadcast live to every device. Or run fully standalone. |
 | 🔉 **Speaker-node fleet** | `play.py --zone D` turns a Raspberry Pi + class-D amp (~$180/node) into a grid speaker with ±1–3 ms sync over wired/dedicated Wi-Fi. |
@@ -124,8 +124,8 @@ QRを開いて▶を押すだけで、会場中のスマホ・スピーカーの
 各端末が自分の位置から色を計算する — だから光の波が観客席を横切る。
 
 - **60秒デモ**: `pip install aiohttp && python3 demo.py` → 出てきたURLをスマホ2台で開く
-- **📍GPS自動ゾーン**: FOHがステージ位置を登録すると、各端末が距離を測って自分の
-  遅延ゾーンに自動スナップ(精度ゲート+ヒステリシス付き、手動優先可)
+- **📍ゾーン分け不要**: FOHがステージ位置を1回登録すると、各端末がGPS距離から遅延を
+  連続計算(d÷343+15ms)。移動すれば追従。ゾーン旗は位置情報オフの人の保険
 - **DJはどの端末からでも**: `/dj` を開いた端末が会場全体の音源になる
 - **既存PAと融合も単体運用も**: 実測80msの低遅延パイプライン+±1msトリム
 - 本番: フェスではサーバを会場のMac(LAN)で運用。クラウド版はデモ・配布用
