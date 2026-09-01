@@ -123,6 +123,30 @@
   </section>
 
   <section>
+    <h2>LIGHT <small>SOLUNAモード — 全端末の画面が同期カラーライトになる</small></h2>
+    <div class="row" id="patRow">
+      <button data-pat="pulse">PULSE</button>
+      <button data-pat="wave">WAVE</button>
+      <button data-pat="plasma">PLASMA</button>
+      <button data-pat="audio">AUDIO SYNC</button>
+      <button data-pat="strobe">STROBE≤3Hz</button>
+      <button data-pat="solid">SOLID</button>
+    </div>
+    <div class="row mt">
+      <div><label>COLOR 1</label><input id="col1" type="color" value="#d4af37" style="width:64px;height:42px;padding:2px"></div>
+      <div><label>COLOR 2</label><input id="col2" type="color" value="#7fc9a2" style="width:64px;height:42px;padding:2px"></div>
+      <div><label>BPM</label><input id="bpm" type="number" value="120" min="20" max="200" style="width:74px"></div>
+      <div><label>SPEED</label><input id="speed" type="number" value="1.0" step="0.1" min="0.1" max="4" style="width:70px"></div>
+      <div><label>BRIGHT</label><input id="bright" type="number" value="1.0" step="0.1" min="0.1" max="1" style="width:70px"></div>
+    </div>
+    <div class="row mt">
+      <button class="gold fire" id="lightGo">💡 LIGHT GO</button>
+      <button class="red" id="lightStop" style="flex:1">■ DARK</button>
+    </div>
+    <div class="cuenow" id="lightnow"></div>
+  </section>
+
+  <section>
     <h2>LOG</h2>
     <pre id="log">—</pre>
   </section>
@@ -213,6 +237,22 @@ $('fire').onclick = ()=> call('/api/cue', {
   gain: parseFloat($('gain').value||1), loop: !!$('loop').value });
 $('stop').onclick = ()=> call('/api/cue', {stop:true});
 
+// ---- light ----
+let selPat = 'pulse';
+document.querySelectorAll('#patRow [data-pat]').forEach(b=>{
+  b.onclick = ()=>{
+    selPat = b.dataset.pat;
+    document.querySelectorAll('#patRow button').forEach(x=>x.classList.remove('gold'));
+    b.classList.add('gold');
+  };
+});
+document.querySelector('#patRow [data-pat="pulse"]').classList.add('gold');
+$('lightGo').onclick = ()=> call('/api/light', {
+  pattern: selPat, colors: [$('col1').value, $('col2').value],
+  bpm: parseFloat($('bpm').value||120), speed: parseFloat($('speed').value||1),
+  brightness: parseFloat($('bright').value||1) });
+$('lightStop').onclick = ()=> call('/api/light', {stop:true});
+
 // ---- status poll ----
 setInterval(async ()=>{
   try{
@@ -232,6 +272,7 @@ setInterval(async ()=>{
       el.textContent = n; el.classList.toggle('zero', !n);
     });
     $('cuenow').textContent = c.cue ? `● ACTIVE: ${c.cue.id} ${c.cue.url} gain=${c.cue.gain}${c.cue.loop?' loop':''}` : '';
+    $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}` : '';
     if (!assetsLoaded) loadAssets();
   }catch(e){}
 }, 2000);

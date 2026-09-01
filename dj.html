@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SOLUNA DJ</title>
+<style>
+  :root{--ink:#0a0507;--panel:#161014;--line:#2c2320;--txt:#f2e7d3;--dim:#9d8d76;
+        --gold:#d4af37;--gold2:#f0d47a;--ok:#4ade80;--bad:#f87171}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--ink);color:var(--txt);font-family:system-ui,-apple-system,sans-serif;
+       font-size:15px;max-width:520px;margin:0 auto;padding:20px 18px 80px}
+  .mono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-variant-numeric:tabular-nums}
+  h1{font-size:.75rem;letter-spacing:.34em;color:var(--gold);font-weight:800;text-align:center;
+     margin:14px 0 4px}
+  .sub{text-align:center;font-size:.72rem;color:var(--dim);margin-bottom:18px}
+  section{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+     padding:16px;margin-top:14px}
+  h2{font-size:.64rem;letter-spacing:.22em;color:var(--gold);font-weight:800;margin-bottom:12px}
+  label{font-size:.62rem;letter-spacing:.1em;color:var(--dim);display:block;margin-bottom:4px}
+  input,select{width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);
+     background:var(--ink);color:var(--txt);font-size:.95rem}
+  .row{display:flex;gap:10px}.row>div{flex:1}
+  .row.mt{margin-top:12px}
+  button{border:none;border-radius:12px;padding:14px;font-weight:800;cursor:pointer;
+     font-size:.9rem;background:#241b17;color:var(--txt);border:1px solid var(--line);width:100%}
+  button:active{transform:scale(.98)}
+  .gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none}
+  .red{background:rgba(248,113,113,.15);color:var(--bad);border:1px solid rgba(248,113,113,.3)}
+  .onair{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0 12px}
+  .onair .dot{width:12px;height:12px;border-radius:50%;background:#444}
+  .onair.live .dot{background:var(--bad);box-shadow:0 0 14px var(--bad);animation:bl 1.2s infinite}
+  @keyframes bl{50%{opacity:.4}}
+  .onair b{font-size:1.05rem;letter-spacing:.18em}
+  #meter{height:10px;border-radius:5px;background:var(--ink);border:1px solid var(--line);
+     overflow:hidden;margin-top:12px}
+  #meterBar{height:100%;width:0%;background:linear-gradient(90deg,var(--ok),var(--gold),var(--bad))}
+  .stat{display:flex;justify-content:space-between;font-size:.74rem;color:var(--dim);margin-top:10px}
+  .stat b{color:var(--txt)}
+  .seg{display:flex;gap:8px;margin-bottom:12px}
+  .seg button{flex:1;padding:11px;font-size:.82rem}
+  .seg button.on{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+  .hint{font-size:.68rem;color:var(--dim);line-height:1.7;margin-top:10px}
+  .check{display:flex;align-items:center;gap:10px;font-size:.8rem;margin-top:12px;color:var(--txt)}
+  .check input{width:auto}
+</style>
+</head>
+<body>
+  <h1>S O L U N A · D J</h1>
+  <div class="sub">この端末が、会場全体の音源になる</div>
+
+  <div class="onair" id="onair"><span class="dot"></span><b id="onairTxt">OFF AIR</b></div>
+
+  <section>
+    <h2>SOURCE</h2>
+    <div class="seg">
+      <button id="segMic" class="on">🎙 マイク / ライン</button>
+      <button id="segFile">🎵 ファイル</button>
+    </div>
+    <div id="fileRow" style="display:none;margin-bottom:12px">
+      <label>音源ファイル(この端末内)</label>
+      <input type="file" id="file" accept="audio/*">
+    </div>
+    <div class="row">
+      <div><label>SERVER(wss://…)</label><input id="server" placeholder="wss://host 例: 空欄=このホスト"></div>
+    </div>
+    <div class="row mt">
+      <div><label>CHANNEL</label><input id="ch" value="festival"></div>
+      <div><label>TOKEN(koe*等のみ必須)</label><input id="tok" type="password" placeholder="通常は空欄"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="fusion">
+      既存PAと融合(有線/低遅延 lead 0.08s) — 単体運用はOFFのまま</label>
+    <button class="gold" id="go" style="margin-top:14px">▶ ON AIR — 配信をはじめる</button>
+    <button class="red" id="stopBtn" style="margin-top:8px;display:none">■ OFF AIR</button>
+    <div id="meter"><div id="meterBar"></div></div>
+    <div class="stat"><span>LISTENERS <b id="n" class="mono">0</b></span>
+      <span>送信 <b id="sent" class="mono">0</b>f</span>
+      <span>sr <b id="sr" class="mono">—</b></span></div>
+    <div class="hint">マイク入力はエコー/ノイズ処理を切った音楽向け設定。DJミキサーのREC OUTを
+      イヤホン端子やUSB-IFでこの端末に入れれば、そのままフロア全体へ。聴く側は同じホストの
+      <span class="mono">/?zone=A</span> を開く。</div>
+  </section>
+
+  <div id="err" style="color:var(--bad);font-size:.78rem;margin-top:10px;text-align:center"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+let ctx=null, ws=null, running=false, seq=0, srcNode=null, procNode=null, mediaEl=null, stream=null;
+$('server').value = localStorage.getItem('dj_server')||'';
+$('ch').value = localStorage.getItem('dj_ch')||'festival';
+$('tok').value = localStorage.getItem('dj_tok')||'';
+
+let mode='mic';
+$('segMic').onclick=()=>{mode='mic';$('segMic').classList.add('on');$('segFile').classList.remove('on');$('fileRow').style.display='none';};
+$('segFile').onclick=()=>{mode='file';$('segFile').classList.add('on');$('segMic').classList.remove('on');$('fileRow').style.display='';};
+
+function sl2(pcm16){
+  const buf=new ArrayBuffer(22+pcm16.length*2), dv=new DataView(buf);
+  dv.setUint8(0,0x53);dv.setUint8(1,0x4c);dv.setUint8(2,0x32);
+  dv.setUint8(3,2);dv.setUint8(4,1);dv.setUint8(5,0);
+  dv.setUint32(6,seq++>>>0,true); dv.setUint32(10,pcm16.length,true);
+  dv.setFloat64(14,0,true);
+  new Int16Array(buf,22).set(pcm16);
+  return buf;
+}
+function setLive(on){
+  running=on;
+  $('onair').classList.toggle('live',on);
+  $('onairTxt').textContent=on?'ON AIR':'OFF AIR';
+  $('go').style.display=on?'none':'';
+  $('stopBtn').style.display=on?'':'none';
+}
+async function start(){
+  $('err').textContent='';
+  localStorage.setItem('dj_server',$('server').value);
+  localStorage.setItem('dj_ch',$('ch').value);
+  localStorage.setItem('dj_tok',$('tok').value);
+  try{
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    await ctx.resume();
+    if (mode==='mic'){
+      stream = await navigator.mediaDevices.getUserMedia({audio:{
+        echoCancellation:false, noiseSuppression:false, autoGainControl:false}, video:false});
+      srcNode = ctx.createMediaStreamSource(stream);
+    } else {
+      const f = $('file').files[0];
+      if (!f){ $('err').textContent='ファイルを選んでください'; return; }
+      mediaEl = new Audio(URL.createObjectURL(f));
+      mediaEl.loop = false;
+      srcNode = ctx.createMediaElementSource(mediaEl);
+      await mediaEl.play();
+    }
+    const base = $('server').value.trim() ||
+      ((location.protocol==='https:'?'wss://':'ws://')+location.host);
+    const tok = $('tok').value ? `&token=${encodeURIComponent($('tok').value)}` : '';
+    ws = new WebSocket(`${base}/audio?role=push&ch=${encodeURIComponent($('ch').value)}${tok}&node=dj`);
+    ws.binaryType='arraybuffer';
+    ws.onopen = ()=>{
+      const lead = $('fusion').checked ? 0.08 : 0.6;
+      ws.send(JSON.stringify({t:'hello',map:['L'],sr:ctx.sampleRate,lead}));
+      $('sr').textContent = ctx.sampleRate;
+      setLive(true);
+    };
+    ws.onclose = ()=>{ if(running){ $('err').textContent='接続が切れました — 再接続します';
+      setTimeout(()=>{ if(running) reconnect(); }, 1500);} };
+    procNode = ctx.createScriptProcessor(2048,1,1);
+    srcNode.connect(procNode); procNode.connect(ctx.destination);
+    if (mode==='mic'){ // マイクの回り込み防止: 出力へはつながない(processorはdestination必須なのでgain0を挟む)
+      procNode.disconnect();
+      const mute = ctx.createGain(); mute.gain.value = 0;
+      procNode.connect(mute); mute.connect(ctx.destination);
+      srcNode.connect(procNode);
+    }
+    let sent=0;
+    procNode.onaudioprocess = e=>{
+      if (!running || !ws || ws.readyState!==1) return;
+      const f32=e.inputBuffer.getChannelData(0);
+      let peak=0;
+      const i16=new Int16Array(f32.length);
+      for(let i=0;i<f32.length;i++){
+        const v=Math.max(-1,Math.min(1,f32[i]));
+        i16[i]=v*32767; peak=Math.max(peak,Math.abs(v));
+      }
+      $('meterBar').style.width=Math.min(100,peak*130)+'%';
+      ws.send(sl2(i16));
+      $('sent').textContent=++sent;
+    };
+  }catch(e){
+    $('err').textContent='開始できません: '+(e.name||e);
+    stop();
+  }
+}
+function reconnect(){ stopAudioKeep(); start(); }
+function stopAudioKeep(){ try{ws&&ws.close()}catch(e){} ws=null; }
+function stop(){
+  setLive(false);
+  try{ws&&ws.close()}catch(e){} ws=null;
+  try{procNode&&procNode.disconnect()}catch(e){}
+  try{srcNode&&srcNode.disconnect()}catch(e){}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  if(mediaEl){try{mediaEl.pause()}catch(e){} mediaEl=null;}
+  if(ctx){try{ctx.close()}catch(e){} ctx=null;}
+  $('meterBar').style.width='0%';
+}
+$('go').onclick=start;
+$('stopBtn').onclick=stop;
+setInterval(async ()=>{
+  try{
+    const base = $('server').value.trim().replace(/^wss/,'https').replace(/^ws(?!s)/,'http') || '';
+    const s = await (await fetch(`${base}/status`)).json();
+    const c = s.channels[$('ch').value];
+    $('n').textContent = c ? c.listeners : 0;
+  }catch(e){}
+},2500);
+</script>
+</body>
+</html>

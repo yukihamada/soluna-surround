@@ -76,6 +76,7 @@ def _chan(name):
         "base_ms": 0.0,           # 全ゾーン一括トリム(既存ハウスPAとの位相合わせ)
         "lead": LEAD,
         "cue": None,              # active cue dict (途中参加者へ再送する)
+        "light": None,            # active light dict (SOLUNAモード: 色の同期)
     })
 
 
@@ -167,6 +168,8 @@ async def audio_ws(request):
         await ws.send_str(_config_msg(state))
         if state["cue"]:                      # 途中参加 → 進行中キューを渡す
             await ws.send_str(json.dumps({"t": "cue", **state["cue"]}))
+        if state["light"]:                    # 途中参加 → 進行中ライトも渡す
+            await ws.send_str(json.dumps({"t": "light", **state["light"]}))
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 try:
@@ -268,6 +271,45 @@ async def api_cue(request):
                               "listeners": len(state["listeners"])})
 
 
+async def api_light(request):
+    """SOLUNAモード(色の同期)。色データは配信せず「パターン+開始時刻」だけを
+    配り、各端末が (ゾーン位置, 同期時刻) から色をローカル計算する — 音のCUEと
+    同じ思想で帯域ゼロ・台数無制限。
+    body: {pattern: solid|pulse|wave|plasma|strobe|audio,
+           colors: ["#rrggbb", ...], bpm, speed, brightness, at?} or {stop:true}
+    pattern=audio は再生中キューの音源から端末側がエネルギー包絡を解析して
+    明るさに変換する(追加通信なし)。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch", "festival")
+    state = _chan(name)
+    body = await request.json()
+
+    if body.get("stop"):
+        state["light"] = None
+        await _broadcast_text(state, json.dumps({"t": "light_stop"}))
+        return web.json_response({"ok": True, "stopped": True,
+                                  "listeners": len(state["listeners"])})
+
+    pattern = body.get("pattern", "pulse")
+    if pattern not in ("solid", "pulse", "wave", "plasma", "strobe", "audio"):
+        raise web.HTTPBadRequest(text="pattern must be one of "
+                                      "solid|pulse|wave|plasma|strobe|audio")
+    light = {
+        "id": body.get("id") or f"light-{int(time.time() * 1000)}",
+        "pattern": pattern,
+        "colors": body.get("colors") or ["#d4af37", "#7fc9a2"],
+        "bpm": float(body.get("bpm", 120)),
+        "speed": float(body.get("speed", 1.0)),
+        "brightness": float(body.get("brightness", 1.0)),
+        "at": float(body.get("at") or time.time()),   # パターン位相の基準時刻
+    }
+    state["light"] = light
+    await _broadcast_text(state, json.dumps({"t": "light", **light}))
+    return web.json_response({"ok": True, "light": light,
+                              "listeners": len(state["listeners"])})
+
+
 async def api_align(request):
     """既存ハウスPAとの位相合わせ: 全ゾーン一括トリム(ms, 負値=早める方向)。
     サウンドチェックでクリックをハウスPA+グリッド同時に鳴らし、フラム感が
@@ -335,6 +377,7 @@ async def status(request):
             "base_ms": st["base_ms"],
             "live_lead": st["lead"],
             "cue": st["cue"],
+            "light": st["light"],
         }
     return web.json_response({"server_epoch_ms": time.time() * 1000.0,
                               "lead": LEAD, "cue_lead": CUE_LEAD, "channels": out})
@@ -346,6 +389,18 @@ async def index(request):
 
 async def admin_page(request):
     return web.FileResponse(os.path.join(HERE, "admin.html"))
+
+
+async def dj_page(request):
+    return web.FileResponse(os.path.join(HERE, "dj.html"))
+
+
+async def manifest(request):
+    return web.FileResponse(os.path.join(HERE, "manifest.webmanifest"))
+
+
+async def sw(request):
+    return web.FileResponse(os.path.join(HERE, "sw.js"))
 
 
 async def mic(request):
@@ -360,14 +415,19 @@ def main():
     app.add_routes([
         web.get("/", index),
         web.get("/admin", admin_page),
+        web.get("/dj", dj_page),
+        web.get("/manifest.webmanifest", manifest),
+        web.get("/sw.js", sw),
         web.get("/mic", mic),
         web.get("/status", status),
         web.get("/audio", audio_ws),
         web.post("/api/cue", api_cue),
         web.post("/api/zones", api_zones),
         web.post("/api/align", api_align),
+        web.post("/api/light", api_light),
         web.get("/api/assets", api_assets),
         web.static("/assets", ASSETS),
+        web.static("/icons", os.path.join(HERE, "icons")),
     ])
     ip = os.environ.get("LAN_IP", "127.0.0.1")
     print(f"\n🔊 SOLUNA Surround v3  http://{ip}:{port}/")
