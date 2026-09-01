@@ -66,6 +66,7 @@
       <span data-i18n="clock">同期精度</span><b id="off">—</b>
       <span>RTT</span><b id="rtt">—</b>
       <span data-i18n="cueL">キュー</span><b id="cue">—</b>
+      <span data-i18n="geoL">ステージ距離</span><b id="geo">—</b>
       <span data-i18n="liveL">ライブ受信</span><b id="fr">0</b>
     </div>
   </details>
@@ -86,12 +87,14 @@ const I18N = {
         clock:'同期精度', cueL:'キュー', liveL:'ライブ受信',
         hint:'近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。',
         join:'▶ 音に参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
-        ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細' },
+        ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細',
+        autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
         hint:'Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
         join:'▶ JOIN THE SOUND', leave:'■ LEAVE', idle:'idle', conn:'connected',
-        ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details' },
+        ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details',
+        autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST' },
 };
 const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
 const T = I18N[LANG];
@@ -143,16 +146,76 @@ function delayMs(){
     : (zones[ZONE] ?? 15);
   return Math.max(0, z + baseMs);
 }
+
+// ---- GPSゾーン自動選択 --------------------------------------------------------
+// サーバconfigのステージ座標(geo)がある場合、GPS距離→最寄りゾーンへ自動スナップ。
+// ・精度>30mの測位は捨てる ・2回連続で同じ候補になったら切替(フラッピング防止)
+// ・QRでゾーン指定して開いた場合は旗が正なので初期OFF(📍タップでON)
+let stageGeo=null, geoWatchId=null, geoInfo='—', autoCand=null, autoCandN=0;
+let autoZone = !qs.get('zone') && !qs.get('pos');
+function havM(a,b){
+  const R=6371000, r=x=>x*Math.PI/180;
+  const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(s));
+}
+function zoneFromDistance(d){
+  let best=null, bestDiff=Infinity;
+  for (const [name, ms] of Object.entries(zones)){
+    const zm = Math.max(0,(ms-15))/1000*343;      // delay_ms → 距離[m] に逆算
+    const diff = Math.abs(zm - d);
+    if (diff < bestDiff){ bestDiff=diff; best=name; }
+  }
+  return best;
+}
+function onGeoFix(pos){
+  if (!stageGeo || !autoZone) return;
+  const acc = pos.coords.accuracy;
+  const d = havM({lat:pos.coords.latitude, lng:pos.coords.longitude}, stageGeo);
+  geoInfo = `${d.toFixed(0)}m ±${acc.toFixed(0)}m`;
+  $('geo') && ($('geo').textContent = geoInfo);
+  if (acc > 30) return;                            // 粗い測位でゾーンを揺らさない
+  const cand = zoneFromDistance(d);
+  if (!cand || cand === ZONE){ autoCand=null; autoCandN=0; return; }
+  if (cand === autoCand){ autoCandN++; } else { autoCand=cand; autoCandN=1; }
+  if (autoCandN >= 2){                             // 2回連続で確定
+    ZONE = cand; autoCand=null; autoCandN=0;
+    renderZones();
+    if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
+    if (cueBuf && lastCueId) armCue();
+  }
+}
+function startGeoWatch(){
+  if (!stageGeo || geoWatchId!==null || !navigator.geolocation) return;
+  geoWatchId = navigator.geolocation.watchPosition(onGeoFix,
+    e=>{ // 拒否(code=1)のみ手動へ。圏外/タイムアウトは一時的なので監視継続
+      if (e.code === 1){ geoInfo = T.geoDenied; autoZone=false; renderZones(); }
+      $('geo') && ($('geo').textContent = geoInfo);
+    },
+    {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
+}
+function stopGeoWatch(){
+  if (geoWatchId!==null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId=null;
+}
 function renderZones(){
   const p = $('picker'); p.innerHTML='';
   for (const z of Object.keys(zones)){
     const b = document.createElement('button');
     b.textContent = z;
     if (z===ZONE) b.classList.add('on');
-    b.onclick = ()=>{ ZONE=z; renderZones();
+    b.onclick = ()=>{ ZONE=z; autoZone=false; renderZones();   // 手動選択=自動OFF
       if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
       if (cueBuf && lastCueId) armCue();   // ゾーン変更 → 遅延を替えて即リスケジュール
     };
+    p.appendChild(b);
+  }
+  if (stageGeo && navigator.geolocation){       // 📍 = GPSでゾーン自動選択
+    const b = document.createElement('button');
+    b.textContent = '📍';
+    b.title = T.autoZone;
+    if (autoZone) b.classList.add('on');
+    b.onclick = ()=>{ autoZone=true; renderZones(); startGeoWatch(); };
     p.appendChild(b);
   }
   $('zoneBig').textContent = customD ? customD+'m' : ZONE;
@@ -337,7 +400,9 @@ function connect(){
     if (typeof e.data === 'string'){
       const m = JSON.parse(e.data);
       if (m.t==='pong') onPong(m);
-      else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0; renderZones();
+      else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0;
+        stageGeo=m.geo||null; renderZones();
+        if (stageGeo && autoZone) startGeoWatch();
         if (cueBuf && pendingCue) armCue(); }
       else if (m.t==='cue') onCue(m).catch(err=>{ $('cue').textContent=T.fail; console.error(err); });
       else if (m.t==='cue_stop') onCueStop();
@@ -366,9 +431,10 @@ async function start(){
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
   active = true; frames=0; $('fr').textContent=0;
   connect();
+  if (stageGeo && autoZone) startGeoWatch();   // 参加タップ=ユーザー起点で位置許可を出す
 }
 function stop(){
-  active=false; onCueStop(); onLightStop();
+  active=false; onCueStop(); onLightStop(); stopGeoWatch();
   if(ws){try{ws.close()}catch(e){}}
   if(ctx){try{ctx.close()}catch(e){}} ctx=null;
   try{ wakeLock?.release(); }catch(e){}

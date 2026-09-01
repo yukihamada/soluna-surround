@@ -77,6 +77,7 @@ def _chan(name):
         "lead": LEAD,
         "cue": None,              # active cue dict (途中参加者へ再送する)
         "light": None,            # active light dict (SOLUNAモード: 色の同期)
+        "geo": None,              # {"lat","lng"} ステージ位置(GPSゾーン自動選択用)
     })
 
 
@@ -96,7 +97,7 @@ def _pos_index(state, pos):
 
 def _config_msg(state):
     return json.dumps({"t": "config", "zones": state["zones"], "sr": state["sr"],
-                       "base_ms": state["base_ms"],
+                       "base_ms": state["base_ms"], "geo": state["geo"],
                        "server_ms": time.time() * 1000.0})
 
 
@@ -310,6 +311,26 @@ async def api_light(request):
                               "listeners": len(state["listeners"])})
 
 
+async def api_geo(request):
+    """ステージ位置(緯度経度)を登録 → 端末はGPS距離からゾーンを自動選択できる。
+    body: {lat, lng} or {clear:true}。FOHが舞台前で「現在地を登録」する運用。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch", "festival")
+    state = _chan(name)
+    body = await request.json()
+    if body.get("clear"):
+        state["geo"] = None
+    else:
+        try:
+            state["geo"] = {"lat": float(body["lat"]), "lng": float(body["lng"])}
+        except (KeyError, TypeError, ValueError):
+            raise web.HTTPBadRequest(text='{"lat":21.33,"lng":-158.08} or {"clear":true}')
+    await _broadcast_text(state, _config_msg(state))
+    return web.json_response({"ok": True, "geo": state["geo"],
+                              "listeners": len(state["listeners"])})
+
+
 async def api_align(request):
     """既存ハウスPAとの位相合わせ: 全ゾーン一括トリム(ms, 負値=早める方向)。
     サウンドチェックでクリックをハウスPA+グリッド同時に鳴らし、フラム感が
@@ -378,6 +399,7 @@ async def status(request):
             "live_lead": st["lead"],
             "cue": st["cue"],
             "light": st["light"],
+            "geo": st["geo"],
         }
     return web.json_response({"server_epoch_ms": time.time() * 1000.0,
                               "lead": LEAD, "cue_lead": CUE_LEAD, "channels": out})
@@ -430,6 +452,7 @@ def main():
         web.post("/api/zones", api_zones),
         web.post("/api/align", api_align),
         web.post("/api/light", api_light),
+        web.post("/api/geo", api_geo),
         web.get("/api/assets", api_assets),
         web.static("/assets", ASSETS),
         web.static("/icons", os.path.join(HERE, "icons")),
