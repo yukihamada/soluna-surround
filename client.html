@@ -63,7 +63,7 @@
     <summary style="cursor:pointer;list-style:none" data-i18n="details">詳細</summary>
     <div class="grid" style="margin-top:8px">
       <span data-i18n="zoneDelay">ゾーン遅延</span><b id="dly">—</b>
-      <span data-i18n="clock">クロック誤差</span><b id="off">—</b>
+      <span data-i18n="clock">同期精度</span><b id="off">—</b>
       <span>RTT</span><b id="rtt">—</b>
       <span data-i18n="cueL">キュー</span><b id="cue">—</b>
       <span data-i18n="liveL">ライブ受信</span><b id="fr">0</b>
@@ -83,12 +83,12 @@ const $ = id => document.getElementById(id);
 // ---- i18n (ja / en) ---------------------------------------------------------
 const I18N = {
   ja: { zoneLabel:'あなたのゾーン(近くの旗の色/記号)', status:'状態', zoneDelay:'ゾーン遅延',
-        clock:'クロック誤差', cueL:'キュー', liveL:'ライブ受信',
+        clock:'同期精度', cueL:'キュー', liveL:'ライブ受信',
         hint:'近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。',
         join:'▶ 音に参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
         ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
-        clock:'CLOCK OFFSET', cueL:'CUE', liveL:'LIVE FRAMES',
+        clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
         hint:'Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
         join:'▶ JOIN THE SOUND', leave:'■ LEAVE', idle:'idle', conn:'connected',
         ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details' },
@@ -129,7 +129,8 @@ function onPong(m){
   if (pingCount === 10){                  // 収束後はサーバ負荷を下げる(5000台対策)
     clearInterval(pingTimer); pingTimer = setInterval(sendPing, 3000);
   }
-  $('off').textContent = (offsetMs>=0?'+':'') + offsetMs.toFixed(1)+'ms';
+  // 生のepochオフセットは無意味な巨大数なので、同期精度(±bestRTT/2)を見せる
+  $('off').textContent = '±' + (best.rtt/2).toFixed(1)+'ms';
   $('rtt').textContent = rtt.toFixed(1)+'ms';
   if (pendingCue && cueBuf) armCue();     // 同期がとれた時点で保留キューを発火
 }
