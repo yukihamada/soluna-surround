@@ -94,6 +94,9 @@ async def net(player, server, ch):
                         player.zones = {k.upper(): float(v)
                                         for k, v in (m.get("zones") or {}).items()}
                         player.base_ms = float(m.get("base_ms", 0.0))
+                        if int(m.get("sr", SR)) != SR:
+                            print(f"[play {player.pos}] ⚠ source sr={m['sr']} != {SR}: "
+                                  f"ノード運用は48kHz送出(source.py)が前提。ピッチが狂います")
                         print(f"[play {player.pos}] config zone={player.zone} "
                               f"delay={player.delay_sec()*1000:.1f}ms")
                     elif m.get("t") == "pong":

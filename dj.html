@@ -170,18 +170,11 @@ async function start(){
     };
     ws.onclose = ()=>{ if(running){ $('err').textContent='接続が切れました — 再接続します';
       setTimeout(()=>{ if(running) reconnect(); }, 1500);} };
-    procNode = ctx.createScriptProcessor(2048,1,1);
-    srcNode.connect(procNode); procNode.connect(ctx.destination);
-    if (mode==='mic'){ // マイクの回り込み防止: 出力へはつながない(processorはdestination必須なのでgain0を挟む)
-      procNode.disconnect();
-      const mute = ctx.createGain(); mute.gain.value = 0;
-      procNode.connect(mute); mute.connect(ctx.destination);
-      srcNode.connect(procNode);
-    }
-    let sent=0;
-    procNode.onaudioprocess = e=>{
-      if (!running || !ws || ws.readyState!==1) return;
-      const f32=e.inputBuffer.getChannelData(0);
+    // 取り込み: AudioWorklet(別スレッド=メインスレッドの重さで音を落とさない)。
+    // 非対応ブラウザは ScriptProcessor にフォールバック。~2048サンプルに束ねて送信。
+    let sent=0, acc=new Float32Array(0);
+    const CHUNK = 2048;
+    function sendChunk(f32){
       let peak=0;
       const i16=new Int16Array(f32.length);
       for(let i=0;i<f32.length;i++){
@@ -191,7 +184,31 @@ async function start(){
       $('meterBar').style.width=Math.min(100,peak*130)+'%';
       ws.send(sl2(i16));
       $('sent').textContent=++sent;
-    };
+    }
+    function pushBlock(f32){
+      if (!running || !ws || ws.readyState!==1) return;
+      const merged=new Float32Array(acc.length+f32.length);
+      merged.set(acc); merged.set(f32, acc.length); acc=merged;
+      while (acc.length >= CHUNK){
+        sendChunk(acc.subarray(0, CHUNK));
+        acc = acc.slice(CHUNK);
+      }
+    }
+    if (ctx.audioWorklet){
+      const wsrc = `class Cap extends AudioWorkletProcessor{
+        process(inputs){ const c=inputs[0][0]; if(c) this.port.postMessage(c.slice(0)); return true; } }
+        registerProcessor('soluna-cap', Cap);`;
+      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([wsrc],{type:'application/javascript'})));
+      procNode = new AudioWorkletNode(ctx, 'soluna-cap');
+      procNode.port.onmessage = e=> pushBlock(e.data);
+    } else {
+      procNode = ctx.createScriptProcessor(2048,1,1);
+      procNode.onaudioprocess = e=> pushBlock(new Float32Array(e.inputBuffer.getChannelData(0)));
+    }
+    srcNode.connect(procNode);
+    const mute = ctx.createGain(); mute.gain.value = 0;   // マイク回り込み防止
+    procNode.connect(mute); mute.connect(ctx.destination);
+    if (mode==='file') srcNode.connect(ctx.destination);  // ファイルは手元モニターも鳴らす
   }catch(e){
     $('err').textContent='開始できません: '+(e.name||e);
     stop();

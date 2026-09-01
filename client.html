@@ -71,6 +71,7 @@
     </div>
   </details>
   <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
+  <div class="hint" data-i18n="hint2">音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。</div>
 
   <div id="lightLayer"></div>
   <div id="lightHud"><span class="chip">ZONE <b id="hudZone">A</b> <span id="hudPat"></span>
@@ -89,13 +90,15 @@ const I18N = {
         hint:'近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。',
         join:'▶ 音に参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
         ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細',
-        autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離' },
+        autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離',
+        preloaded:'準備OK', hint2:'音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
         hint:'Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
         join:'▶ JOIN THE SOUND', leave:'■ LEAVE', idle:'idle', conn:'connected',
         ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details',
-        autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST' },
+        autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST',
+        preloaded:'ready', hint2:'No sound? On iPhone, flip the silent switch off and turn the volume up.' },
 };
 const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
 const T = I18N[LANG];
@@ -112,7 +115,7 @@ let baseMs = 0;                           // ハウスPA位相合わせの一括
 const customD = qs.get('d');              // ?d=<m> 距離を直接指定(スタッフ用)
 
 let ctx=null, ws=null, active=false, wakeLock=null;
-let frames=0, lastCueId=null;
+let frames=0, lastCueId=null, srvSr=48000;   // LIVE配信元の実サンプルレート(config)
 let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null;
 
 // ---- clock sync: 直近windowの最小RTTサンプルのoffsetを採用 ------------------
@@ -237,17 +240,23 @@ function renderZones(){
 }
 
 // ---- CUE MODE: 事前配布ファイルを playAt で一斉スケジュール -------------------
+async function loadTrack(url){
+  if (cueBufUrl === url && cueBuf) return;
+  const res = await fetch(url);
+  const raw = await res.arrayBuffer();
+  cueBuf = await ctx.decodeAudioData(raw);
+  cueBufUrl = url;
+  energyEnv = null;                            // 音源が替わったら包絡も作り直す
+  if (light) energyEnv = buildEnergyEnv(cueBuf);
+}
+async function onPreload(m){                    // 開演前DL: 再生はしない
+  try{ await loadTrack(m.url); $('cue').textContent = T.preloaded; }
+  catch(e){ $('cue').textContent = T.fail; }
+}
 async function onCue(m){
   $('cue').textContent = T.ready;
   pendingCue = m;
-  if (cueBufUrl !== m.url){
-    const res = await fetch(m.url);
-    const raw = await res.arrayBuffer();
-    cueBuf = await ctx.decodeAudioData(raw);
-    cueBufUrl = m.url;
-    energyEnv = null;                          // 音源が替わったら包絡も作り直す
-    if (light) energyEnv = buildEnergyEnv(cueBuf);
-  }
+  await loadTrack(m.url);
   lastCueId = m.id;
   if (offsetMs !== null) armCue();
 }
@@ -400,7 +409,8 @@ function onFrame(buf){
   const f32 = new Float32Array(nsamp);
   const vol = $('vol').value/100;
   for (let i=0;i<nsamp;i++) f32[i] = pcm[i] / 32768 * vol;
-  const ab = ctx.createBuffer(1, nsamp, SR);
+  // 配信元の実レート(例: Macの44.1kHz)でバッファを作る — 再生時にctxへ自動リサンプル
+  const ab = ctx.createBuffer(1, nsamp, srvSr);
   ab.copyToChannel(f32, 0);
   const src = ctx.createBufferSource();
   src.buffer = ab; src.connect(ctx.destination);
@@ -425,10 +435,11 @@ function connect(){
       const m = JSON.parse(e.data);
       if (m.t==='pong') onPong(m);
       else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0;
-        stageGeo=m.geo||null; renderZones();
+        srvSr=m.sr||48000; stageGeo=m.geo||null; renderZones();
         if (stageGeo && autoZone) startGeoWatch();
         if (cueBuf && pendingCue) armCue(); }
       else if (m.t==='cue') onCue(m).catch(err=>{ $('cue').textContent=T.fail; console.error(err); });
+      else if (m.t==='preload') onPreload(m);
       else if (m.t==='cue_stop') onCueStop();
       else if (m.t==='light') onLight(m);
       else if (m.t==='light_stop') onLightStop();

@@ -130,6 +130,9 @@
       <div><label>LOOP</label><select id="loop"><option value="">no</option><option value="1">yes</option></select></div>
     </div>
     <div class="row mt">
+      <button id="preload" style="flex:1">📥 PRELOAD — 先に全端末へ配布(再生しない)</button>
+    </div>
+    <div class="row mt">
       <button class="gold fire" id="fire">▶ FIRE — 全端末一斉再生</button>
       <button class="red" id="stop" style="flex:1">■ STOP</button>
     </div>
@@ -259,10 +262,12 @@ async function loadAssets(){
     box.appendChild(d);
   }
 }
+$('preload').onclick = ()=> call('/api/cue', {url: $('url').value, preload:true});
 $('fire').onclick = ()=> call('/api/cue', {
   url: $('url').value, lead: parseFloat($('clead').value||5),
   gain: parseFloat($('gain').value||1), loop: !!$('loop').value });
-$('stop').onclick = ()=> call('/api/cue', {stop:true});
+// 本番の音/光を落とすボタンは誤タップ1発で死なないよう確認を挟む
+$('stop').onclick = ()=>{ if (confirm('全端末のキュー再生を停止します。OK?')) call('/api/cue', {stop:true}); };
 
 // ---- light ----
 let selPat = 'pulse';
@@ -278,7 +283,7 @@ $('lightGo').onclick = ()=> call('/api/light', {
   pattern: selPat, colors: [$('col1').value, $('col2').value],
   bpm: parseFloat($('bpm').value||120), speed: parseFloat($('speed').value||1),
   brightness: parseFloat($('bright').value||1) });
-$('lightStop').onclick = ()=> call('/api/light', {stop:true});
+$('lightStop').onclick = ()=>{ if (confirm('全端末のライトを消灯します。OK?')) call('/api/light', {stop:true}); };
 
 // ---- status poll ----
 setInterval(async ()=>{

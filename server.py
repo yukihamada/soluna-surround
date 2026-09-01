@@ -78,6 +78,7 @@ def _chan(name):
         "cue": None,              # active cue dict (途中参加者へ再送する)
         "light": None,            # active light dict (SOLUNAモード: 色の同期)
         "geo": None,              # {"lat","lng"} ステージ位置(GPSゾーン自動選択用)
+        "preload": None,          # 事前配布済み音源URL(FIRE前のDLバースト回避)
     })
 
 
@@ -102,14 +103,13 @@ def _config_msg(state):
 
 
 async def _broadcast_text(state, text):
-    dead = []
-    for ws in list(state["listeners"].keys()):
+    # 並列送信+タイムアウト: 死にかけの1端末が全体の配信を詰まらせないように
+    async def _send(ws):
         try:
-            await ws.send_str(text)
+            await asyncio.wait_for(ws.send_str(text), timeout=2.0)
         except Exception:
-            dead.append(ws)
-    for ws in dead:
-        state["listeners"].pop(ws, None)
+            state["listeners"].pop(ws, None)
+    await asyncio.gather(*(_send(ws) for ws in list(state["listeners"].keys())))
 
 
 def _admin_ok(request):
@@ -125,6 +125,12 @@ async def audio_ws(request):
     tok = os.environ.get("SOLUNA_TOKEN")
     if tok and name.startswith("koe") and request.query.get("token") != tok:
         raise web.HTTPForbidden(text="token required for koe* channels")
+    # 本番の音の乗っ取り防止: SOLUNA_DJ_TOKEN が設定されていれば配信側は要トークン
+    # (リスナーは常にオープン)。未設定なら従来どおり=自宅/デモの手軽さ優先。
+    dj_tok = os.environ.get("SOLUNA_DJ_TOKEN")
+    if (dj_tok and role == "push" and not name.startswith("koe")
+            and request.query.get("token") != dj_tok):
+        raise web.HTTPForbidden(text="broadcast token required (SOLUNA_DJ_TOKEN)")
     ws = web.WebSocketResponse(max_msg_size=8 * 1024 * 1024, heartbeat=30)
     await ws.prepare(request)
     state = _chan(name)
@@ -167,6 +173,8 @@ async def audio_ws(request):
     print(f"[listen] +{meta} ch={name} (n={len(state['listeners'])})")
     try:
         await ws.send_str(_config_msg(state))
+        if state.get("preload") and not state["cue"]:   # 開演前に入場 → 先にDLさせる
+            await ws.send_str(json.dumps({"t": "preload", "url": state["preload"]}))
         if state["cue"]:                      # 途中参加 → 進行中キューを渡す
             await ws.send_str(json.dumps({"t": "cue", **state["cue"]}))
         if state["light"]:                    # 途中参加 → 進行中ライトも渡す
@@ -216,10 +224,11 @@ async def _fanout(name, state, data: bytes):
     state["played"] += nsamp
     state["seq"] = seq
 
-    # Build one mono frame per distinct position in use, then send.
+    # Build one mono frame per distinct position in use, then send in parallel
+    # (直列だと遅い1端末が全ノードの位相を巻き込む)。
     cache = {}
-    dead = []
-    for ws, meta in list(state["listeners"].items()):
+
+    async def _send(ws, meta):
         idx = _pos_index(state, meta.get("pos"))
         if idx >= nchan:
             idx = 0
@@ -230,11 +239,12 @@ async def _fanout(name, state, data: bytes):
             frame = hdr + mono.tobytes()
             cache[idx] = frame
         try:
-            await ws.send_bytes(frame)
+            await asyncio.wait_for(ws.send_bytes(frame), timeout=1.0)
         except Exception:
-            dead.append(ws)
-    for ws in dead:
-        state["listeners"].pop(ws, None)
+            state["listeners"].pop(ws, None)
+
+    await asyncio.gather(*(_send(ws, meta)
+                           for ws, meta in list(state["listeners"].items())))
 
 
 # ---- admin API -------------------------------------------------------------
@@ -255,6 +265,14 @@ async def api_cue(request):
     url = body.get("url")
     if not url:
         raise web.HTTPBadRequest(text="url required")
+
+    if body.get("preload"):
+        # 事前配布: 全端末がDL/デコードだけ済ませる(再生しない)。本番のFIREは
+        # 一斉DLバーストなしで頭から揃う。開演30分前に打っておくのが正。
+        state["preload"] = url
+        await _broadcast_text(state, json.dumps({"t": "preload", "url": url}))
+        return web.json_response({"ok": True, "preloaded": url,
+                                  "listeners": len(state["listeners"])})
     if body.get("at"):                       # サーバepoch秒を直接指定
         at = float(body["at"])
     else:                                    # lead秒後(サーバ時計基準・推奨)
