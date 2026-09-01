@@ -487,6 +487,7 @@ function audioLevelNow(){
   const i = Math.min(energyEnv.length-1, Math.floor(pos*SR/energyHop));
   return energyEnv[i];
 }
+let lvlAvg = 0;                               // audio: ヒット検出用のゆっくり平均
 function lightColor(){
   const t = serverNowSec() - light.at - delayMs()/1000;        // 耳に届く音と同相
   const cols = light.colors.map(hex2rgb);
@@ -494,28 +495,39 @@ function lightColor(){
   const beat = light.bpm/60, x = zoneX(), B = light.brightness;
   switch (light.pattern){
     case 'solid':  return scaleC(c0, B);
-    case 'pulse': {
-      const p = (Math.sin(2*Math.PI*beat*t - Math.PI/2)+1)/2;
-      return scaleC(mix(c1,c0,p), B*(0.12+0.88*p));
+    case 'pulse': {                           // 拍頭でフラッシュ→鋭く減衰
+      const ph = ((t*beat)%1+1)%1;
+      const p = Math.exp(-5*ph);
+      return scaleC(mix(c0,c1,p), B*(0.06+0.94*p));
     }
-    case 'wave': {                            // ゾーンを横切る光の波
+    case 'beat': {                            // 1拍ごとに2色が硬く切り替わる
+      const n = Math.floor(t*beat);
+      return scaleC(n%2 ? c1 : c0, B);
+    }
+    case 'wave': {                            // ゾーンを横切る光の波(コントラスト強)
       const p = (Math.sin(2*Math.PI*(t*0.5*light.speed - x*1.5))+1)/2;
-      return scaleC(mix(c0,c1,p), B);
+      const s = p*p*p/(p*p*p+(1-p)*(1-p)*(1-p));   // 中間色を減らして色の境界を立てる
+      return scaleC(mix(c0,c1,s), B*(0.35+0.65*Math.abs(s-0.5)*2));
     }
     case 'plasma': {                          // 会場全体でうねる面
       const v = (Math.sin(6.283*(x*1.7 + t*0.23*light.speed))
                + Math.sin(6.283*(jitter*2.1 - t*0.17*light.speed))
                + Math.sin(6.283*(x + jitter + t*0.11*light.speed)))/3;
-      return scaleC(mix(c0,c1,(v+1)/2), B);
+      const p = (v+1)/2, s = p*p*p/(p*p*p+(1-p)*(1-p)*(1-p));
+      return scaleC(mix(c0,c1,s), B);
     }
     case 'strobe': {                          // 光過敏対策で3Hz上限
       const hz = Math.min(3, beat);
       const on = (t*hz) % 1 < 0.5;
       return on ? scaleC(c0,B) : [0,0,0];
     }
-    case 'audio': {                           // 音のエネルギー→明るさ/色
+    case 'audio': {                           // ヒット検出: 立ち上がり=別色フラッシュ全開
       const lvl = audioLevelNow();
-      return scaleC(mix(c0,c1,Math.min(1,lvl*1.3)), B*(0.06+0.94*lvl));
+      lvlAvg += (lvl - lvlAvg) * 0.05;
+      const punch = lvl - lvlAvg;
+      if (punch > 0.09) return scaleC(c1, B);            // ドン!→色2で全開
+      const base = Math.pow(Math.max(0,lvl), 1.9);       // 静けさは深く沈む
+      return scaleC(c0, B*(0.03 + 0.72*base));
     }
   }
   return [0,0,0];

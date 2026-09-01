@@ -316,9 +316,9 @@ async def api_light(request):
                                   "listeners": len(state["listeners"])})
 
     pattern = body.get("pattern", "pulse")
-    if pattern not in ("solid", "pulse", "wave", "plasma", "strobe", "audio"):
+    if pattern not in ("solid", "pulse", "beat", "wave", "plasma", "strobe", "audio"):
         raise web.HTTPBadRequest(text="pattern must be one of "
-                                      "solid|pulse|wave|plasma|strobe|audio")
+                                      "solid|pulse|beat|wave|plasma|strobe|audio")
     light = {
         "id": body.get("id") or f"light-{int(time.time() * 1000)}",
         "pattern": pattern,
