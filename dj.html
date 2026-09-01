@@ -61,6 +61,10 @@
       <label>音源ファイル(この端末内)</label>
       <input type="file" id="file" accept="audio/*">
     </div>
+    <div id="micRow" style="margin-bottom:12px">
+      <label>入力デバイス(Mac: DJミキサーのUSB-IF等を選択)</label>
+      <select id="inputDev"><option value="">既定の入力</option></select>
+    </div>
     <div class="row">
       <div><label>SERVER</label><input id="server" placeholder="空欄 = このホストに配信"></div>
     </div>
@@ -91,8 +95,27 @@ $('ch').value = localStorage.getItem('dj_ch')||'festival';
 $('tok').value = localStorage.getItem('dj_tok')||'';
 
 let mode='mic';
-$('segMic').onclick=()=>{mode='mic';$('segMic').classList.add('on');$('segFile').classList.remove('on');$('fileRow').style.display='none';};
-$('segFile').onclick=()=>{mode='file';$('segFile').classList.add('on');$('segMic').classList.remove('on');$('fileRow').style.display='';};
+$('segMic').onclick=()=>{mode='mic';$('segMic').classList.add('on');$('segFile').classList.remove('on');$('fileRow').style.display='none';$('micRow').style.display='';};
+$('segFile').onclick=()=>{mode='file';$('segFile').classList.add('on');$('segMic').classList.remove('on');$('fileRow').style.display='';$('micRow').style.display='none';};
+
+// 入力デバイス一覧(許可後にラベルが出る。選択は保存)
+async function refreshInputs(){
+  try{
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    const sel = $('inputDev'), saved = localStorage.getItem('dj_input')||'';
+    sel.innerHTML = '<option value="">既定の入力</option>';
+    for (const d of devs.filter(d=>d.kind==='audioinput')){
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || `入力 ${sel.length}`;
+      if (d.deviceId === saved) o.selected = true;
+      sel.appendChild(o);
+    }
+  }catch(e){}
+}
+refreshInputs();
+navigator.mediaDevices && (navigator.mediaDevices.ondevicechange = refreshInputs);
+$('inputDev').onchange = ()=> localStorage.setItem('dj_input', $('inputDev').value);
 
 function sl2(pcm16){
   const buf=new ArrayBuffer(22+pcm16.length*2), dv=new DataView(buf);
@@ -120,9 +143,12 @@ async function start(){
     await ctx.resume();
     try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
     if (mode==='mic'){
-      stream = await navigator.mediaDevices.getUserMedia({audio:{
-        echoCancellation:false, noiseSuppression:false, autoGainControl:false}, video:false});
+      const audio = {echoCancellation:false, noiseSuppression:false, autoGainControl:false};
+      const dev = $('inputDev').value;
+      if (dev) audio.deviceId = {exact: dev};
+      stream = await navigator.mediaDevices.getUserMedia({audio, video:false});
       srcNode = ctx.createMediaStreamSource(stream);
+      refreshInputs();                       // 許可後はデバイス名ラベルが取れる
     } else {
       const f = $('file').files[0];
       if (!f){ $('err').textContent='ファイルを選んでください'; return; }

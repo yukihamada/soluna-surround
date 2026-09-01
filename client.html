@@ -74,6 +74,7 @@
 
   <div id="lightLayer"></div>
   <div id="lightHud"><span class="chip">ZONE <b id="hudZone">A</b> <span id="hudPat"></span>
+    <button id="lightFull" style="pointer-events:auto;border:none;background:rgba(212,175,55,.2);color:#d4af37;border-radius:99px;padding:8px 14px;font-weight:800;font-size:.8rem">⛶</button>
     <button id="lightExit">✕ 抜ける</button></span></div>
 
 <script>
@@ -378,6 +379,15 @@ $('lightLayer').onclick = ()=>{               // タップでHUD表示⇔非表�
 };
 $('lightExit').textContent = T.exit;
 $('lightExit').onclick = e=>{ e.stopPropagation(); onLightStop(); };
+// ⛶ / F キー: Mac等でライトを画面フルスクリーンに(MacBook=即席カラーパネル)
+function toggleFull(){
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.().catch(()=>{});
+}
+$('lightFull').onclick = e=>{ e.stopPropagation(); toggleFull(); };
+document.addEventListener('keydown', e=>{
+  if (e.key==='f' && light) toggleFull();
+});
 
 // ---- LIVE MODE (SL2 PCM) — スピーカーノード/近距離WiFi向け ------------------
 function onFrame(buf){
