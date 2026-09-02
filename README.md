@@ -132,6 +132,14 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
   `curl -fsSL …/tools/pi-setup.sh | SERVER=wss://… ZONE=B bash`
   GPIO I2S DAC boards without an EEPROM (PCM5102A / MAX98357A) need the overlay once:
   add `DAC=hifiberry-dac` to that line (`hifiberry-dacplus` for PCM5122), then reboot.
+- **Plugs into the festival's existing audio network** — `source.py --aes67 ADDR:PORT`
+  receives **AES67 / Ravenna / Dante (AES67 mode)** RTP multicast directly (L24/L16,
+  48 kHz, 1 ms or 125 µs packets) and pushes it as the LIVE feed; `--sap` lists what is
+  being announced, `--aes67 auto` picks the first stream, `--map "L=3,R=4,C=3+4"` chooses
+  channels. Lost packets are zero-filled by sample count so phase never slips; no PTP
+  needed (the sync server, not the sender's clock, stamps `playAt`). Dante without AES67
+  mode, MADI, AVB, analog: `--input` via any interface. Details and honest limits (receive
+  only, no native Dante protocol, no PTP slave): `docs/integration.md`.
 - **Clock authority is monotonic** — the server timestamps from `monotonic()`
   anchored once at boot, so an NTP step on the host can never jump the crowd.
 - **Hot standby** — `GET /api/state` exports the whole show; `POST /api/state` on a
@@ -355,6 +363,13 @@ FOH卓 matrix/aux out ──▶ USBオーディオIF ──▶ source.py --input
    来場者スマホ    Piスピーカーノード   /screen(映像)     Koe iOSアプリ
    (LTE/会場WiFi)  (有線/専用5GHz)     (Mac+HDMI)        (ロック中も再生)
 ```
+
+**既にDante/AES67で回っている現場**なら、USBオーディオIFは不要です。同期サーバのMac(またはPi)を
+音響ネットワークのスイッチに1本挿し、`source.py --sap` で流れているストリームを一覧 →
+`source.py --aes67 auto --lead 0.08`(または `--aes67 239.69.x.x:5004`)でFOHのマトリクス出力を
+そのまま受けます(AES67/Ravenna/DanteのAES67モード・L24/L16・1ms/125µs・`--map` でch選択)。
+DanteをAES67モードにできない卓は Dante Virtual Soundcard か AVIO USB を経由して `--input`。
+手順と制約(受信のみ・ネイティブDante非対応・PTP不要)= `docs/integration.md`。
 
 ### 同期の仕組みと精度
 
