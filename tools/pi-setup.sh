@@ -18,7 +18,7 @@ sudo apt-get update -qq
 sudo apt-get install -y -qq python3-numpy python3-websockets python3-pip libportaudio2 ffmpeg alsa-utils curl >/dev/null
 # sounddevice is not packaged everywhere → pip (break-system-packages is fine on a dedicated node)
 python3 -c "import sounddevice" 2>/dev/null || sudo pip3 install -q --break-system-packages sounddevice
-sudo mkdir -p "$APP" && sudo chown "$USER_NAME" "$APP"
+sudo mkdir -p "$APP" && sudo chown -R "$USER_NAME" "$APP"   # -R: play.py may be root-owned from a cloud-init install
 curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/play.py -o "$APP/play.py"
 chmod +x "$APP/play.py"
 # Output device: play.py --device auto prefers a USB DAC and falls back to the default card.
