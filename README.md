@@ -128,8 +128,15 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
 - **Speaker nodes run the same show** — `play.py` (Raspberry Pi) receives CUE,
   PRELOAD, walk-test, SHOW steps and LIGHT (forwarded to a `--light-cmd` GPIO hook),
   decodes any format via ffmpeg, joins mid-track, reconnects forever. One-shot Pi
-  install with a systemd service (output auto-picked: USB DAC > GPIO I2S DAC > built-in):
-  `curl -fsSL …/tools/pi-setup.sh | SERVER=wss://… ZONE=B bash`
+  install (output auto-picked: USB DAC > GPIO I2S DAC > built-in):
+  `curl -fsSL …/tools/pi-setup.sh | bash`
+- **Zero-config Pi boxes that heal each other** — every box runs `agent.py`: it finds
+  the server (mDNS + UDP beacon), or the boxes elect one (wired > uptime > hostname);
+  nodes keep a warm copy of the show and take over in ≈15–20 s if the server box dies;
+  services, audio devices and a hung kernel are restarted automatically; a box with no
+  upstream network raises its own Wi-Fi `SOLUNA`. Zones are assigned from `/admin` → NODES
+  and pushed live (`{"t":"assign"}`), persisted on the box and re-sent on reconnect.
+  Details: `docs/pi-box.md`.
   GPIO I2S DAC boards without an EEPROM (PCM5102A / MAX98357A) need the overlay once:
   add `DAC=hifiberry-dac` to that line (`hifiberry-dacplus` for PCM5122), then reboot.
 - **Clock authority is monotonic** — the server timestamps from `monotonic()`
@@ -183,6 +190,9 @@ payload: interleaved int16 PCM
 | `POST /api/light` | `{pattern, colors, bpm, speed, brightness}` / `{stop}` |
 | `POST /api/zones` | `{zones_m:{A:0,B:15,…}}` measured meters → live delays |
 | `POST /api/net` | admin | `{"ssid":"SOLUNA-Front","wifi_zones":["A","B"]}` — phones in those zones show "join venue Wi-Fi", the rest "stay on mobile data"; `{"clear":true}` removes |
+| `POST /api/nodes/report` | LAN, 1/s per IP | box health from `agent.py` (host, role, temp, load, disk, audio device, services, AP) |
+| `GET /api/nodes` | admin | boxes with `stale` flag, their assignments, the server box's AP SSID/password |
+| `POST /api/nodes/assign` | admin | `{"host":"soluna-box-2","zone":"C","pos":"L","gain_db":-3}` → saved + pushed live to that box; `{"host":…,"clear":true}` |
 | `GET /api/preload` | public, tiny | `{url, video, asset_base}` — what a phone should prefetch; used by the gate QR (`/flags?gate=1`) before any WebSocket is opened |
 | `POST /api/align` | `{base_ms}` global trim vs house PA |
 | `POST /api/geo` | `{lat,lng}` stage location for GPS auto-delay |

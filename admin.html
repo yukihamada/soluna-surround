@@ -125,6 +125,15 @@
   </section>
 
   <section>
+    <h2>NODES <small>Piボックス(agent.py が5秒ごとに報告)。ゾーン/位置/音量をここから割り当てる=箱側は設定不要。⚠=15秒以上報告なし</small></h2>
+    <div id="apLine" style="font-size:.75rem;color:var(--dim);margin-bottom:6px">AP: —</div>
+    <div style="overflow-x:auto"><table id="ntab" style="width:100%;font-size:.8rem">
+      <thead><tr><th>host</th><th>role</th><th>ip</th><th>zone</th><th>pos</th><th>gain dB</th><th></th><th>audio</th><th>temp</th><th>up</th><th>node</th><th>seen</th></tr></thead>
+      <tbody></tbody></table></div>
+    <div id="nEmpty" style="font-size:.75rem;color:var(--dim)">まだ箱からの報告がありません(Piを起動すると自動で並びます)</div>
+  </section>
+
+  <section>
     <h2>ZONES <small>ステージからの実測距離[m]を入れて APPLY — delay = d/343 + 15ms・gain=ゾーン別音量補正(dB)</small></h2>
     <table id="ztab">
       <thead><tr><th>zone</th><th>distance m</th><th>delay ms</th><th>gain dB</th><th>devices</th><th>playing</th><th></th></tr></thead>
@@ -313,6 +322,56 @@ $('zapply').onclick = async ()=>{
   localStorage.setItem('soluna_zones_g', JSON.stringify(zonesG));
   await call('/api/zones', {zones_m: zonesM, gains_db: zonesG});
 };
+// ---- NODES: Piボックス台帳(admin token が要る) ----
+function fmtUp(m){ if(m==null) return '—'; return m<60 ? m+'m' : (m/60).toFixed(1)+'h'; }
+async function pollNodes(){
+  if (!$('tok').value) return;
+  try{
+    const r = await fetch(`/api/nodes?ch=${encodeURIComponent($('ch').value)}`, {headers:{'x-soluna-admin':$('tok').value}});
+    if (!r.ok) return;
+    const d = await r.json();
+    const ap = d.meta && d.meta.ap;
+    $('apLine').textContent = ap ? `📶 Pi AP: SSID ${ap.ssid} / password ${ap.psk}  (Piだけで運用する時、スマホ/他のPiはこれに繋ぐ。収容20〜30台)` : 'AP: なし(サーバ箱は上流Wi-Fi/有線に乗っている、またはMac運用)';
+    const tb = $('ntab').querySelector('tbody');
+    $('nEmpty').style.display = d.nodes.length ? 'none' : '';
+    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.nh : null;
+    for (const n of d.nodes){
+      let tr = tb.querySelector(`tr[data-host="${n.host}"]`);
+      if (!tr){
+        tr = document.createElement('tr'); tr.dataset.host = n.host;
+        tr.innerHTML = `<td class="mono"></td><td></td><td class="mono"></td>
+          <td><input data-nh="${n.host}" data-k="zone" style="width:40px" maxlength="2"></td>
+          <td><select data-nh="${n.host}" data-k="pos"><option>L</option><option>C</option><option>R</option></select></td>
+          <td><input data-nh="${n.host}" data-k="gain_db" type="number" step="1" min="-24" max="24" style="width:52px"></td>
+          <td><button class="ghost" data-assign="${n.host}" style="padding:2px 8px;font-size:.7rem">ASSIGN</button></td>
+          <td></td><td class="mono"></td><td class="mono"></td><td></td><td class="mono"></td>`;
+        tb.appendChild(tr);
+        tr.querySelector('[data-k=zone]').value = (n.cfg && n.cfg.zone) || '';
+        tr.querySelector('[data-k=pos]').value = (n.cfg && n.cfg.pos) || 'C';
+        tr.querySelector('[data-k=gain_db]').value = (n.cfg && n.cfg.gain_db != null) ? n.cfg.gain_db : 0;
+      }
+      const td = tr.children;
+      td[0].textContent = (n.stale ? '⚠ ' : (n.ws ? '● ' : '○ ')) + n.host;
+      td[1].textContent = n.role === 'server' ? '★ server' : (n.role || '—');
+      td[2].textContent = n.ip || '—';
+      if (focused !== n.host && n.cfg && n.cfg.zone) tr.querySelector('[data-k=zone]').value = n.cfg.zone;   // 入力中の行は上書きしない
+      td[7].textContent = n.audio || '—';
+      td[8].textContent = n.temp != null ? n.temp+'°' : '—';
+      td[9].textContent = fmtUp(n.up_min);
+      td[10].textContent = (n.node === 'active' ? '▶' : (n.node || '—')) + (n.server === 'active' ? ' +srv' : '');
+      td[11].textContent = n.age_s == null ? 'never' : (n.age_s < 60 ? Math.round(n.age_s)+'s' : Math.round(n.age_s/60)+'m');
+      tr.style.opacity = n.stale ? .5 : 1;
+    }
+  }catch(e){}
+}
+$('ntab').onclick = e=>{
+  const h = e.target.dataset.assign; if (!h) return;
+  const tr = e.target.closest('tr');
+  call('/api/nodes/assign', {host:h, zone: tr.querySelector('[data-k=zone]').value.trim().toUpperCase() || null,
+    pos: tr.querySelector('[data-k=pos]').value, gain_db: parseFloat(tr.querySelector('[data-k=gain_db]').value||0)});
+};
+setInterval(pollNodes, 5000); setTimeout(pollNodes, 800);
+
 $('netApply').onclick = ()=> call('/api/net', {ssid: $('netSsid').value.trim(),
   wifi_zones: $('netZones').value.split(/[,\s]+/).filter(Boolean).map(z=>z.toUpperCase())});
 $('netClear').onclick = ()=> call('/api/net', {clear:true});
