@@ -65,6 +65,40 @@ keymap = "us"
 timezone = "Asia/Tokyo"
 TOML
 touch "$BOOT/ssh"
+# ---- Trixie (2025-10+) images ignore custom.toml and use cloud-init instead ----------------
+# Write both: user-data (user/ssh/hostname + installer as runcmd) and network-config (Wi-Fi).
+cat > "$BOOT/user-data" <<CLOUD
+#cloud-config
+hostname: $HOSTNAME
+manage_etc_hosts: true
+timezone: Asia/Tokyo
+keyboard:
+  layout: us
+ssh_pwauth: true
+users:
+- name: pi
+  groups: users,adm,dialout,audio,netdev,video,plugdev,games,input,gpio,spi,i2c,render,sudo
+  shell: /bin/bash
+  lock_passwd: false
+  passwd: "$USER_HASH"
+  sudo: ALL=(ALL) NOPASSWD:ALL
+runcmd:
+- [ bash, -c, "for i in \$(seq 1 60); do curl -fsS https://raw.githubusercontent.com >/dev/null 2>&1 && break; sleep 5; done; curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/tools/pi-setup.sh | SERVER='$SERVER' ZONE='$ZONE' POS='$POS' CH='$CH' SUDO_USER=pi bash > /var/log/soluna-install.log 2>&1" ]
+CLOUD
+cat > "$BOOT/network-config" <<NET
+network:
+  version: 2
+  wifis:
+    renderer: NetworkManager
+    wlan0:
+      dhcp4: true
+      optional: true
+      regulatory-domain: "$WIFI_COUNTRY"
+      access-points:
+        "$WIFI_SSID":
+          password: "$PSK_HASH"
+NET
+echo "instance-id: $HOSTNAME-$(date +%s)" > "$BOOT/meta-data"
 # First-boot installer: waits for network, runs pi-setup.sh once, removes itself.
 cat > "$BOOT/soluna-install.sh" <<SH
 #!/bin/bash
@@ -93,8 +127,10 @@ UNIT
 cat > "$BOOT/firstrun.sh" <<'SH'
 #!/bin/bash
 set +e
+if [ ! -d /etc/cloud ]; then   # Bookworm: no cloud-init → use our oneshot installer
 cp /boot/firmware/soluna-install.service /etc/systemd/system/soluna-install.service
 systemctl enable soluna-install.service
+fi
 rm -f /boot/firmware/firstrun.sh
 sed -i 's| systemd.run.*||g' /boot/firmware/cmdline.txt
 exit 0
@@ -102,7 +138,7 @@ SH
 chmod +x "$BOOT/firstrun.sh"
 CMD=$(cat "$BOOT/cmdline.txt")
 echo "${CMD% } systemd.run=/boot/firmware/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target" > "$BOOT/cmdline.txt"
-sync; diskutil eject "$DISK"
+sync; if [ "${NO_EJECT:-0}" = 1 ]; then echo "(NO_EJECT=1: left mounted for inspection)"; else diskutil eject "$DISK"; fi
 echo "✅ flashed. Insert into the Pi, power on with the USB DAC attached."
 echo "   ~2-4 min later: ssh pi@$HOSTNAME.local  (pass: $PI_PASS)  → journalctl -u soluna-node -f"
 echo "   FOH: /admin DEVICES → nodes=1"
