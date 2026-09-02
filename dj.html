@@ -5,112 +5,86 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SOLUNA DJ</title>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
 <style>
-  :root{--ink:#0a0507;--panel:#161014;--line:#2c2320;--txt:#f2e7d3;--dim:#9d8d76;
-        --gold:#d4af37;--gold2:#f0d47a;--ok:#4ade80;--bad:#f87171;
-        --sans:"Zen Kaku Gothic New","Hiragino Sans",system-ui,sans-serif;
-        --mono:"IBM Plex Mono",ui-monospace,monospace}
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{background:var(--ink);color:var(--txt);font-family:var(--sans);
-       font-size:15px;max-width:520px;margin:0 auto;padding:20px 18px 80px;
-       transition:background .6s}
-  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
-       background:radial-gradient(60% 40% at 50% -8%, rgba(212,175,55,.13), transparent 70%);
-       transition:background .6s}
-  body.onair-bg::before{
-       background:radial-gradient(60% 40% at 50% -8%, rgba(248,113,113,.14), transparent 70%)}
-  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
-  h1{font-size:.75rem;letter-spacing:.4em;color:var(--gold);font-weight:700;text-align:center;
-     margin:14px 0 4px;font-family:var(--mono);text-indent:.4em}
-  .sub{text-align:center;font-size:.72rem;color:var(--dim);margin-bottom:18px;letter-spacing:.06em}
-  section{background:linear-gradient(180deg, rgba(255,255,255,.015), transparent 40%), var(--panel);
-     border:1px solid var(--line);border-radius:18px;padding:18px;margin-top:14px;
-     box-shadow:0 8px 30px rgba(0,0,0,.35)}
-  h2{font-size:.62rem;letter-spacing:.26em;color:var(--gold);font-weight:700;margin-bottom:14px;
-     font-family:var(--mono)}
-  label{font-size:.62rem;letter-spacing:.1em;color:var(--dim);display:block;margin-bottom:5px}
-  input,select{width:100%;padding:12px 13px;border-radius:11px;border:1px solid var(--line);
-     background:var(--ink);color:var(--txt);font-size:.95rem;font-family:var(--sans);
-     transition:border-color .2s}
-  input:focus,select:focus{outline:none;border-color:rgba(212,175,55,.55)}
-  .row{display:flex;gap:10px}.row>div{flex:1}
-  .row.mt{margin-top:12px}
-  button{border:none;border-radius:13px;padding:14px;font-weight:700;cursor:pointer;
-     font-size:.9rem;background:#221a16;color:var(--txt);border:1px solid var(--line);width:100%;
-     font-family:var(--sans);letter-spacing:.04em;transition:transform .12s ease}
-  button:active{transform:scale(.975)}
-  .gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border:none;
-     box-shadow:0 5px 24px rgba(212,175,55,.3), inset 0 1px 0 rgba(255,255,255,.35)}
-  .red{background:rgba(248,113,113,.13);color:var(--bad);border:1px solid rgba(248,113,113,.3)}
-  .onair{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 14px}
-  .onair .dot{width:12px;height:12px;border-radius:50%;background:#3d3531;transition:background .3s}
-  .onair.live .dot{background:var(--bad);box-shadow:0 0 16px var(--bad)}
-  @media (prefers-reduced-motion:no-preference){
-    .onair.live .dot{animation:bl 1.2s infinite}
-    @keyframes bl{50%{opacity:.35}}
-  }
-  .onair b{font-size:1.1rem;letter-spacing:.26em;font-family:var(--mono);text-indent:.26em}
+  /* page: this phone/laptop is the source of the whole floor. ON AIR must be readable from 2 m. */
+  body{transition:background .6s}
+  body.onair-bg::before{background:radial-gradient(60% 40% at 50% -8%, rgba(248,113,113,.16), transparent 70%)}
+  .s-wrap{max-width:560px}
+  .sub{text-align:center;font-family:var(--serif);font-size:1.15rem;color:var(--txt);margin:18px 0 4px}
+  .sub small{display:block;font-family:var(--sans);font-size:.78rem;color:var(--dim);margin-top:4px}
+  .onair{display:flex;align-items:center;justify-content:center;gap:12px;margin:14px 0 4px;padding:14px;border-radius:var(--r-lg);
+     border:1px solid var(--line);background:rgba(255,255,255,.02);transition:border-color .3s,background .3s}
+  .onair .dot{width:14px;height:14px;border-radius:50%;background:#3d3531;transition:background .3s}
+  .onair.live{border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.08)}
+  .onair.live .dot{background:var(--bad);box-shadow:0 0 18px var(--bad)}
+  @media (prefers-reduced-motion:no-preference){ .onair.live .dot{animation:bl 1.2s infinite} @keyframes bl{50%{opacity:.35}} }
+  .onair b{font-size:1.5rem;letter-spacing:.3em;font-family:var(--mono);text-indent:.3em;color:var(--dim)}
   .onair.live b{color:var(--bad);text-shadow:0 0 22px rgba(248,113,113,.5)}
-  #meter{height:12px;border-radius:6px;background:var(--ink);border:1px solid var(--line);
-     overflow:hidden;margin-top:14px}
-  #meterBar{height:100%;width:0%;border-radius:6px;
-     background:linear-gradient(90deg,var(--ok) 60%,var(--gold) 82%,var(--bad));
-     transition:width .06s linear}
-  .stat{display:flex;justify-content:space-between;font-size:.72rem;color:var(--dim);margin-top:12px;
-     font-family:var(--mono)}
-  .stat b{color:var(--txt)}
-  .seg{display:flex;gap:0;margin-bottom:14px;border:1px solid var(--line);border-radius:13px;
-     overflow:hidden;background:var(--ink)}
-  .seg button{flex:1;padding:12px;font-size:.84rem;border:none;border-radius:0;background:none}
-  .seg button.on{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);
-     font-weight:700}
-  .hint{font-size:.68rem;color:var(--dim);line-height:1.8;margin-top:12px}
-  .check{display:flex;align-items:center;gap:10px;font-size:.8rem;margin-top:14px;color:var(--txt)}
-  .check input{width:18px;height:18px;accent-color:var(--gold)}
+  .seg{display:flex;border:1px solid var(--line2);border-radius:13px;overflow:hidden;background:var(--ink);margin-bottom:14px}
+  .seg button{flex:1;padding:13px;font-size:.9rem;border:0;border-radius:0;background:none;color:var(--txt);font-family:inherit;cursor:pointer;min-height:44px}
+  .seg button.on{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1206;font-weight:700}
+  .check{display:flex;align-items:center;gap:10px;font-size:.85rem;margin-top:14px;color:var(--txt);cursor:pointer}
+  .check input{width:20px;height:20px;accent-color:var(--gold);flex:none}
+  #meter{height:16px;border-radius:8px;background:var(--ink);border:1px solid var(--line2);overflow:hidden;margin-top:16px}
+  #meterBar{height:100%;width:0%;border-radius:8px;background:linear-gradient(90deg,var(--ok) 60%,var(--gold) 82%,var(--bad));transition:width .06s linear}
+  .stat{display:flex;justify-content:space-between;gap:10px;margin-top:10px}
+  .stat span{font-size:.7rem;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .stat b{display:block;color:var(--txt);font-size:1.25rem;font-family:var(--mono)}
+  #err{color:var(--bad);font-size:.85rem;margin-top:12px;text-align:center;line-height:1.6}
+  input[type=file].s-input{padding:9px}
+  .s-btn.big{flex-direction:column;gap:2px;line-height:1.3}
 </style>
 </head>
 <body>
-  <h1>S O L U N A · D J</h1>
-  <div class="sub">この端末が、会場全体の音源になる</div>
+<div class="s-wrap">
+  <div class="s-bar" style="justify-content:space-between">
+    <div class="s-brand"><span class="mark"></span>SOLUNA · DJ <small>配信</small></div>
+    <a href="/admin" class="s-hint" style="margin:0">🎚 FOH</a>
+  </div>
+
+  <h1 class="sub">この端末が、会場全体の音源になる<small>This device becomes the sound of the whole floor.</small></h1>
 
   <div class="onair" id="onair"><span class="dot"></span><b id="onairTxt">OFF AIR</b></div>
 
-  <section>
-    <h2>SOURCE</h2>
+  <section class="s-card">
+    <h2>音源 <small>source — マイク/ライン入力か、この端末のファイル</small></h2>
     <div class="seg">
       <button id="segMic" class="on">🎙 マイク / ライン</button>
       <button id="segFile">🎵 ファイル</button>
     </div>
     <div id="fileRow" style="display:none;margin-bottom:12px">
-      <label>音源ファイル(この端末内)</label>
-      <input type="file" id="file" accept="audio/*">
+      <label class="s-label">音源ファイル(この端末内)</label>
+      <input class="s-input" type="file" id="file" accept="audio/*">
     </div>
     <div id="micRow" style="margin-bottom:12px">
-      <label>入力デバイス(Mac: DJミキサーのUSB-IF等を選択)</label>
-      <select id="inputDev"><option value="">既定の入力</option></select>
+      <label class="s-label">入力デバイス(Mac: DJミキサーのUSB-IF等を選択)</label>
+      <select class="s-input" id="inputDev"><option value="">既定の入力</option></select>
     </div>
-    <div class="row">
-      <div><label>SERVER</label><input id="server" placeholder="空欄 = このホストに配信"></div>
-    </div>
-    <div class="row mt">
-      <div><label>CHANNEL</label><input id="ch" value="festival"></div>
-      <div><label>TOKEN(本番サーバでは必須)</label><input id="tok" type="password" placeholder="主催者から受け取る"></div>
-    </div>
+    <details class="s-fold">
+      <summary>接続先・チャンネル・トークン(通常は変えない)</summary>
+      <div class="s-grid" style="margin-top:8px">
+        <div><label class="s-label">SERVER</label><input class="s-input" id="server" placeholder="空欄 = このホストに配信"></div>
+        <div><label class="s-label">CHANNEL</label><input class="s-input" id="ch" value="festival"></div>
+        <div><label class="s-label">TOKEN(本番サーバでは必須)</label><input class="s-input" id="tok" type="password" placeholder="主催者から受け取る"></div>
+      </div>
+    </details>
     <label class="check"><input type="checkbox" id="fusion">
       既存PAと融合(有線/低遅延 lead 0.08s) — 単体運用はOFFのまま</label>
-    <button class="gold" id="go" style="margin-top:14px">▶ ON AIR — 配信をはじめる</button>
-    <button class="red" id="stopBtn" style="margin-top:8px;display:none">■ OFF AIR</button>
+    <button class="s-btn primary big" id="go" style="margin-top:16px">▶ ON AIR — 配信をはじめる<small>start broadcasting to every phone and speaker</small></button>
+    <button class="s-btn danger big" id="stopBtn" style="margin-top:8px;display:none">■ OFF AIR — 配信を止める</button>
     <div id="meter"><div id="meterBar"></div></div>
-    <div class="stat"><span>LISTENERS <b id="n" class="mono">0</b></span>
-      <span>送信 <b id="sent" class="mono">0</b>f</span>
-      <span>sr <b id="sr" class="mono">—</b></span></div>
-    <div class="hint">マイク入力はエコー/ノイズ処理を切った音楽向け設定。DJミキサーのREC OUTを
-      イヤホン端子やUSB-IFでこの端末に入れれば、そのままフロア全体へ。聴く側は同じホストの
-      <span class="mono">/?zone=A</span> を開く。</div>
+    <div class="stat">
+      <div><span>listeners</span><b id="n" class="mono">0</b></div>
+      <div><span>送信 frames</span><b id="sent" class="mono">0</b></div>
+      <div><span>sample rate</span><b id="sr" class="mono">—</b></div>
+    </div>
+    <p class="s-hint" style="margin-top:14px">マイク入力はエコー/ノイズ処理を切った音楽向け設定。DJミキサーのREC OUTをイヤホン端子やUSB-IFでこの端末に入れれば、そのままフロア全体へ。聴く側は同じホストの <span class="mono">/?zone=A</span> を開く。</p>
   </section>
 
-  <div id="err" style="color:var(--bad);font-size:.78rem;margin-top:10px;text-align:center"></div>
+  <div id="err"></div>
+</div>
 
 <script>
 const $=id=>document.getElementById(id);

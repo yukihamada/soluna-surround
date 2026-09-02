@@ -567,7 +567,7 @@ async def api_show(request):
 
 
 async def flags_page(request):
-    """A4印刷用のゾーン旗: 大きなゾーン文字+そのゾーン直行のQR。1ゾーン=1ページ。"""
+    """A4印刷用のゾーン旗: 大きなゾーン文字+そのゾーン直行のQR。1ゾーン=1ページ。?gate=1 で入場QR。"""
     ch = request.query.get("ch", "festival")
     base = request.query.get("base") or f"https://{request.host}"
     zones = list(_chan(ch)["zones"].keys())
@@ -587,45 +587,81 @@ async def flags_page(request):
     except Exception:
         qr_svg = None
 
+    def _qr_block(url):
+        inner = qr_svg(url) if qr_svg else f'<div class="url">{url}</div>'
+        return f'<div class="qrwrap">{inner}</div>'
+
+    gate = request.query.get("gate") == "1"
     pages = []
-    if request.query.get("gate") == "1":
+    if gate:
         # 入場QR: ゾーン無し(GPS自動/後で選ぶ)・開いた瞬間に音源を先読み → 開演時のDLバーストをゼロに
         url = f"{base}/?gate=1" + (f"&ch={ch}" if ch != "festival" else "")
-        qr = qr_svg(url) if qr_svg else f'<div class="url">{url}</div>'
-        pages.append(f'''<section class="flag">
-  <div class="brand">SOLUNA · SOUND</div>
-  <div class="letter" style="font-size:40mm;line-height:1.2">入場<br><span style="font-size:22mm">ENTRANCE</span></div>
-  <div class="say">いま読み取ると、中に入る前に音の準備が終わります。<br>Scan now — your phone gets the sound ready before you're inside.</div>
-  {qr}
+        pages.append(f'''<section class="flag" data-gate="1">
+  <div class="brand"><span class="mark"></span>SOLUNA · SOUND</div>
+  <div class="gatehead"><span class="ja">入場</span><span class="en">ENTRANCE</span></div>
+  <div class="say">いま読み取ると、中に入る前に音の準備が終わります。<br><span class="en">Scan now — your phone gets the sound ready before you're inside.</span></div>
+  {_qr_block(url)}
   <div class="url">{url}</div>
+  <div class="foot">スマホでよみとる → あとは会場で ▶ を押すだけ · 位置情報は端末の中だけ</div>
 </section>''')
         zones = []
     for z in zones:
         url = f"{base}/?zone={z}" + (f"&ch={ch}" if ch != "festival" else "")
-        qr = qr_svg(url) if qr_svg else f'<div class="url">{url}</div>'
         pages.append(f'''<section class="flag">
-  <div class="brand">SOLUNA · SOUND</div>
+  <div class="brand"><span class="mark"></span>SOLUNA · SOUND</div>
+  <div class="zonelabel">ZONE · ゾーン</div>
   <div class="letter">{z}</div>
-  <div class="say">スマホでよみとって、▶をおすだけ。<br>Scan &amp; tap ▶ — you become the sound.</div>
-  {qr}
+  <div class="say">この旗の近くなら、ここを読み取って ▶ 。<br><span class="en">Near this flag? Scan &amp; tap ▶ — you become the sound.</span></div>
+  {_qr_block(url)}
   <div class="url">{url}</div>
+  <div class="foot">音が出ない時: サイレントスイッチ OFF・音量アップ · No sound? Silent switch off, volume up</div>
 </section>''')
 
+    n = len(pages)
+    title = "ENTRANCE QR" if gate else "ZONE FLAGS"
     html = f'''<!doctype html><html lang="ja"><head><meta charset="utf-8">
-<title>SOLUNA zone flags</title><style>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOLUNA {title.lower()}</title><style>
+  :root{{--ink:#0a0507;--gold:#d4af37;--gold2:#f0d47a;--cream:#f4e8d0;--dim:#a8977e;--moon:#c8d3e6}}
   *{{margin:0;box-sizing:border-box}}
-  body{{font-family:"Hiragino Sans",sans-serif;background:#fff;color:#0a0507}}
-  .flag{{width:210mm;height:296mm;page-break-after:always;display:flex;flex-direction:column;
-       align-items:center;justify-content:center;gap:10mm;background:#0a0507;color:#f4e8d0}}
-  .brand{{font-size:8mm;letter-spacing:2.2mm;color:#d4af37;font-weight:700}}
-  .letter{{font-size:95mm;font-weight:900;line-height:1;color:#d4af37;
-       font-family:"Hiragino Mincho ProN",serif}}
-  .say{{font-size:6.5mm;text-align:center;line-height:1.8;color:#f4e8d0}}
-  .qr{{width:80mm;height:80mm;background:#fff;padding:4mm;border-radius:4mm}}
-  .url{{font-size:4mm;color:#a8977e;font-family:monospace}}
-  @media screen{{body{{padding:20px;background:#333}} .flag{{margin:0 auto 20px;
-       transform:scale(.45);transform-origin:top center;margin-bottom:-150mm}}}}
-</style></head><body>{"".join(pages)}</body></html>'''
+  body{{font-family:"Zen Kaku Gothic New","Hiragino Sans",system-ui,sans-serif;background:#1a1216;color:var(--cream)}}
+  .flag{{width:210mm;height:297mm;padding:14mm 16mm;display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+        background:radial-gradient(70% 45% at 50% -10%,rgba(212,175,55,.22),transparent 70%),var(--ink);color:var(--cream);position:relative;overflow:hidden}}
+  .flag::after{{content:"";position:absolute;inset:6mm;border:0.4mm solid rgba(212,175,55,.35);border-radius:6mm;pointer-events:none}}
+  .brand{{display:flex;align-items:center;gap:4mm;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:6.5mm;letter-spacing:2mm;color:var(--gold);font-weight:700}}
+  .mark{{width:9mm;height:9mm;border-radius:50%;background:conic-gradient(from 200deg,var(--gold) 0 50%,var(--moon) 50% 100%);box-shadow:0 0 8mm rgba(212,175,55,.45)}}
+  .zonelabel{{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:5mm;letter-spacing:2mm;color:var(--dim);margin-top:2mm}}
+  .letter{{font-size:118mm;font-weight:700;line-height:.95;color:var(--gold);font-family:"Shippori Mincho","Hiragino Mincho ProN",Georgia,serif;
+          text-shadow:0 0 14mm rgba(212,175,55,.35);margin-top:-6mm}}
+  .gatehead{{display:flex;flex-direction:column;align-items:center;line-height:1;margin-top:6mm}}
+  .gatehead .ja{{font-size:62mm;font-weight:700;color:var(--gold);font-family:"Shippori Mincho","Hiragino Mincho ProN",serif;text-shadow:0 0 14mm rgba(212,175,55,.35)}}
+  .gatehead .en{{font-size:18mm;letter-spacing:6mm;color:var(--cream);font-family:"IBM Plex Mono",ui-monospace,monospace;margin-top:4mm;text-indent:6mm}}
+  .say{{font-size:7.2mm;text-align:center;line-height:1.7;color:var(--cream);font-weight:500}}
+  .say .en{{font-size:5.2mm;color:var(--dim);font-weight:400}}
+  .flag[data-gate] .say{{font-size:6.2mm}}
+  .qrwrap{{background:#fff;padding:5mm;border-radius:5mm;box-shadow:0 6mm 18mm rgba(0,0,0,.45)}}
+  .qr{{width:84mm;height:84mm;display:block}}
+  .url{{font-size:4.2mm;color:var(--dim);font-family:"IBM Plex Mono",ui-monospace,monospace;word-break:break-all;text-align:center}}
+  .foot{{font-size:3.8mm;color:var(--dim);text-align:center;line-height:1.6}}
+  @media screen{{
+    body{{padding:24px 12px 60px}}
+    .toolbar{{max-width:900px;margin:0 auto 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;color:var(--dim);font-size:.85rem}}
+    .toolbar b{{color:var(--gold);font-family:"IBM Plex Mono",ui-monospace,monospace;letter-spacing:.2em}}
+    .toolbar button{{background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1206;border:0;border-radius:12px;padding:10px 18px;font-weight:700;font-size:.95rem;cursor:pointer}}
+    .sheet{{display:flex;flex-wrap:wrap;gap:20px;justify-content:center}}
+    .slot{{width:calc(210mm * .5);height:calc(297mm * .5);overflow:hidden;border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,.5)}}
+    .slot .flag{{transform:scale(.5);transform-origin:top left}}
+  }}
+  @media print{{
+    body{{background:#fff}} .toolbar{{display:none}} .sheet{{display:block}} .slot{{width:auto;height:auto;overflow:visible;box-shadow:none;border-radius:0}}
+    .flag{{page-break-after:always;break-after:page;transform:none;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+    @page{{size:A4 portrait;margin:0}}
+  }}
+</style></head><body>
+<div class="toolbar"><div><b>SOLUNA · {title}</b> &nbsp; {n} 枚 · A4 縦 · 印刷ダイアログで「背景のグラフィック」をON</div>
+  <button onclick="window.print()">🖨 印刷 / Print</button></div>
+<div class="sheet">{"".join(f'<div class="slot">{pg}</div>' for pg in pages)}</div>
+</body></html>'''
     return web.Response(text=html, content_type="text/html")
 
 
