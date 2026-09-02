@@ -88,6 +88,8 @@ def read_env(path):
                 out[k.strip()] = v.strip().strip('"')
     except FileNotFoundError:
         pass
+    except PermissionError:                      # root所有0600の server.env 等: 値は環境変数で既に届いている
+        pass
     return out
 
 
@@ -128,6 +130,15 @@ def write_env(path, updates: dict, mode=None):
             env[k] = str(v)
     body = "".join(f"{k}={v}\n" for k, v in env.items())
     return write_file(path, body, mode)
+
+
+def read_text(path):
+    """小さな秘密ファイル(ap.psk / admin-token)を安全に読む。無い/読めない → None"""
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except (FileNotFoundError, PermissionError, IsADirectoryError):
+        return None
 
 
 def local_ips():
@@ -219,11 +230,11 @@ def status(ctx):
         "role_mode": ("server" if os.path.exists(FORCE_SERVER) else ("pinned" if node.get("PINNED") == "1" else "auto")),
         "ap": {"on": agent.get("SOLUNA_AP", "1") == "1", "ssid": agent.get("SOLUNA_AP_SSID", "SOLUNA"),
                "band": agent.get("SOLUNA_AP_BAND", "bg"), "security": (agent.get("SOLUNA_AP_SECURITY") or "open").lower(),
-               "psk": (open(AP_PSK).read().strip() if os.path.exists(AP_PSK) else None)},
+               "psk": read_text(AP_PSK)},
         "setup_open": dict(zip(("now", "left_s"), setup_open_now())) | {"mode": SETUP_OPEN_MODE},
         "wifi": wifi_state(),
         "port": server.get("PORT") or os.environ.get("PORT", "8900"),
-        "token": (open(TOKEN_FILE).read().strip() if os.path.exists(TOKEN_FILE) else None),
+        "token": read_text(TOKEN_FILE),
         "t": time.time(),
     }
 

@@ -71,7 +71,8 @@ SOLUNA_SETUP_OPEN=${SETUP_OPEN:-window}
 SOLUNA_SETUP_WINDOW_S=${SETUP_WINDOW_S:-600}
 PYTHONUNBUFFERED=1
 ENV
-$SUDO chmod 600 "$ETC/server.env"
+$SUDO chmod 600 "$ETC/server.env"; $SUDO chown "$USER_NAME" "$ETC/server.env"   # サーバ本体(/setup)も読めるように
+[ -f "$ETC/ap.psk" ] && $SUDO chown "$USER_NAME" "$ETC/ap.psk" || true
 $SUDO tee "$ETC/agent.env" >/dev/null <<ENV
 SOLUNA_AP=${AP:-1}
 SOLUNA_AP_SSID=${AP_SSID:-SOLUNA}
