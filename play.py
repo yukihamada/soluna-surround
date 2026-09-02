@@ -95,6 +95,9 @@ class Player:
         self.base_ms = 0.0         # ハウスPA位相合わせトリム
         self.gain_db = 0.0         # このノード固有の音量補正(--gain-db)
         self.muted = False         # {"t":"mute","on":true} で全ノード即時無音
+        self.tone_left = 0         # {"t":"tone"} セットアップ画面の🔔テスト音(残りサンプル数)
+        self.tone_hz = 880.0
+        self.tone_phase = 0
         self.asset_base = None
         self.gl, self.gr = PAN.get(pos.upper(), (0.7071, 0.7071))
         self.ring = np.zeros((RING, 2), dtype=np.float32)
@@ -179,6 +182,12 @@ class Player:
             block += self.cue_block(cue, start, nframes)
         if self.muted:                     # FOHキルスイッチ: 位相を保ったまま無音(解除でそのまま復帰)
             block[:] = 0.0
+        if self.tone_left > 0:             # テスト音: -12dBFS サイン(ミュート中でも鳴る=配線確認用)
+            n = min(nframes, self.tone_left)
+            ph = self.tone_phase + np.arange(n)
+            block[:n] += (0.25 * np.sin(2 * np.pi * self.tone_hz * ph / SR)).astype(np.float32)[:, None]
+            self.tone_phase += n
+            self.tone_left -= n
         outdata[:] = np.clip(block, -1.0, 1.0)
 
     def cue_block(self, cue, start, nframes):
@@ -393,6 +402,11 @@ async def session(player, server, ch, node_id):
                                 print(f"[play {player.pos}] cue failed: {e}")
                         await loop.run_in_executor(None, _cue)
                         await ws.send(json.dumps(player.report()))
+                    elif t == "tone":
+                        player.tone_hz = float(m.get("hz") or 880.0)
+                        player.tone_phase = 0
+                        player.tone_left = int(SR * max(0.1, min(5.0, float(m.get("sec") or 0.6))))
+                        print(f"[play {player.pos}] TONE {player.tone_hz:.0f}Hz")
                     elif t == "mute":
                         player.muted = bool(m.get("on"))
                         print(f"[play {player.pos}] MUTE {'on' if player.muted else 'off'}")

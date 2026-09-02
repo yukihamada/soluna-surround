@@ -147,6 +147,10 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
   needed (the sync server, not the sender's clock, stamps `playAt`). Dante without AES67
   mode, MADI, AVB, analog: `--input` via any interface. Details and honest limits (receive
   only, no native Dante protocol, no PTP slave): `docs/integration.md`.
+- **Plug in, a page opens** — join a box's Wi-Fi (SSID SOLUNA) and the phone pops the welcome
+  page (captive portal); `/setup` on any box: role, speaker zone/DAC + test tone, Wi-Fi uplink,
+  its own AP, hostname, token, update, logs — no SSH. Boxes never strand themselves: AP only after
+  a 120 s uplink grace, autoconnect off, periodic uplink retry, known default PSK (docs/pi-box.md).
 - **Clock authority is monotonic** — the server timestamps from `monotonic()`
   anchored once at boot, so an NTP step on the host can never jump the crowd.
 - **Hot standby** — `GET /api/state` exports the whole show; `POST /api/state` on a
@@ -212,6 +216,7 @@ payload: interleaved int16 PCM
 | `GET /api/preload` | public, tiny | `{url, video, asset_base}` — what a phone should prefetch; used by the gate QR (`/flags?gate=1`) before any WebSocket is opened |
 | `POST /api/mute` | admin | `{"on":true}` — kill switch: every phone and node goes silent at once (CUE and LIVE), phase preserved; `false` restores |
 | `GET /api/stats` | admin | post-show report: peak devices, peak playing (per zone), cues fired, uptime; `?reset=1` starts a new show |
+| `GET/POST /api/box` · `/api/box/wifi` · `/api/box/action` · `/api/box/logs` | box only (token, or on the box's own AP) | status + settings of a Pi box: node zone/pos/gain/device, role, own AP, hostname; Wi-Fi scan/join; tone / restart / update / reboot / regen-token; journal |
 | cue extras | | `title`, `artist` → NOW PLAYING on phones/screen; `image` → full-screen still (sponsor / announcement); `/status.level` shows LIVE peak/RMS dBFS + clip |
 | `POST /api/timecode` | admin | `{"tc":"01:00:00:00","fps":30}` — "right now the show timecode is X" (also OSC `/soluna/tc`, or `ltc.py` from LTC audio); then `/api/cue` and setlist steps accept `"tc":"01:00:10:00"` instead of `lead`. 24/25/30/29.97DF. `GET` returns the anchor + estimated current tc |
 | OSC `udp/$SOLUNA_OSC_PORT` | LAN, no auth | `/soluna/cue url [lead] [gain]` · `/soluna/preload` · `/soluna/stop` · `/soluna/go` · `/soluna/show/goto i` · `/soluna/light pattern [c1] [c2] [bpm]` · `/soluna/light/stop` · `/soluna/align ms` · `/soluna/zone name ms` · `/soluna/tc "HH:MM:SS:FF" [fps]` — trailing `"ch=<name>"` selects a channel; bundle timetag → `at`. See `docs/show-control.md` |
@@ -234,7 +239,7 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 
 | Test | Result |
 |---|---|
-| Test suites (`tests/`, run in CI before every deploy) | **261 checks PASS**: 84 protocol + 20 node + 9 auth/load + 44 AES67 ingest + 61 show-control (OSC/timecode/LTC/Art-Net/sACN) + 43 Pi mesh (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
+| Test suites (`tests/`, run in CI before every deploy) | **313 checks PASS**: 84 protocol + 20 node + 9 auth/load + 44 AES67 ingest + 61 show-control (OSC/timecode/LTC/Art-Net/sACN) + 53 Pi mesh/AP policy + 34 box setup/captive + 8 image manifest (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
 | **10,000 concurrent devices — one process, LAN** | 9,999/10,000 connected in 17 s, **cue reached 100%**, identical epochs, 791 ms delivery spread vs 8 s lead, median RTT under load 29 ms |
 | Video sync | 23 ms drift; 2 ms mid-track loop join |
 | FOH kill switch + NOW PLAYING (headless browser) | `/api/mute` drops the phone's gain to 0 within a second and restores the exact value; cue `title`/`artist`/`image` render and clear on stop |
@@ -242,6 +247,7 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 | Production E2E | join → sync → light → GPS auto-delay, headless browser vs the live deploy |
 | **Real devices** | two iPhones, ears-on: music, light show and timecode video locked — then a real track with onset-flash lighting |
 | **Physical Pi node** | Raspberry Pi 4 + GPIO I2S DAC (PCM5102A) joined the cloud deploy (`nodes=1`), took a zone walk-test cue, played in sync (±60 ms vs cloud clock, **±0.5 ms** when the server runs on the same Pi) |
+| Box setup + captive portal (`tests/test_box.py`) | 34 checks: OS probes (Apple/Android/Windows) get the landing, own-host traffic untouched, settings land in `/etc/soluna/*.env` with the right restarts, role/AP/hostname validation, tone reaches the box's node, token gate when `SETUP_OPEN=0`, nothing exposed off-box |
 | **Zero-config Pi box** (`agent.py`) | Real Pi 4: fresh install → elected itself server in 12 s, node auto-pointed to localhost; `/api/nodes/assign` applied on the node in 3 s and persisted; `kill -9` of the server → healed in 6 s with the show state intact; FOH mute reached the node. Two-box takeover and the Wi-Fi AP path are unit-tested only (need a 2nd Pi / a Pi without uplink) |
 | **Pi 4 as the server** (`tools/pi-server-setup.sh`) | **5,000 WebSocket clients** on one Pi 4: all connected in 12 s, cue reached 5,000/5,000 with 3.3 s spread (→ use `lead ≥ 5` at that size; default 3 s is fine to ~2,000); 2,000 clients → 0.9 s spread. LIVE PCM from `source.py` on the same Pi to its own node: 0 late frames. Node sync stayed ±0.5 ms under the 5k load |
 

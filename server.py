@@ -1180,12 +1180,37 @@ async def _start_showctl(app):
         print(f"   DMX out: {dmx.describe()}  fixtures={dmx.fixtures} (ch {dmx_ch})")
 
 
+async def _send_to_host(host, msg: dict) -> int:
+    """箱(Pi)の名前で名乗っているノードWSへ1件送る(setup の🔔テスト音など)。→ 送れた本数"""
+    text = json.dumps(msg)
+    n = 0
+    for st in channels.values():
+        for ws, meta in list(st["listeners"].items()):
+            if meta.get("host") == host:
+                try:
+                    await asyncio.wait_for(ws.send_str(text), timeout=2.0)
+                    n += 1
+                except Exception:
+                    pass
+    return n
+
+
 def main():
     port = int(os.environ.get("PORT", "8900"))
     os.makedirs(ASSETS, exist_ok=True)
     _load_state()   # クラッシュ/再起動からショー状態を復元
+    middlewares = [cache_headers]
+    BOX = os.environ.get("SOLUNA_BOX") == "1"                  # Raspberry Pi 箱: /setup と /welcome を出す
+    CAPTIVE_PORT = int(os.environ.get("SOLUNA_CAPTIVE_PORT") or 0)   # 箱のAPで :80 も聞く(接続→自動でページが開く)
+    if BOX:
+        import boxctl
+        if CAPTIVE_PORT or os.environ.get("SOLUNA_CAPTIVE") == "1":
+            middlewares.append(boxctl.captive_middleware)
     app = web.Application(client_max_size=256 * 1024 * 1024,   # 映像アップロード対応
-                          middlewares=[cache_headers])
+                          middlewares=middlewares)
+    if BOX:
+        boxctl.register(app, {"version": VERSION, "role": lambda: "server",
+                              "send_to_host": _send_to_host, "admin_ok": _admin_ok})
     app.on_startup.append(_start_showctl)
     app.add_routes([
         web.get("/health", health),
@@ -1229,7 +1254,22 @@ def main():
     print(f"   client http://{ip}:{port}/?zone=A   admin http://{ip}:{port}/admin")
     print(f"   data: {DATA_DIR}  assets: {ASSETS}"
           + (f"  asset_base: {ASSET_BASE}" if ASSET_BASE else "") + "\n")
-    web.run_app(app, host="0.0.0.0", port=port, print=None)
+    if BOX and CAPTIVE_PORT and CAPTIVE_PORT != port:
+        # 2ポート同時: 通常(:8900)+キャプティブ(:80)。同じ app なので状態は1つ。
+        async def _serve():
+            runner = web.AppRunner(app)
+            await runner.setup()
+            await web.TCPSite(runner, "0.0.0.0", port).start()
+            try:
+                await web.TCPSite(runner, "0.0.0.0", CAPTIVE_PORT).start()
+                print(f"   captive portal also on :{CAPTIVE_PORT}")
+            except OSError as e:                 # 権限が無い(AmbientCapabilities未設定)→ 通常ポートだけで続行
+                print(f"   captive port {CAPTIVE_PORT} unavailable: {e}")
+            while True:
+                await asyncio.sleep(3600)
+        asyncio.run(_serve())
+    else:
+        web.run_app(app, host="0.0.0.0", port=port, print=None)
 
 
 if __name__ == "__main__":

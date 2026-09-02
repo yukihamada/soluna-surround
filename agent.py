@@ -182,6 +182,41 @@ def write_env(path, updates):
     return env
 
 
+AP_GRACE_S = float(os.environ.get("SOLUNA_AP_GRACE_S", "120"))    # 上流が消えてからAPを立てるまでの猶予
+AP_RETRY_S = float(os.environ.get("SOLUNA_AP_RETRY_S", "600"))    # AP中、保存済み上流へ戻る試行の間隔
+AP_RETRY_WAIT_S = float(os.environ.get("SOLUNA_AP_RETRY_WAIT_S", "45"))
+DEFAULT_AP_PSK = "solunasound"   # ルータのラベルと同じ考え方: 既知の初期値・/setup で変更・pi-flash.sh は艦隊PSKを焼き込む
+
+
+def saved_upstream_wifi():
+    """NetworkManager に保存された、AP以外のWi-Fiプロファイル名一覧(会場LAN・テザリング等)。"""
+    out = sh(["nmcli", "-t", "-f", "NAME,TYPE", "con", "show"], timeout=5)
+    names = []
+    for l in out.splitlines():
+        p = l.split(":")
+        if len(p) >= 2 and p[1] in ("802-11-wireless", "wifi") and p[0] != "soluna-ap":
+            names.append(p[0])
+    return names
+
+
+def should_raise_ap(wlan, down_since, now_t, has_upstream_profiles, grace=AP_GRACE_S):
+    """APを立てるべきか。wlan='connected'→No。'ap'→No(既に)。上流プロファイルが無ければ即Yes、
+    あれば猶予(grace秒)だけ上流の復帰を待ってからYes(=テザリングの一瞬の断でAPに化けて迷子にならない)。"""
+    if wlan in ("connected", "ap", "connecting"):
+        return False
+    if not has_upstream_profiles:
+        return True
+    return down_since is not None and (now_t - down_since) >= grace
+
+
+def should_retry_upstream(ap_since, last_retry, now_t, has_upstream_profiles, every=AP_RETRY_S):
+    """AP中、保存済み上流が復活したかを定期的に試すべきか(APを一時的に落として上流を待つ)。"""
+    if not has_upstream_profiles or ap_since is None:
+        return False
+    ref = last_retry if last_retry is not None else ap_since
+    return (now_t - ref) >= every
+
+
 def ensure_ap_psk():
     """AP の PSK: 初回起動で生成(12文字・0600)。イメージ焼き込み時に同じ値を配れば全Piが同じSSIDに乗る。"""
     try:
@@ -191,13 +226,13 @@ def ensure_ap_psk():
                 return p
     except FileNotFoundError:
         pass
-    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
-    p = "".join(random.choice(alphabet) for _ in range(12))
+    # 初期値は既知(ルータのラベル方式)。ランダムにすると上流が切れて箱がAPに化けた瞬間、誰も入れず迷子になる。
+    p = (discover.read_env(AGENT_ENV).get("SOLUNA_AP_PSK") or DEFAULT_AP_PSK).strip()
     os.makedirs(ETC, exist_ok=True)
     with open(AP_PSK, "w") as f:
         f.write(p + "\n")
     os.chmod(AP_PSK, 0o600)
-    log("generated AP psk")
+    log(f"AP psk initialised ({'from agent.env' if p != DEFAULT_AP_PSK else 'default — change it in /setup'})")
     return p
 
 
@@ -333,18 +368,54 @@ class Agent:
         if self.agent_env.get("SOLUNA_AP", "1") != "1" or not shutil.which("nmcli"):
             return
         st = wlan_state()
-        if st in ("ap",):
-            return
+        now_t = time.time()
         if st == "connected":          # 上流Wi-Fi(会場LAN/テザリング)に乗っている → APは立てない
+            self.wlan_down_since = None
+            self.ap_since = None
             return
+        upstream = saved_upstream_wifi()
+        if st in ("ap",):
+            self.ap_since = getattr(self, "ap_since", None) or now_t
+            cur = sh(["nmcli", "-g", "802-11-wireless.ssid", "con", "show", "soluna-ap"], timeout=5).strip()
+            if cur != self.ap_ssid or ensure_ap_psk() != (self.ap_psk or ensure_ap_psk()):
+                log(f"AP settings changed ({cur} → {self.ap_ssid}) — re-raising")
+            elif should_retry_upstream(self.ap_since, getattr(self, "ap_last_retry", None), now_t, bool(upstream)):
+                # 上流が戻っていないか定期的に試す: APを一時停止→上流の自動接続を待つ→戻らなければAP再開
+                self.ap_last_retry = now_t
+                log(f"AP: trying saved upstream {upstream} for {AP_RETRY_WAIT_S:.0f}s")
+                sh(["nmcli", "con", "down", "soluna-ap"], timeout=15)
+                t_end = now_t + AP_RETRY_WAIT_S
+                while time.time() < t_end:
+                    if wlan_state() == "connected":
+                        log("AP: upstream is back — staying on it")
+                        self.ap_since = None
+                        return
+                    time.sleep(3)
+                log("AP: upstream still gone — re-raising AP")
+            else:
+                return
+        else:
+            self.wlan_down_since = getattr(self, "wlan_down_since", None) or now_t
+            if not should_raise_ap(st, self.wlan_down_since, now_t, bool(upstream)):
+                return                 # 猶予中: テザリング/会場Wi-Fiの復帰を待つ
         self.ap_psk = ensure_ap_psk()
         band = self.agent_env.get("SOLUNA_AP_BAND", "bg")
+        # キャプティブポータル: APにつないだ端末の全DNSを箱に向ける → OSの接続確認が /welcome を開く
+        try:
+            os.makedirs("/etc/NetworkManager/dnsmasq-shared.d", exist_ok=True)
+            with open("/etc/NetworkManager/dnsmasq-shared.d/soluna-captive.conf", "w") as f:
+                f.write("# SOLUNA box captive portal: every name resolves to the box while the AP is up\n"
+                        "address=/#/10.42.0.1\n")
+        except Exception as e:                       # noqa: BLE001
+            log(f"captive dnsmasq conf failed: {e}")
         sh(["nmcli", "con", "delete", "soluna-ap"], timeout=10)
         out = sh(["nmcli", "dev", "wifi", "hotspot", "ifname", "wlan0", "con-name", "soluna-ap",
                   "ssid", self.ap_ssid, "password", self.ap_psk], timeout=30, check=True)
-        sh(["nmcli", "con", "modify", "soluna-ap", "connection.autoconnect", "yes",
+        # autoconnect=no: 再起動後は必ず上流Wi-Fiを先に試す(agentが猶予後に改めてAPを判断する)
+        sh(["nmcli", "con", "modify", "soluna-ap", "connection.autoconnect", "no",
             "802-11-wireless.band", band], timeout=10)
-        log(f"Wi-Fi AP up: ssid={self.ap_ssid} band={band} ({out.strip()[:80]})")
+        self.ap_since = time.time()
+        log(f"Wi-Fi AP up: ssid={self.ap_ssid} psk={self.ap_psk} band={band} ({out.strip()[:80]})")
 
     # ---- healing ----
     def heal_local(self):

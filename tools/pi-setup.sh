@@ -63,6 +63,11 @@ $SUDO tee "$ETC/server.env" >/dev/null <<ENV
 PORT=$PORT
 SOLUNA_ADMIN=$ADMIN
 SOLUNA_DATA_DIR=$DATA
+SOLUNA_BOX=1
+SOLUNA_ETC=$ETC
+SOLUNA_APP=$APP
+SOLUNA_CAPTIVE_PORT=${CAPTIVE_PORT:-80}
+SOLUNA_SETUP_OPEN=${SETUP_OPEN:-1}
 PYTHONUNBUFFERED=1
 ENV
 $SUDO chmod 600 "$ETC/server.env"
@@ -70,6 +75,7 @@ $SUDO tee "$ETC/agent.env" >/dev/null <<ENV
 SOLUNA_AP=${AP:-1}
 SOLUNA_AP_SSID=${AP_SSID:-SOLUNA}
 SOLUNA_AP_BAND=${AP_BAND:-bg}
+SOLUNA_AP_PSK=${AP_PSK:-solunasound}
 SOLUNA_DATA_DIR=$DATA
 PORT=$PORT
 PYTHONUNBUFFERED=1
@@ -152,6 +158,8 @@ Restart=always
 RestartSec=2
 LimitNOFILE=65536
 Nice=-5
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 
 [Install]
 WantedBy=multi-user.target
@@ -176,6 +184,12 @@ WantedBy=multi-user.target
 UNIT
 
 $SUDO systemctl daemon-reload
+# /setup が使う特権コマンドだけを、この箱のユーザーに無パスワードで許可(それ以外は不可)
+$SUDO tee /etc/sudoers.d/soluna >/dev/null <<SUDOERS
+$USER_NAME ALL=(root) NOPASSWD: /usr/bin/systemctl restart soluna-node, /usr/bin/systemctl restart soluna-agent, /usr/bin/systemctl restart soluna-server, /usr/bin/systemctl restart --no-block soluna-server, /usr/bin/systemctl restart avahi-daemon, /usr/bin/systemctl reboot, /usr/bin/nmcli *, /usr/bin/hostnamectl set-hostname *, /usr/bin/tee $ETC/*, /usr/bin/chmod * $ETC/*, /usr/bin/rm -f $ETC/force-server, /usr/bin/journalctl *, /usr/bin/bash -c *
+SUDOERS
+$SUDO chmod 440 /etc/sudoers.d/soluna
+$SUDO usermod -aG netdev,audio "$USER_NAME" 2>/dev/null || true
 $SUDO systemctl enable soluna-node soluna-agent >/dev/null 2>&1
 $SUDO systemctl disable soluna-server >/dev/null 2>&1 || true      # the agent starts it when elected
 [ -f "$ETC/force-server" ] && $SUDO systemctl enable soluna-server >/dev/null 2>&1 || true

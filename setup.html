@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SOLUNA box setup</title>
+<style>
+  :root{--bg:#0a0507;--panel:#160d10;--gold:#d4af37;--cream:#f4e8d0;--dim:#a8977e;--red:#c0392b;--ok:#3fbf7f}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--cream);font-family:"Hiragino Sans","Zen Kaku Gothic New",sans-serif;font-size:15px}
+  header{padding:18px 18px 8px;display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+  header b{color:var(--gold);letter-spacing:.25em;font-size:.8rem}
+  header .st{font-size:.8rem;color:var(--dim)}
+  main{padding:0 14px 60px;max-width:760px;margin:0 auto}
+  section{background:var(--panel);border:1px solid rgba(212,175,55,.18);border-radius:14px;padding:14px 16px;margin:12px 0}
+  h2{margin:0 0 10px;font-size:.95rem;color:var(--gold)} h2 small{color:var(--dim);font-weight:400;font-size:.75rem;margin-left:8px}
+  label{display:block;font-size:.7rem;color:var(--dim);margin:8px 0 3px;letter-spacing:.05em}
+  input,select{background:#0e0709;color:var(--cream);border:1px solid rgba(244,232,208,.25);border-radius:8px;padding:9px 10px;font-size:15px;width:100%}
+  .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+  button{background:var(--gold);color:#1a1206;border:0;border-radius:10px;padding:11px 14px;font-weight:700;font-size:.95rem;cursor:pointer;margin-top:10px}
+  button.ghost{background:transparent;color:var(--cream);border:1px solid rgba(244,232,208,.3);font-weight:500}
+  button.red{background:var(--red);color:#fff}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.85rem} .kv span{color:var(--dim)}
+  .led{display:inline-block;width:9px;height:9px;border-radius:50%;background:#555;margin-right:6px;vertical-align:middle}
+  .led.on{background:var(--ok)} .led.bad{background:var(--red)}
+  #toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:999px;font-size:.85rem;opacity:0;transition:.25s;pointer-events:none;max-width:90vw}
+  #toast.show{opacity:1}
+  pre{background:#000;color:#bcd;font-size:.7rem;padding:10px;border-radius:8px;max-height:260px;overflow:auto;white-space:pre-wrap}
+  .nets button{margin:4px 6px 0 0;padding:6px 10px;font-size:.8rem}
+  .hint{font-size:.75rem;color:var(--dim);line-height:1.6}
+  .tok{font-family:monospace;font-size:.8rem;word-break:break-all}
+</style></head><body>
+<header>
+  <div><b>SOLUNA · BOX SETUP</b><div style="font-size:1.2rem;font-weight:700" id="hHost">—</div></div>
+  <div class="st" id="hSt">読み込み中…</div>
+</header>
+<main>
+  <section>
+    <h2>状態 <small>status</small></h2>
+    <div class="kv">
+      <span>役割 / role</span><div id="sRole">—</div>
+      <span>IP</span><div id="sIp">—</div>
+      <span>サービス</span><div id="sSvc">—</div>
+      <span>音の出口 / audio</span><div id="sAudio">—</div>
+      <span>温度・稼働</span><div id="sMisc">—</div>
+      <span>Wi-Fi</span><div id="sWifi">—</div>
+    </div>
+    <button class="ghost" id="tone">🔔 テスト音を鳴らす (880Hz)</button>
+    <button class="ghost" id="reload">↻ 更新</button>
+  </section>
+
+  <section>
+    <h2>この箱の役割 <small>role — 通常は「自動」でOK</small></h2>
+    <div class="row">
+      <div><label>モード</label>
+        <select id="rMode">
+          <option value="auto">自動(見つけたサーバに従う・無ければ自分がサーバ)</option>
+          <option value="server">常にこの箱がサーバ(時計の親)</option>
+          <option value="pinned">固定サーバに接続(URL指定)</option>
+        </select></div>
+      <div><label>固定サーバ URL(pinned のとき)</label><input id="rUrl" placeholder="ws://192.168.0.10:8900"></div>
+    </div>
+    <button id="rSave">役割を保存</button>
+    <div class="hint">サーバ役の箱が消えると、残りの箱が15〜20秒で自動的に引き継ぎます。</div>
+  </section>
+
+  <section>
+    <h2>スピーカー <small>this box as a speaker node</small></h2>
+    <div class="row">
+      <div><label>ゾーン(旗の文字)</label><input id="nZone" placeholder="A" maxlength="2"></div>
+      <div><label>位置 L / R / C</label><select id="nPos"><option>C</option><option>L</option><option>R</option></select></div>
+      <div><label>音量補正 dB</label><input id="nGain" type="number" step="0.5" min="-24" max="12" value="0"></div>
+      <div><label>チャンネル</label><input id="nCh" value="festival"></div>
+    </div>
+    <label>出力デバイス</label>
+    <select id="nDev"><option value="auto">auto(USB &gt; GPIO I2S DAC &gt; 内蔵)</option></select>
+    <button id="nSave">スピーカー設定を保存(ノード再起動)</button>
+  </section>
+
+  <section>
+    <h2>Wi-Fi 上流 <small>join the venue Wi-Fi / tethering</small></h2>
+    <div class="hint">会場のWi-Fiやテザリングに繋ぐと、この箱は自分のAPを立てずにそのネットワークで他の箱・スマホと同期します。</div>
+    <button class="ghost" id="wScan">📡 周りのWi-Fiを探す</button>
+    <div class="nets" id="wNets"></div>
+    <div class="row">
+      <div><label>SSID</label><input id="wSsid"></div>
+      <div><label>パスワード</label><input id="wPsk" type="password"></div>
+    </div>
+    <button id="wJoin">接続する</button>
+    <div class="hint">⚠ この箱のAP経由で開いている場合、接続すると一度切れます。同じネットワークから <span id="wHostHint">http://&lt;箱名&gt;.local:8900/setup</span> で戻れます。</div>
+  </section>
+
+  <section>
+    <h2>この箱のWi-Fi(AP) <small>own access point — 上流が無いとき自動で立つ</small></h2>
+    <div class="row">
+      <div><label>有効</label><select id="aOn"><option value="1">立てる(上流が無いとき)</option><option value="0">立てない</option></select></div>
+      <div><label>SSID</label><input id="aSsid" maxlength="32"></div>
+      <div><label>パスワード(8〜63)</label><input id="aPsk" placeholder="変更するときだけ入力"></div>
+      <div><label>帯域</label><select id="aBand"><option value="bg">2.4GHz(届く)</option><option value="a">5GHz(速い・近距離)</option></select></div>
+    </div>
+    <div class="hint">現在のパスワード: <span class="tok" id="aPskNow">—</span> ・ 収容の目安 20〜30台(箱同士+スタッフ用)</div>
+    <button id="aSave">APを保存(agent再起動)</button>
+  </section>
+
+  <section>
+    <h2>箱 <small>box</small></h2>
+    <div class="row">
+      <div><label>箱の名前(hostname・a-z0-9-)</label><input id="bHost" placeholder="soluna-box-1"></div>
+      <div><label>管理トークン(/admin 用)</label><div class="tok" id="bTok" style="padding:9px 0">—</div></div>
+    </div>
+    <button class="ghost" id="bHostSave">名前を変更</button>
+    <button class="ghost" id="bTokRegen">トークンを再生成</button>
+    <button class="ghost" id="bRestartNode">ノード再起動</button>
+    <button class="ghost" id="bRestartServer">サーバ再起動</button>
+    <button class="ghost" id="bUpdate">⬇ 最新版に更新</button>
+    <button class="red" id="bReboot">箱を再起動</button>
+    <button class="ghost" id="bLogs">📜 ログ</button>
+    <pre id="logs" hidden></pre>
+  </section>
+  <div class="hint" style="text-align:center;margin-top:20px"><a href="/admin" style="color:var(--gold)">FOH コンソール</a> · <a href="/" style="color:var(--gold)">観客ページ</a> · <a href="/flags?gate=1" style="color:var(--gold)">入場QR</a></div>
+</main>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const TOK = new URLSearchParams(location.search).get('token') || sessionStorage.getItem('soluna_admin') || '';
+const H = TOK ? {'x-soluna-admin': TOK} : {};
+let S = null;
+function toast(t, bad){ const e=$('toast'); e.textContent=t; e.style.background=bad?'#7a1f1f':'#222'; e.classList.add('show'); setTimeout(()=>e.classList.remove('show'), 3200); }
+async function api(path, body, method){
+  const r = await fetch(path, {method: method || (body?'POST':'GET'), headers:{...H, 'content-type':'application/json'}, body: body?JSON.stringify(body):undefined});
+  const t = await r.text(); let j; try{ j = JSON.parse(t); }catch(e){ j = {text:t}; }
+  if (!r.ok) throw new Error(j.text || t || r.status);
+  return j;
+}
+function render(s){
+  S = s;
+  $('hHost').textContent = s.host; $('hSt').textContent = `v${(s.version||'').replace(/^v/,'')} · ${new Date(s.t*1000).toLocaleTimeString()}`;
+  $('sRole').innerHTML = `<span class="led ${s.role==='server'?'on':''}"></span>${s.role==='server'?'サーバ(時計の親)+スピーカー':'スピーカー(ノード)'} <small style="color:var(--dim)">mode=${s.role_mode}${s.node.pinned?' → '+s.node.server:''}</small>`;
+  $('sIp').textContent = (s.ips||[]).join(' · ') || '—';
+  $('sSvc').innerHTML = ['node','server','agent'].map(u=>`<span class="led ${s.services[u]==='active'?'on':(u==='server'?'':'bad')}"></span>${u}`).join(' &nbsp; ');
+  $('sAudio').textContent = (s.audio||[]).map(c=>`${c.name} (${c.hw})`).join(' · ') || '(no sound card)';
+  $('sMisc').textContent = `${s.temp!=null?s.temp+'°C':'—'} · ${s.uptime_s!=null?(s.uptime_s/60).toFixed(0)+' min':'—'}`;
+  $('sWifi').textContent = s.wifi ? `${s.wifi.device}: ${s.wifi.state}${s.wifi.connection?' ('+s.wifi.connection+')':''}${s.wifi.mode==='ap'?' — AP mode':''}` : '—';
+  $('rMode').value = s.role_mode; $('rUrl').value = s.node.pinned ? s.node.server : '';
+  $('nZone').value = s.node.zone; $('nPos').value = s.node.pos; $('nGain').value = s.node.gain_db; $('nCh').value = s.node.ch;
+  const dev = $('nDev'); dev.innerHTML = '<option value="auto">auto(USB &gt; GPIO I2S DAC &gt; 内蔵)</option>' + (s.audio||[]).map(c=>`<option value="${c.hw}">${c.name} — ${c.desc} (${c.hw})</option>`).join('');
+  dev.value = s.node.device; if (dev.value !== s.node.device){ const o=document.createElement('option'); o.value=s.node.device; o.textContent=s.node.device; dev.appendChild(o); dev.value=s.node.device; }
+  $('aOn').value = s.ap.on?'1':'0'; $('aSsid').value = s.ap.ssid; $('aBand').value = s.ap.band; $('aPskNow').textContent = s.ap.psk || '(未生成)';
+  $('bHost').value = s.host; $('bTok').textContent = s.token || '(非表示)'; $('wHostHint').textContent = `http://${s.host}.local:${s.port}/setup`;
+}
+async function load(){ try{ render(await api('/api/box')); }catch(e){ $('hSt').textContent = '⛔ ' + e.message; toast(e.message, true); } }
+$('reload').onclick = load;
+$('tone').onclick = async ()=>{ try{ const j = await api('/api/box/action', {action:'tone'}); toast(j.ok ? '🔔 鳴らしました' : (j.hint||'ノード未接続'), !j.ok); }catch(e){ toast(e.message,true); } };
+$('rSave').onclick = async ()=>{ try{ const j = await api('/api/box', {role:{mode:$('rMode').value, server:$('rUrl').value}}); render(j.status); toast('役割を保存: '+j.applied.join(', ')); }catch(e){ toast(e.message,true); } };
+$('nSave').onclick = async ()=>{ try{ const j = await api('/api/box', {node:{zone:$('nZone').value, pos:$('nPos').value, gain_db:parseFloat($('nGain').value||0), device:$('nDev').value, ch:$('nCh').value}}); render(j.status); toast('スピーカー設定を保存・ノード再起動'); }catch(e){ toast(e.message,true); } };
+$('wScan').onclick = async ()=>{ $('wNets').textContent='探しています…'; try{ const j = await api('/api/box/wifi'); $('wNets').innerHTML = j.networks.map(n=>`<button class="ghost" data-s="${n.ssid.replace(/"/g,'&quot;')}">${n.ssid} <small>${n.signal}% ${n.security||'open'}</small></button>`).join('') || '(見つかりません)'; }catch(e){ $('wNets').textContent=''; toast(e.message,true); } };
+$('wNets').onclick = e=>{ const b=e.target.closest('button'); if(b){ $('wSsid').value=b.dataset.s; $('wPsk').focus(); } };
+$('wJoin').onclick = async ()=>{ toast('接続中…(この画面が切れたら同じネットワークから .local で戻ってください)'); try{ const j = await api('/api/box/wifi', {ssid:$('wSsid').value, psk:$('wPsk').value}); toast(j.ok?'接続しました':'接続失敗: '+j.out, !j.ok); load(); }catch(e){ toast(e.message,true); } };
+$('aSave').onclick = async ()=>{ try{ const body={ap:{on:$('aOn').value==='1', ssid:$('aSsid').value, band:$('aBand').value}}; if($('aPsk').value) body.ap.psk=$('aPsk').value; const j = await api('/api/box', body); render(j.status); $('aPsk').value=''; toast('APを保存(数秒で反映)'); }catch(e){ toast(e.message,true); } };
+$('bHostSave').onclick = async ()=>{ try{ const j = await api('/api/box', {hostname:$('bHost').value}); render(j.status); toast('名前を変更: '+j.applied.join(', ')); }catch(e){ toast(e.message,true); } };
+const act = (name, msg, confirmMsg) => async ()=>{ if (confirmMsg && !confirm(confirmMsg)) return; try{ const j = await api('/api/box/action', {action:name}); toast(msg + (j.token?' → '+j.token:'')); setTimeout(load, 2500); }catch(e){ toast(e.message,true); } };
+$('bTokRegen').onclick = act('regen-token', 'トークン再生成', '管理トークンを作り直します。/admin を開いている端末は再ログインが必要です。');
+$('bRestartNode').onclick = act('restart-node', 'ノード再起動');
+$('bRestartServer').onclick = act('restart-server', 'サーバ再起動');
+$('bUpdate').onclick = act('update', '更新を開始(1〜3分・ログ参照)', 'GitHubの最新版を取り込みます。設定とトークンは保持されます。');
+$('bReboot').onclick = act('reboot', '再起動します…', 'この箱を再起動します。');
+$('bLogs').onclick = async ()=>{ const p=$('logs'); p.hidden=false; p.textContent='…'; try{ p.textContent = await (await fetch('/api/box/logs', {headers:H})).text(); p.scrollTop=p.scrollHeight; }catch(e){ p.textContent=e.message; } };
+load();
+</script>
+</body></html>

@@ -173,6 +173,31 @@ async def server_part():
 with ServerProc(env={"SOLUNA_NODE_STALE_S": "1", "SOLUNA_MDNS": "0"}):
     asyncio.run(server_part())
 
+# ---- AP policy(上流が切れた瞬間にAPへ化けて迷子にならない)
+
+from agent import should_raise_ap, should_retry_upstream, DEFAULT_AP_PSK
+
+check("AP: 上流接続中は立てない", should_raise_ap("connected", 0, 1000, True) is False)
+
+check("AP: 保存済み上流なし → 即立てる", should_raise_ap("disconnected", 990, 1000, False) is True)
+
+check("AP: 上流あり・猶予中(30s) → まだ", should_raise_ap("disconnected", 970, 1000, True, grace=120) is False)
+
+check("AP: 上流あり・猶予超え(130s) → 立てる", should_raise_ap("disconnected", 870, 1000, True, grace=120) is True)
+
+check("AP: 既にAP → 立て直さない", should_raise_ap("ap", 0, 1000, True) is False)
+
+check("AP再試行: 上流プロファイル無し → しない", should_retry_upstream(0, None, 5000, False) is False)
+
+check("AP再試行: AP開始から600s未満 → しない", should_retry_upstream(1000, None, 1500, True, every=600) is False)
+
+check("AP再試行: 600s経過 → する", should_retry_upstream(1000, None, 1601, True, every=600) is True)
+
+check("AP再試行: 直前の試行から測る", should_retry_upstream(1000, 1601, 1900, True, every=600) is False)
+
+check("AP PSK 既定値は既知(ラベル方式)", DEFAULT_AP_PSK == "solunasound")
+
+
 print(f"\n== PASS {len(ok)} / FAIL {len(ng)} ==")
 if ng:
     print("failed:", ng)

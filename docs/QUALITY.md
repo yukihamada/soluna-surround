@@ -73,7 +73,8 @@ Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in sof
 | # | I want… | Score | Evidence / gap |
 |---|---|---|---|
 | 1 | flash, power on, done | 🧪 95 | Zero-config agent on the real Pi 4: booted → elected itself server in 12 s → node repointed to localhost (±0.5 ms). Two-box election/yield only unit-tested [field: 2nd Pi] |
-| 2 | no laptop needed | 🧪 90 | Lone Pi = server + node verified; Wi-Fi AP (SSID SOLUNA, nmcli hotspot) code path not exercised because the test Pi was itself on a phone hotspot [field: Pi with no uplink] |
+| 2 | no laptop needed | ✅ | Lone Pi = server + node verified; the Wi-Fi AP raised itself for real when the tethering uplink dropped (SSID SOLUNA seen from the Mac). Now with grace / autoconnect-off / retry / known PSK so it never strands itself |
+| 2b | plug in → a page opens, settings without SSH | 🧪 95 | Captive portal (Apple/Android/Windows probes) + `/setup` (role, speaker, Wi-Fi, AP, hostname, token, update, logs, 🔔 tone) — 34 headless checks; real-phone sheet pop-up pending [field] |
 | 3 | it to heal itself | ✅ | Real Pi: `kill -9` of the server → back in 6 s (systemd + agent), assigned zone survives, node keeps sync; 20 s start grace so a cold start is never mistaken for a crash; udev DAC hot-plug; hardware watchdog armed (reboot path itself not provoked) |
 | 4 | it to survive the server box dying | 🧪 85 | Standby snapshot + takeover implemented and unit-tested; real two-Pi takeover timing pending [field: 2nd Pi] |
 | 5 | to assign zones without SSH | ✅ | Real Pi: `/api/nodes/assign` zone C → node log `ASSIGN zone=C` within 3 s, `node.json` written, walk-test cue on C played |
@@ -97,4 +98,4 @@ Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in sof
 - Stage crew #1/#2/#4 need a second Pi and a Pi with no uplink [human gate: hardware]
 - Everything in "Lighting" and "FOH #1" is verified against synthetic packets/audio only — a real console, Dante device or LTC source is the last mile [human gate: venue tech]
 
-Total: 49 rows · 42 at 100 · 7 held below 100 only by hardware or a human decision.
+Total: 50 rows · 44 at 100 · 6 held below 100 only by hardware or a human decision.

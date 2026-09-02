@@ -25,6 +25,8 @@ jobs:
         run: if [ -f tests/test_aes67.py ]; then python3 tests/test_aes67.py; else echo "skip (not yet)"; fi
       - name: test show control (OSC/timecode/Art-Net)
         run: if [ -f tests/test_showcontrol.py ]; then python3 tests/test_showcontrol.py; else echo "skip (not yet)"; fi
+      - name: test box setup + captive portal
+        run: python3 tests/test_box.py
       - name: test Pi mesh
         run: if [ -f tests/test_mesh.py ]; then python3 tests/test_mesh.py; else echo "skip (not yet)"; fi
   deploy:
