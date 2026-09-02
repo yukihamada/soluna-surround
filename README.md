@@ -149,8 +149,10 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
   only, no native Dante protocol, no PTP slave): `docs/integration.md`.
 - **Plug in, a page opens** — join a box's Wi-Fi (SSID SOLUNA) and the phone pops the welcome
   page (captive portal); `/setup` on any box: role, speaker zone/DAC + test tone, Wi-Fi uplink,
-  its own AP, hostname, token, update, logs — no SSH. Boxes never strand themselves: AP only after
-  a 120 s uplink grace, autoconnect off, periodic uplink retry, known default PSK (docs/pi-box.md).
+  its own AP, hostname, token, update, logs — no SSH. The AP has **no password** yet stays safe:
+  firewall lets only the box's web/WS through (no SSH, no forwarding), clients are isolated, and
+  `/setup` is open only for 10 min after power-on, then token. Boxes never strand themselves: AP
+  only after a 120 s uplink grace, autoconnect off, periodic uplink retry (docs/pi-box.md).
 - **Clock authority is monotonic** — the server timestamps from `monotonic()`
   anchored once at boot, so an NTP step on the host can never jump the crowd.
 - **Hot standby** — `GET /api/state` exports the whole show; `POST /api/state` on a

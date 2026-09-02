@@ -185,7 +185,65 @@ def write_env(path, updates):
 AP_GRACE_S = float(os.environ.get("SOLUNA_AP_GRACE_S", "120"))    # 上流が消えてからAPを立てるまでの猶予
 AP_RETRY_S = float(os.environ.get("SOLUNA_AP_RETRY_S", "600"))    # AP中、保存済み上流へ戻る試行の間隔
 AP_RETRY_WAIT_S = float(os.environ.get("SOLUNA_AP_RETRY_WAIT_S", "45"))
-DEFAULT_AP_PSK = "solunasound"   # ルータのラベルと同じ考え方: 既知の初期値・/setup で変更・pi-flash.sh は艦隊PSKを焼き込む
+DEFAULT_AP_PSK = "solunasound"
+# AP のセキュリティ: open(既定・パスワード無し。安全は「箱が閉じている」ことで担保=下の ap_firewall)
+#                    wpa(PSK)・owe(Enhanced Open: 暗号化ありパスワード無し。対応端末のみ)
+AP_SECURITY_DEFAULT = "open"
+AP_ALLOWED_TCP = ("80", "8900")          # 箱が開けるのは Web/WS だけ。SSH(22)等はAPからは届かない
+AP_ALLOWED_UDP = ("53", "67", "5353", "8901")   # DNS / DHCP / mDNS / 発見ビーコン
+
+
+def ap_firewall(enable: bool, iface="wlan0"):
+    """AP側の閘門: パスワード無しでも、箱の Web/WS 以外には触れず、上流へも抜けられない。
+    nft があれば nft、無ければ iptables(-nft)。失敗は致命ではない(ログのみ)。"""
+    if shutil.which("nft"):
+        sh(["nft", "delete", "table", "inet", "soluna_ap"], timeout=5)
+        if not enable:
+            return
+        rules = f"""table inet soluna_ap {{
+  chain input {{ type filter hook input priority -10; policy accept;
+    iifname "{iface}" ct state established,related accept
+    iifname "{iface}" icmp type echo-request accept
+    iifname "{iface}" icmpv6 type {{ echo-request, nd-neighbor-solicit, nd-neighbor-advert, nd-router-solicit }} accept
+    iifname "{iface}" tcp dport {{ {", ".join(AP_ALLOWED_TCP)} }} accept
+    iifname "{iface}" udp dport {{ {", ".join(AP_ALLOWED_UDP)} }} accept
+    iifname "{iface}" drop
+  }}
+  chain forward {{ type filter hook forward priority -10; policy accept;
+    iifname "{iface}" drop
+    oifname "{iface}" ct state established,related accept
+  }}
+}}
+"""
+        try:
+            r = subprocess.run(["nft", "-f", "-"], input=rules, capture_output=True, text=True, timeout=10)
+            log("AP firewall: " + ("on (web/ws only, no forwarding)" if r.returncode == 0 else f"failed: {r.stderr.strip()[:120]}"))
+        except Exception as e:                       # noqa: BLE001
+            log(f"AP firewall failed: {e}")
+        return
+    ipt = shutil.which("iptables")
+    if not ipt:
+        log("AP firewall: no nft/iptables — AP is open and unfiltered")
+        return
+    for chain in ("SOLUNA_AP_IN", "SOLUNA_AP_FWD"):
+        hook = "INPUT" if chain.endswith("IN") else "FORWARD"
+        sh([ipt, "-D", hook, "-i", iface, "-j", chain], timeout=5)
+        sh([ipt, "-F", chain], timeout=5); sh([ipt, "-X", chain], timeout=5)
+    if not enable:
+        return
+    sh([ipt, "-N", "SOLUNA_AP_IN"], timeout=5)
+    sh([ipt, "-A", "SOLUNA_AP_IN", "-m", "conntrack", "--ctstate", "ESTABLISHED,RELATED", "-j", "ACCEPT"], timeout=5)
+    sh([ipt, "-A", "SOLUNA_AP_IN", "-p", "icmp", "-j", "ACCEPT"], timeout=5)
+    for pt in AP_ALLOWED_TCP:
+        sh([ipt, "-A", "SOLUNA_AP_IN", "-p", "tcp", "--dport", pt, "-j", "ACCEPT"], timeout=5)
+    for pu in AP_ALLOWED_UDP:
+        sh([ipt, "-A", "SOLUNA_AP_IN", "-p", "udp", "--dport", pu, "-j", "ACCEPT"], timeout=5)
+    sh([ipt, "-A", "SOLUNA_AP_IN", "-j", "DROP"], timeout=5)
+    sh([ipt, "-I", "INPUT", "-i", iface, "-j", "SOLUNA_AP_IN"], timeout=5)
+    sh([ipt, "-N", "SOLUNA_AP_FWD"], timeout=5)
+    sh([ipt, "-A", "SOLUNA_AP_FWD", "-j", "DROP"], timeout=5)
+    sh([ipt, "-I", "FORWARD", "-i", iface, "-j", "SOLUNA_AP_FWD"], timeout=5)
+    log("AP firewall: on via iptables (web/ws only, no forwarding)")   # ルータのラベルと同じ考え方: 既知の初期値・/setup で変更・pi-flash.sh は艦隊PSKを焼き込む
 
 
 def saved_upstream_wifi():
@@ -384,6 +442,7 @@ class Agent:
                 self.ap_last_retry = now_t
                 log(f"AP: trying saved upstream {upstream} for {AP_RETRY_WAIT_S:.0f}s")
                 sh(["nmcli", "con", "down", "soluna-ap"], timeout=15)
+                ap_firewall(False)
                 t_end = now_t + AP_RETRY_WAIT_S
                 while time.time() < t_end:
                     if wlan_state() == "connected":
@@ -408,14 +467,24 @@ class Agent:
                         "address=/#/10.42.0.1\n")
         except Exception as e:                       # noqa: BLE001
             log(f"captive dnsmasq conf failed: {e}")
+        sec = (self.agent_env.get("SOLUNA_AP_SECURITY") or AP_SECURITY_DEFAULT).lower()
         sh(["nmcli", "con", "delete", "soluna-ap"], timeout=10)
-        out = sh(["nmcli", "dev", "wifi", "hotspot", "ifname", "wlan0", "con-name", "soluna-ap",
-                  "ssid", self.ap_ssid, "password", self.ap_psk], timeout=30, check=True)
-        # autoconnect=no: 再起動後は必ず上流Wi-Fiを先に試す(agentが猶予後に改めてAPを判断する)
-        sh(["nmcli", "con", "modify", "soluna-ap", "connection.autoconnect", "no",
-            "802-11-wireless.band", band], timeout=10)
+        # nmcli の hotspot サブコマンドは必ずWPAを付けるので、接続を自分で組む(open/owe/wpa を選べる)
+        cmd = ["nmcli", "con", "add", "type", "wifi", "ifname", "wlan0", "con-name", "soluna-ap",
+               "autoconnect", "no", "ssid", self.ap_ssid,
+               "802-11-wireless.mode", "ap", "802-11-wireless.band", band,
+               "ipv4.method", "shared", "ipv6.method", "disabled"]
+        if sec == "wpa":
+            cmd += ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.psk", self.ap_psk]
+        elif sec == "owe":
+            cmd += ["wifi-sec.key-mgmt", "owe"]
+        out = sh(cmd, timeout=30, check=True)
+        sh(["nmcli", "con", "modify", "soluna-ap", "802-11-wireless.ap-isolation", "1"], timeout=10)  # 端末同士は見えない
+        sh(["nmcli", "con", "up", "soluna-ap"], timeout=30, check=True)
+        ap_firewall(True)                # パスワード無しでも: 箱の Web/WS だけ・上流へは抜けない・SSH不可
         self.ap_since = time.time()
-        log(f"Wi-Fi AP up: ssid={self.ap_ssid} psk={self.ap_psk} band={band} ({out.strip()[:80]})")
+        self.ap_security = sec
+        log(f"Wi-Fi AP up: ssid={self.ap_ssid} security={sec}{' psk='+self.ap_psk if sec=='wpa' else ''} band={band} ({out.strip()[:80]})")
 
     # ---- healing ----
     def heal_local(self):

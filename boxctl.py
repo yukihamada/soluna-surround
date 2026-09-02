@@ -37,7 +37,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ETC = os.environ.get("SOLUNA_ETC", "/etc/soluna")
 APP_DIR = os.environ.get("SOLUNA_APP", HERE)
 DRYRUN = os.environ.get("SOLUNA_BOX_DRYRUN") == "1"
-SETUP_OPEN = os.environ.get("SOLUNA_SETUP_OPEN", "1") == "1"
+# 認証なしで /setup を触れる条件(箱のAP内/localhostから):
+#   "1"/"always" = いつでも  ・ "window"(既定) = サーバ起動から SOLUNA_SETUP_WINDOW_S 秒だけ(電源を入れた人=居る人)
+#   "0"/"never"  = 常にトークン必須
+SETUP_OPEN_MODE = (os.environ.get("SOLUNA_SETUP_OPEN") or "window").lower()
+SETUP_OPEN = SETUP_OPEN_MODE in ("1", "always")
+SETUP_WINDOW_S = float(os.environ.get("SOLUNA_SETUP_WINDOW_S", "600"))
+START_T = time.time()
 OPEN_NETS = tuple(p for p in os.environ.get("SOLUNA_SETUP_OPEN_FROM", "10.42.0.,127.0.0.1,::1").split(",") if p)
 NODE_ENV, SERVER_ENV, AGENT_ENV = (os.path.join(ETC, n) for n in ("node.env", "server.env", "agent.env"))
 FORCE_SERVER = os.path.join(ETC, "force-server")
@@ -212,7 +218,9 @@ def status(ctx):
                  "server": node.get("SERVER") or "auto", "pinned": node.get("PINNED") == "1"},
         "role_mode": ("server" if os.path.exists(FORCE_SERVER) else ("pinned" if node.get("PINNED") == "1" else "auto")),
         "ap": {"on": agent.get("SOLUNA_AP", "1") == "1", "ssid": agent.get("SOLUNA_AP_SSID", "SOLUNA"),
-               "band": agent.get("SOLUNA_AP_BAND", "bg"), "psk": (open(AP_PSK).read().strip() if os.path.exists(AP_PSK) else None)},
+               "band": agent.get("SOLUNA_AP_BAND", "bg"), "security": (agent.get("SOLUNA_AP_SECURITY") or "open").lower(),
+               "psk": (open(AP_PSK).read().strip() if os.path.exists(AP_PSK) else None)},
+        "setup_open": dict(zip(("now", "left_s"), setup_open_now())) | {"mode": SETUP_OPEN_MODE},
         "wifi": wifi_state(),
         "port": server.get("PORT") or os.environ.get("PORT", "8900"),
         "token": (open(TOKEN_FILE).read().strip() if os.path.exists(TOKEN_FILE) else None),
@@ -266,6 +274,8 @@ def apply(body: dict):
             upd["SOLUNA_AP_SSID"] = re.sub(r"[^\x20-\x7e]", "", str(ap["ssid"]))[:32]
         if ap.get("band") in ("bg", "a"):
             upd["SOLUNA_AP_BAND"] = ap["band"]
+        if ap.get("security") in ("open", "wpa", "owe"):
+            upd["SOLUNA_AP_SECURITY"] = ap["security"]
         write_env(AGENT_ENV, upd)
         if ap.get("psk"):
             psk = str(ap["psk"])
@@ -324,10 +334,21 @@ def _peer_ip(request):
     return (peer[0] if peer else request.remote or "") or ""
 
 
+def setup_open_now():
+    """今、箱のAP内からトークン無しで設定できるか(+残り秒)。"""
+    if SETUP_OPEN:
+        return True, None
+    if SETUP_OPEN_MODE in ("0", "never"):
+        return False, 0
+    left = SETUP_WINDOW_S - (time.time() - START_T)
+    return left > 0, max(0, int(left))
+
+
 def _authorized(request, admin_ok):
     if admin_ok(request):
         return True
-    if not SETUP_OPEN:
+    open_now, _ = setup_open_now()
+    if not open_now:
         return False
     ip = _peer_ip(request)
     return any(ip == p or ip.startswith(p) for p in OPEN_NETS)
@@ -367,7 +388,8 @@ def register(app, ctx):
 
     def need(request):
         if not _authorized(request, admin_ok):
-            raise web.HTTPForbidden(text="setup: join the box's Wi-Fi or send x-soluna-admin")
+            raise web.HTTPForbidden(text="setup: token required (x-soluna-admin). Without a token, the setup is open "
+                                         "from the box's own Wi-Fi only for %d s after power-on — reboot the box to reopen it." % SETUP_WINDOW_S)
 
     async def api_box(request):
         need(request)

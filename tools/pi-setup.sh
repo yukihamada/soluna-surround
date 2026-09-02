@@ -23,7 +23,7 @@ echo "▶ SOLUNA box install → $APP  (user=$USER_NAME ch=$CH server=${SERVER:-
 
 # ---- packages (node + server + agent) ---------------------------------------------------
 $SUDO apt-get update -qq
-$SUDO apt-get install -y -qq python3-numpy python3-websockets python3-aiohttp python3-pip libportaudio2 \
+$SUDO apt-get install -y -qq python3-numpy python3-websockets python3-aiohttp python3-pip libportaudio2 nftables \
   ffmpeg alsa-utils curl rsync avahi-daemon avahi-utils network-manager >/dev/null
 python3 -c "import sounddevice" 2>/dev/null || $SUDO pip3 install -q --break-system-packages sounddevice
 python3 -c "import qrcode" 2>/dev/null || $SUDO pip3 install -q --break-system-packages qrcode
@@ -67,7 +67,8 @@ SOLUNA_BOX=1
 SOLUNA_ETC=$ETC
 SOLUNA_APP=$APP
 SOLUNA_CAPTIVE_PORT=${CAPTIVE_PORT:-80}
-SOLUNA_SETUP_OPEN=${SETUP_OPEN:-1}
+SOLUNA_SETUP_OPEN=${SETUP_OPEN:-window}
+SOLUNA_SETUP_WINDOW_S=${SETUP_WINDOW_S:-600}
 PYTHONUNBUFFERED=1
 ENV
 $SUDO chmod 600 "$ETC/server.env"
@@ -76,6 +77,7 @@ SOLUNA_AP=${AP:-1}
 SOLUNA_AP_SSID=${AP_SSID:-SOLUNA}
 SOLUNA_AP_BAND=${AP_BAND:-bg}
 SOLUNA_AP_PSK=${AP_PSK:-solunasound}
+SOLUNA_AP_SECURITY=${AP_SECURITY:-open}
 SOLUNA_DATA_DIR=$DATA
 PORT=$PORT
 PYTHONUNBUFFERED=1

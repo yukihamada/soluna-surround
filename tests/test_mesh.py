@@ -196,6 +196,10 @@ check("AP再試行: 600s経過 → する", should_retry_upstream(1000, None, 16
 check("AP再試行: 直前の試行から測る", should_retry_upstream(1000, 1601, 1900, True, every=600) is False)
 
 check("AP PSK 既定値は既知(ラベル方式)", DEFAULT_AP_PSK == "solunasound")
+from agent import AP_SECURITY_DEFAULT, AP_ALLOWED_TCP, AP_ALLOWED_UDP
+check("AP 既定=open(パスワード無し)", AP_SECURITY_DEFAULT == "open")
+check("AP 閘門: TCPは 80/8900 のみ(SSH不可)", set(AP_ALLOWED_TCP) == {"80", "8900"})
+check("AP 閘門: UDPは DNS/DHCP/mDNS/ビーコン", set(AP_ALLOWED_UDP) == {"53", "67", "5353", "8901"})
 
 
 print(f"\n== PASS {len(ok)} / FAIL {len(ng)} ==")

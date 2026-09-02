@@ -150,3 +150,20 @@ dropped for a moment, it became AP "SOLUNA" with a random PSK, and nobody could 
 Recovery = `tools/pi-rescue.sh`: pull the microSD, run the script against `bootfs`, put it back;
 a one-shot cloud-init disables the AP autoconnect, sets the known PSK, re-joins the saved uplink
 and updates the box.
+
+### Open Wi-Fi, still safe (no password by default)
+
+The box's AP has **no password by default** — a crew member or a phone should be able to join
+in one tap. Safety does not come from the Wi-Fi key; it comes from the box being *closed*:
+
+- **Firewall on the AP interface** (`nft`, or `iptables` fallback): only the box's own web/WS
+  ports 80 and 8900 (+ DNS/DHCP/mDNS/beacon UDP) are reachable. **SSH is not**. Nothing is
+  forwarded to the uplink — the open Wi-Fi is not a free hotspot and cannot reach the venue LAN.
+- **Client isolation** (`ap-isolation`): phones on the AP cannot see each other.
+- **Control needs a key anyway**: `/admin` always wants the token. `/setup` is open from the AP
+  only for **10 minutes after power-on** (`SOLUNA_SETUP_OPEN=window`, `SOLUNA_SETUP_WINDOW_S`) —
+  the person who just plugged the box in is the person allowed to configure it. After that:
+  token, or reboot the box to reopen the window. `always` / `never` are available.
+- The audience page carries no secrets, and location never leaves the phone.
+- Prefer encryption without a password? `security: owe` (Wi-Fi Enhanced Open) in `/setup` — newer
+  phones only. Prefer a password? `security: wpa` (default PSK `solunasound`, change it).

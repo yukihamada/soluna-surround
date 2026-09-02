@@ -93,10 +93,14 @@
     <div class="row">
       <div><label>有効</label><select id="aOn"><option value="1">立てる(上流が無いとき)</option><option value="0">立てない</option></select></div>
       <div><label>SSID</label><input id="aSsid" maxlength="32"></div>
-      <div><label>パスワード(8〜63)</label><input id="aPsk" placeholder="変更するときだけ入力"></div>
+      <div><label>セキュリティ</label><select id="aSec">
+        <option value="open">パスワード無し(既定・箱のWeb以外は遮断)</option>
+        <option value="owe">Enhanced Open(暗号化あり・パスワード無し・新しい端末のみ)</option>
+        <option value="wpa">WPA2 パスワード</option></select></div>
+      <div><label>パスワード(WPA2のとき・8〜63)</label><input id="aPsk" placeholder="変更するときだけ入力"></div>
       <div><label>帯域</label><select id="aBand"><option value="bg">2.4GHz(届く)</option><option value="a">5GHz(速い・近距離)</option></select></div>
     </div>
-    <div class="hint">現在のパスワード: <span class="tok" id="aPskNow">—</span> ・ 収容の目安 20〜30台(箱同士+スタッフ用)</div>
+    <div class="hint">パスワード無しでも安全: このWi-Fiからは箱のWebとWS(:80/:8900)しか届かず、SSHも上流ネットへの抜け道も遮断。端末同士も見えません。設定変更はトークンか「電源投入後10分」だけ。<br>WPA2時のパスワード: <span class="tok" id="aPskNow">—</span> ・ 収容の目安 20〜30台</div>
     <button id="aSave">APを保存(agent再起動)</button>
   </section>
 
@@ -143,7 +147,8 @@ function render(s){
   $('nZone').value = s.node.zone; $('nPos').value = s.node.pos; $('nGain').value = s.node.gain_db; $('nCh').value = s.node.ch;
   const dev = $('nDev'); dev.innerHTML = '<option value="auto">auto(USB &gt; GPIO I2S DAC &gt; 内蔵)</option>' + (s.audio||[]).map(c=>`<option value="${c.hw}">${c.name} — ${c.desc} (${c.hw})</option>`).join('');
   dev.value = s.node.device; if (dev.value !== s.node.device){ const o=document.createElement('option'); o.value=s.node.device; o.textContent=s.node.device; dev.appendChild(o); dev.value=s.node.device; }
-  $('aOn').value = s.ap.on?'1':'0'; $('aSsid').value = s.ap.ssid; $('aBand').value = s.ap.band; $('aPskNow').textContent = s.ap.psk || '(未生成)';
+  $('aOn').value = s.ap.on?'1':'0'; $('aSsid').value = s.ap.ssid; $('aBand').value = s.ap.band; $('aSec').value = s.ap.security||'open'; $('aPskNow').textContent = s.ap.psk || '(未生成)';
+  const so = s.setup_open||{}; $('hSt').textContent += so.now ? (so.left_s!=null ? ` · 🔓 設定オープン 残り${Math.ceil(so.left_s/60)}分` : ' · 🔓 設定オープン') : ' · 🔒 トークン必須';
   $('bHost').value = s.host; $('bTok').textContent = s.token || '(非表示)'; $('wHostHint').textContent = `http://${s.host}.local:${s.port}/setup`;
 }
 async function load(){ try{ render(await api('/api/box')); }catch(e){ $('hSt').textContent = '⛔ ' + e.message; toast(e.message, true); } }
@@ -154,7 +159,7 @@ $('nSave').onclick = async ()=>{ try{ const j = await api('/api/box', {node:{zon
 $('wScan').onclick = async ()=>{ $('wNets').textContent='探しています…'; try{ const j = await api('/api/box/wifi'); $('wNets').innerHTML = j.networks.map(n=>`<button class="ghost" data-s="${n.ssid.replace(/"/g,'&quot;')}">${n.ssid} <small>${n.signal}% ${n.security||'open'}</small></button>`).join('') || '(見つかりません)'; }catch(e){ $('wNets').textContent=''; toast(e.message,true); } };
 $('wNets').onclick = e=>{ const b=e.target.closest('button'); if(b){ $('wSsid').value=b.dataset.s; $('wPsk').focus(); } };
 $('wJoin').onclick = async ()=>{ toast('接続中…(この画面が切れたら同じネットワークから .local で戻ってください)'); try{ const j = await api('/api/box/wifi', {ssid:$('wSsid').value, psk:$('wPsk').value}); toast(j.ok?'接続しました':'接続失敗: '+j.out, !j.ok); load(); }catch(e){ toast(e.message,true); } };
-$('aSave').onclick = async ()=>{ try{ const body={ap:{on:$('aOn').value==='1', ssid:$('aSsid').value, band:$('aBand').value}}; if($('aPsk').value) body.ap.psk=$('aPsk').value; const j = await api('/api/box', body); render(j.status); $('aPsk').value=''; toast('APを保存(数秒で反映)'); }catch(e){ toast(e.message,true); } };
+$('aSave').onclick = async ()=>{ try{ const body={ap:{on:$('aOn').value==='1', ssid:$('aSsid').value, band:$('aBand').value, security:$('aSec').value}}; if($('aPsk').value) body.ap.psk=$('aPsk').value; const j = await api('/api/box', body); render(j.status); $('aPsk').value=''; toast('APを保存(数秒で反映)'); }catch(e){ toast(e.message,true); } };
 $('bHostSave').onclick = async ()=>{ try{ const j = await api('/api/box', {hostname:$('bHost').value}); render(j.status); toast('名前を変更: '+j.applied.join(', ')); }catch(e){ toast(e.message,true); } };
 const act = (name, msg, confirmMsg) => async ()=>{ if (confirmMsg && !confirm(confirmMsg)) return; try{ const j = await api('/api/box/action', {action:name}); toast(msg + (j.token?' → '+j.token:'')); setTimeout(load, 2500); }catch(e){ toast(e.message,true); } };
 $('bTokRegen').onclick = act('regen-token', 'トークン再生成', '管理トークンを作り直します。/admin を開いている端末は再ログインが必要です。');

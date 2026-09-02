@@ -151,6 +151,27 @@ async def main():
             r = await s.get(f"{B2}/setup")
             check("/setup ページ自体は開ける(JSがトークンを求める)", r.status == 200)
 
+    # ---- default = window mode: open right after boot, closed after the window
+    env3 = dict(env); env3.pop("SOLUNA_SETUP_OPEN"); env3["SOLUNA_SETUP_WINDOW_S"] = "3600"
+    with ServerProc(env=env3, port=PORT + 3):
+        B = f"http://127.0.0.1:{PORT + 3}"
+        async with aiohttp.ClientSession() as s:
+            r = await s.get(f"{B}/api/box")
+            j = await r.json()
+            check("window(3600s): 起動直後はトークン無しでOK", r.status == 200 and j["setup_open"]["now"] is True and j["setup_open"]["mode"] == "window")
+    env4 = dict(env3); env4["SOLUNA_SETUP_WINDOW_S"] = "0"
+    with ServerProc(env=env4, port=PORT + 4):
+        B = f"http://127.0.0.1:{PORT + 4}"
+        async with aiohttp.ClientSession() as s:
+            r = await s.get(f"{B}/api/box")
+            check("window(0s): 窓が閉じたら403+案内", r.status == 403 and "reboot" in await r.text())
+            r = await s.get(f"{B}/api/box", headers={"x-soluna-admin": ADMIN})
+            j = await r.json()
+            check("window(0s): トークンなら200・setup_open.now=false", r.status == 200 and j["setup_open"]["now"] is False)
+            r = await s.post(f"{B}/api/box", json={"ap": {"security": "owe"}}, headers={"x-soluna-admin": ADMIN})
+            j = await r.json()
+            check("AP security=owe 保存", j["status"]["ap"]["security"] == "owe")
+
     # ---- not a box: nothing exposed
     with ServerProc(port=PORT + 2):
         B3 = f"http://127.0.0.1:{PORT + 2}"
