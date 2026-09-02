@@ -127,7 +127,9 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
   *"how many are really sounding"*, per zone — not just how many are connected.
 - **Speaker nodes run the same show** — `play.py` (Raspberry Pi) receives CUE,
   PRELOAD, walk-test, SHOW steps and LIGHT (forwarded to a `--light-cmd` GPIO hook),
-  decodes any format via ffmpeg, joins mid-track, reconnects forever.
+  decodes any format via ffmpeg, joins mid-track, reconnects forever. One-shot Pi
+  install with a systemd service (USB DAC auto-picked):
+  `curl -fsSL …/tools/pi-setup.sh | SERVER=wss://… ZONE=B bash`
 - **Clock authority is monotonic** — the server timestamps from `monotonic()`
   anchored once at boot, so an NTP step on the host can never jump the crowd.
 - **Hot standby** — `GET /api/state` exports the whole show; `POST /api/state` on a
