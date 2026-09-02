@@ -368,6 +368,27 @@ async def net(player, server, ch, node_id):
         backoff = min(backoff * 2, 15.0)
 
 
+def pick_device(spec):
+    """--device auto: USB音源(名前にusbを含む出力デバイス)を優先、無ければ既定。
+    Piの内蔵3.5mmはノイズが多いので、USB DACが刺さっていれば必ずそちらを使う。"""
+    if spec is None or spec == "" or spec == "default":
+        return None
+    if spec != "auto":
+        try:
+            return int(spec)
+        except ValueError:
+            return spec
+    try:
+        for i, d in enumerate(sd.query_devices()):
+            if d.get("max_output_channels", 0) >= 1 and "usb" in d.get("name", "").lower():
+                print(f"[play] output → USB audio: [{i}] {d['name']}")
+                return i
+    except Exception as e:
+        print(f"[play] device scan failed: {e}")
+    print("[play] output → system default (no USB audio found)")
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("pos", choices=["L", "C", "R", "l", "c", "r"])
@@ -377,17 +398,19 @@ def main():
     ap.add_argument("--gain-db", type=float, default=0.0, help="このノードの音量補正[dB]")
     ap.add_argument("--light-cmd", help="ライト受信時に実行するコマンド(引数=JSON)。GPIO/WS281xドライバ等")
     ap.add_argument("--node-id", default=os.uname().nodename if hasattr(os, "uname") else "node")
-    ap.add_argument("--device", help="sounddevice 出力デバイス名/番号")
+    ap.add_argument("--device", default="auto",
+                    help="sounddevice 出力デバイス名/番号。auto=USB音源があればそれ、無ければ既定")
     a = ap.parse_args()
     if sd is None or websockets is None:
         sys.exit("pip install sounddevice websockets numpy  (and ffmpeg for mp3)")
     player = Player(a.pos.upper(), zone=a.zone, light_cmd=a.light_cmd)
     player.gain_db = a.gain_db
 
+    dev = pick_device(a.device)
     stream = sd.OutputStream(samplerate=SR, channels=2, dtype="float32",
-                             blocksize=480, callback=player.callback, device=a.device)
+                             blocksize=480, callback=player.callback, device=dev)
     stream.start()
-    print(f"[play {player.pos}] speaker live (pan L={player.gl} R={player.gr}) "
+    print(f"[play {player.pos}] speaker live device={dev if dev is not None else 'default'} (pan L={player.gl} R={player.gr}) "
           f"ffmpeg={'yes' if shutil.which('ffmpeg') else 'no (wav only)'}")
 
     def status_loop():

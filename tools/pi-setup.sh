@@ -21,18 +21,14 @@ python3 -c "import sounddevice" 2>/dev/null || sudo pip3 install -q --break-syst
 sudo mkdir -p "$APP" && sudo chown "$USER_NAME" "$APP"
 curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/play.py -o "$APP/play.py"
 chmod +x "$APP/play.py"
-# USB audio → default ALSA card if present (Pi 4 headphone jack is noisy; USB DAC is the intended path)
-if [ -z "$DEVICE" ]; then
-  DEVICE=$(python3 - <<'PY'
-import sounddevice as sd
-for i, d in enumerate(sd.query_devices()):
-    if d["max_output_channels"] >= 2 and "usb" in d["name"].lower():
-        print(i); break
-PY
-  ) || true
-fi
-DEV_ARG=""; [ -n "$DEVICE" ] && DEV_ARG="--device $DEVICE"
-echo "   audio device: ${DEVICE:-system default}"
+# Output device: play.py --device auto prefers a USB DAC and falls back to the default card.
+DEV_ARG="--device ${DEVICE:-auto}"
+echo "   audio device: ${DEVICE:-auto (USB DAC if present)}"
+# Plug-and-play: when a USB sound card appears, restart the node so it moves to the DAC.
+sudo tee /etc/udev/rules.d/90-soluna-usb-audio.rules >/dev/null <<'RULE'
+ACTION=="add", SUBSYSTEM=="sound", KERNEL=="card*", ENV{ID_BUS}=="usb", RUN+="/bin/systemctl --no-block restart soluna-node.service"
+RULE
+sudo udevadm control --reload
 sudo tee /etc/systemd/system/soluna-node.service >/dev/null <<UNIT
 [Unit]
 Description=SOLUNA Sound speaker node
