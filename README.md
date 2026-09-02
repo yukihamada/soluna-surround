@@ -205,14 +205,20 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 | Video sync | 23 ms drift; 2 ms mid-track loop join |
 | Production E2E | join → sync → light → GPS auto-delay, headless browser vs the live deploy |
 | **Real devices** | two iPhones, ears-on: music, light show and timecode video locked — then a real track with onset-flash lighting |
+| **Physical Pi node** | Raspberry Pi 4 + GPIO I2S DAC (PCM5102A) joined the cloud deploy (`nodes=1`), took a zone walk-test cue, played in sync (±60 ms vs cloud clock, **±0.5 ms** when the server runs on the same Pi) |
+| **Pi 4 as the server** (`tools/pi-server-setup.sh`) | **5,000 WebSocket clients** on one Pi 4: all connected in 12 s, cue reached 5,000/5,000 with 3.3 s spread (→ use `lead ≥ 5` at that size; default 3 s is fine to ~2,000); 2,000 clients → 0.9 s spread. LIVE PCM from `source.py` on the same Pi to its own node: 0 late frames. Node sync stayed ±0.5 ms under the 5k load |
 
 Honest limits: the 10k figure is a local (LAN) measurement of the server process; a
 10k run against the cloud deploy from a single test IP hits NAT limits at ~3k and
 has not been re-run from distributed sources. Real crowds are 10k distinct IPs and
-show-day runs the server on the FOH laptop (LAN) anyway. iOS Safari stops web audio
+show-day runs the server on the FOH laptop or a Pi (LAN) anyway. The Pi-as-server
+numbers are localhost; over a phone hotspot the same 2,000-client burst lost 15
+connections and RTT went to 1.7 s while the Pi sat at ≤40 % CPU — **the radio, not the
+server, is the ceiling**: one Pi's own Wi-Fi AP is good for tens of phones, a crowd
+needs venue Wi-Fi/LTE, and wired Pi nodes carry the PA. iOS Safari stops web audio
 on lock screen (the native Koe integration doesn't); LTE sync (±10–20 ms) is for
 effects — wired nodes carry the main PA duty. Not yet done in the field: outdoor GPS
-accuracy, a physical Pi node, dozens of real iPhones at once.
+accuracy, dozens of real iPhones at once.
 
 ## Deploy
 
@@ -228,6 +234,30 @@ CI runs the test suite first and smokes `/health` after the deploy.
 ```bash
 python3 tests/test_node.py && python3 tests/test_protocol.py && python3 tests/test_djauth_load.py
 ```
+
+### Pi as the server — the "SOLUNA box"
+
+One Raspberry Pi can be the whole venue system: clock authority + speaker node, no
+internet, no laptop. Phones and other Pi nodes sync to it.
+
+```bash
+# on the Pi (after pi-setup.sh if it should also be a speaker)
+curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/tools/pi-server-setup.sh | sudo -E bash
+#  → systemd soluna-server on :8900, admin token in /opt/soluna/admin-token, data in /opt/soluna/data,
+#    local node repointed to ws://127.0.0.1:8900 (±0.5 ms). AP=1 also raises a Wi-Fi hotspot (SSID SOLUNA).
+# more speaker Pis, anywhere on the same network:
+curl -fsSL …/tools/pi-setup.sh | SERVER=ws://<box>.local:8900 ZONE=C bash
+# hot standby: same script on a 2nd Pi, then copy the show over
+curl -s http://box1.local:8900/api/state -H "x-soluna-admin: $T" | curl -s -X POST http://box2.local:8900/api/state -H "x-soluna-admin: $T" -d @-
+```
+
+How it scales: CUE mode is control-plane only (media pre-distributed, one small JSON
+per cue), so the server load is *connections*, not audio — a Pi 4 holds 5,000 (measured,
+see Verified). Audience bandwidth is served by the venue network or a CDN
+(`SOLUNA_ASSET_BASE`), never by the Pi. Measure your own setup with
+`HOST=<box>:8900 SOLUNA_ADMIN=$T python3 tools/load-test.py 2000` — run it on the box to
+size the server, from a laptop to size the network. LIVE (SL2 PCM) is the exception: it
+streams 1.5 Mbit/s per listener, so keep LIVE for wired Pi nodes and give phones cues.
 
 ## Roadmap
 
@@ -368,7 +398,9 @@ FOH卓 matrix/aux out ──▶ USBオーディオIF ──▶ source.py --input
 
 - iOSのWeb版は画面ロックで音が止まる(→ネイティブアプリ版は継続再生。Web版は
   「画面はつけたまま」の案内文言+放置時の自動暗転(ロック不要で節電)を実装済み)
-- 未実施の物理検証: 屋外GPS実精度・Piノード実機・実iPhone多台数。1万台のクラウド経路
+- 未実施の物理検証: 屋外GPS実精度・実iPhone多台数。1万台のクラウド経路
   負荷試験は単一IPから約3千で頭打ち(NAT)のため未完 — 本番は会場LAN運用が正
+- Pi 4はサーバ兼ノードとして実測済み(5,000接続・CUE到達100%・同一Pi内ノード±0.5ms)。
+  上限はPiではなく無線: Pi自身のAPは数十台まで・観客規模は会場Wi-Fi/LTE・主音響は有線Piノード
 - LTE経由の±10〜20msはタイトな主音響には粗い — 主音響は有線ノード、スマホは演出に
-- クラウド版(fly.io)は遠隔リハ・配布用。本番はFOHのMacでローカル運用が正
+- クラウド版(fly.io)は遠隔リハ・配布用。本番はFOHのMacまたはPi(`tools/pi-server-setup.sh`)でローカル運用が正
