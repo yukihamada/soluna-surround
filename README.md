@@ -108,6 +108,16 @@ when moved >3.5 m ( =10 ms) and at most every 8 s, so playback never stutters.
 Zone flags remain the fallback when location is denied; a ±50 ms per-device FINE
 TRIM slider nulls any residue by ear.
 
+### Running the whole night
+
+The console is not just buttons — it runs a show. Build a **setlist** where each
+step bundles a track, a video and a light look; the **NEXT** button fires them as
+one synchronized moment. A single zone can be **walk-tested** (`{zones:["B"]}`
+targets cue delivery) while the rest of the field stays silent. And the show is
+**crash-safe**: zones, alignment, stage geo, the active cue/light and the setlist
+position persist to `state.json` and come back on boot. Zone flags print
+themselves from `/flags` — A4, big letter, QR straight into the zone.
+
 ### Wire format (SL2)
 
 ```
@@ -139,7 +149,9 @@ payload: interleaved int16 PCM
 | `POST /api/align` | `{base_ms}` global trim vs house PA |
 | `POST /api/geo` | `{lat,lng}` stage location for GPS auto-delay |
 | `POST /api/upload?name=` | raw-body track/video upload → `/assets/<name>` |
-| `GET /api/assets` · `GET /status` | asset list · listeners/zones/cue/light state |
+| `POST /api/show` | `{steps:[{label, url?, video?, light?}]}` set the setlist · `{next:true}` fire the next step · `{goto:i}` jump |
+| `GET /flags` | print-ready A4 zone flags with QR codes |
+| `GET /api/assets` · `GET /status` | asset list · listeners/zones/cue/light/show state |
 
 Admin endpoints take `x-soluna-admin` (env `SOLUNA_ADMIN`). Broadcasts are
 parallel with per-socket timeouts — one dying phone can't stall the crowd.
@@ -202,6 +214,7 @@ re-upload after a redeploy.
 |---|---|
 | サーバ | ノートPC(Mac)1台。会場のLANに置く(クラウド版はリハ・配布用) |
 | 来場者側 | 各自のスマホのみ。ゾーン旗のQR(またはGPS自動)で参加 |
+| ゾーン旗 | `/flags` を開いてそのままA4印刷(ゾーン文字+QR入り) |
 | 会場との調整 | FOH卓のmatrix/aux出力を1系統(既存PAと融合する場合)・電源・持込機器の申請 |
 | オプション | 客席内スピーカーノード(Raspberry Pi+アンプ、1台約$180)・スクリーン用Mac |
 | 安全 | ストロボ演出は光過敏対策で3Hz上限を実装済み。音量は各端末で調整可能 |
@@ -262,11 +275,15 @@ FOH卓 matrix/aux out ──▶ USBオーディオIF ──▶ source.py --input
    またはステージ前で「📍現在地をステージに設定」→ 来場者はGPSで自動ディレイ
 3. **PA位相合わせ**: クリック/リムショットを会場PAとグリッド両方から出し、
    **フラム(二度打ち感)が消えるまで ALIGN を±5→±1msで追い込む**(全端末一括・即時反映)
-4. **PRELOAD**: 開演30分前までに音源・映像を📥PRELOAD(全端末が事前DL — FIRE時の
+4. **ウォークテスト**: ZONES表の🔊でそのゾーンだけに音を出し、歩いて確認
+5. **PRELOAD**: 開演30分前までに音源・映像を📥PRELOAD(全端末が事前DL — FIRE時の
    ダウンロード集中をゼロにする。**再デプロイ後は音源の上げ直しが必要**)
-5. **本番**: FIREで一斉再生、LIGHTパネルでライト演出(VJ操作)。DJ交代は `/dj` の
+6. **本番**: SHOWパネルにセットリスト(各ステップ=曲+映像+ライトの束)を組み、
+   **NEXTボタンだけで進行**。単発はFIRE/LIGHTで割り込み可。DJ交代は `/dj` の
    トークン付き招待リンクを渡すだけ
-6. **強制終了**(ハードカット): STOP 1操作で全端末即時無音・消灯
+7. **強制終了**(ハードカット): STOP 1操作で全端末即時無音・消灯
+8. **障害時**: サーバ再起動でゾーン・位相・セットリスト・進行位置は自動復元
+   (state.json)。電源が飛んでもサウンドチェックは消えない
 
 ### 音質・信頼性の仕様
 

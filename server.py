@@ -52,6 +52,7 @@ CUE_LEAD = 3.0                  # cue mode: default lead so every device can arm
 HEADER = struct.Struct("<3sBBBIId")
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
+STATE_FILE = os.path.join(HERE, "state.json")   # クラッシュセーフ: ショー状態の正本
 
 # 既定ゾーン: ステージからの距離[m] → delay_ms = d/343*1000 + 15ms (Haas)。
 # 実会場では /api/zones で実測距離に合わせて上書きする。
@@ -79,7 +80,40 @@ def _chan(name):
         "light": None,            # active light dict (SOLUNAモード: 色の同期)
         "geo": None,              # {"lat","lng"} ステージ位置(GPSゾーン自動選択用)
         "preload": None,          # 事前配布済み音源URL(FIRE前のDLバースト回避)
+        "show": None,             # セットリスト [{label,url,video,light},...]
+        "show_i": -1,             # 進行位置(次のNEXTで show_i+1 を発火)
     })
+
+
+# ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
+_PERSIST = ("map", "sr", "zones", "base_ms", "lead", "cue", "light",
+            "geo", "preload", "show", "show_i")
+
+
+def _save_state():
+    try:
+        out = {name: {k: st.get(k) for k in _PERSIST} for name, st in channels.items()}
+        with open(STATE_FILE + ".tmp", "w") as f:
+            json.dump(out, f)
+        os.replace(STATE_FILE + ".tmp", STATE_FILE)
+    except Exception as e:
+        print(f"[state] save failed: {e}")
+
+
+def _load_state():
+    try:
+        with open(STATE_FILE) as f:
+            data = json.load(f)
+        for name, vals in data.items():
+            st = _chan(name)
+            for k in _PERSIST:
+                if k in vals:
+                    st[k] = vals[k]
+        print(f"[state] restored {len(data)} channel(s) from {STATE_FILE}")
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        print(f"[state] load failed: {e}")
 
 
 def _pos_index(state, pos):
@@ -258,6 +292,7 @@ async def api_cue(request):
 
     if body.get("stop"):
         state["cue"] = None
+        _save_state()
         await _broadcast_text(state, json.dumps({"t": "cue_stop"}))
         return web.json_response({"ok": True, "stopped": True,
                                   "listeners": len(state["listeners"])})
@@ -272,6 +307,7 @@ async def api_cue(request):
         # 事前配布: 全端末がDL/デコードだけ済ませる(再生しない)。本番のFIREは
         # 一斉DLバーストなしで頭から揃う。開演30分前に打っておくのが正。
         state["preload"] = url
+        _save_state()
         await _broadcast_text(state, json.dumps({"t": "preload", "url": url}))
         return web.json_response({"ok": True, "preloaded": url,
                                   "listeners": len(state["listeners"])})
@@ -289,7 +325,10 @@ async def api_cue(request):
         cue["url"] = url
     if video:
         cue["video"] = video
+    if body.get("zones"):                    # ウォークテスト: 指定ゾーンのみ再生
+        cue["zones"] = [str(z).upper() for z in body["zones"]]
     state["cue"] = cue
+    _save_state()
     await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
     return web.json_response({"ok": True, "cue": cue,
                               "listeners": len(state["listeners"])})
@@ -311,6 +350,7 @@ async def api_light(request):
 
     if body.get("stop"):
         state["light"] = None
+        _save_state()
         await _broadcast_text(state, json.dumps({"t": "light_stop"}))
         return web.json_response({"ok": True, "stopped": True,
                                   "listeners": len(state["listeners"])})
@@ -329,9 +369,141 @@ async def api_light(request):
         "at": float(body.get("at") or time.time()),   # パターン位相の基準時刻
     }
     state["light"] = light
+    _save_state()
     await _broadcast_text(state, json.dumps({"t": "light", **light}))
     return web.json_response({"ok": True, "light": light,
                               "listeners": len(state["listeners"])})
+
+
+async def api_show(request):
+    """ショーランナー: 一晩のセットリストを組み、NEXTボタンだけで進行する。
+    各ステップ = 音(url) + 映像(video) + ライト(light) の束を1つの同期瞬間として発火。
+    body: {steps:[{label,url?,video?,gain?,loop?,lead?,light:{pattern,colors,bpm,...}?}]}
+        | {next:true} | {goto:<1始まりの番号>} | {reset:true}"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch", "festival")
+    state = _chan(name)
+    body = await request.json()
+
+    if body.get("steps") is not None:
+        steps = []
+        for raw in body["steps"]:
+            step: dict = {"label": str(raw.get("label") or f"step{len(steps)+1}")[:60]}
+            for k in ("url", "video"):
+                if raw.get(k):
+                    step[k] = str(raw[k])
+            for k in ("gain", "lead"):
+                if raw.get(k) is not None:
+                    step[k] = float(raw[k])
+            if raw.get("loop"):
+                step["loop"] = True
+            if isinstance(raw.get("light"), dict):
+                step["light"] = raw["light"]
+            steps.append(step)
+        state["show"] = steps
+        state["show_i"] = -1
+        _save_state()
+        return web.json_response({"ok": True, "steps": len(steps)})
+
+    if body.get("reset"):
+        state["show_i"] = -1
+        _save_state()
+        return web.json_response({"ok": True, "i": 0})
+
+    if body.get("goto") is not None:
+        state["show_i"] = int(body["goto"]) - 2   # 次のNEXTで goto 番を発火
+        _save_state()
+        return web.json_response({"ok": True, "next": int(body["goto"])})
+
+    if body.get("next"):
+        show = state.get("show") or []
+        i = state.get("show_i", -1) + 1
+        if i >= len(show):
+            return web.json_response({"ok": False, "done": True,
+                                      "total": len(show)})
+        step = show[i]
+        state["show_i"] = i
+        fired = {"i": i + 1, "total": len(show), "label": step["label"]}
+        if step.get("url") or step.get("video"):
+            at = time.time() + float(step.get("lead") or CUE_LEAD)
+            cue = {"id": f"show{i+1}-{step['label']}", "at": at,
+                   "gain": float(step.get("gain", 1.0)),
+                   "loop": bool(step.get("loop", False))}
+            if step.get("url"):
+                cue["url"] = step["url"]
+            if step.get("video"):
+                cue["video"] = step["video"]
+            state["cue"] = cue
+            await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
+            fired["cue"] = cue["id"]
+        if step.get("light"):
+            lr = step["light"]
+            light = {"id": f"showlight{i+1}",
+                     "pattern": lr.get("pattern", "pulse"),
+                     "colors": lr.get("colors") or ["#d4af37", "#7fc9a2"],
+                     "bpm": float(lr.get("bpm", 120)),
+                     "speed": float(lr.get("speed", 1.0)),
+                     "brightness": float(lr.get("brightness", 1.0)),
+                     "at": time.time()}
+            state["light"] = light
+            await _broadcast_text(state, json.dumps({"t": "light", **light}))
+            fired["light"] = light["pattern"]
+        _save_state()
+        return web.json_response({"ok": True, **fired})
+
+    raise web.HTTPBadRequest(text='{"steps":[...]} | {"next":true} | {"goto":n} | {"reset":true}')
+
+
+async def flags_page(request):
+    """A4印刷用のゾーン旗: 大きなゾーン文字+そのゾーン直行のQR。1ゾーン=1ページ。"""
+    ch = request.query.get("ch", "festival")
+    base = request.query.get("base") or f"https://{request.host}"
+    zones = list(_chan(ch)["zones"].keys())
+    try:
+        import io
+        import qrcode
+        import qrcode.image.svg
+
+        def _qr_svg(url):
+            img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage,
+                              box_size=18, border=2)
+            buf = io.BytesIO()
+            img.save(buf)
+            svg = buf.getvalue().decode()
+            return svg.replace("<svg", '<svg class="qr"', 1)
+        qr_svg = _qr_svg
+    except Exception:
+        qr_svg = None
+
+    pages = []
+    for z in zones:
+        url = f"{base}/?zone={z}" + (f"&ch={ch}" if ch != "festival" else "")
+        qr = qr_svg(url) if qr_svg else f'<div class="url">{url}</div>'
+        pages.append(f'''<section class="flag">
+  <div class="brand">SOLUNA · SOUND</div>
+  <div class="letter">{z}</div>
+  <div class="say">スマホでよみとって、▶をおすだけ。<br>Scan &amp; tap ▶ — you become the sound.</div>
+  {qr}
+  <div class="url">{url}</div>
+</section>''')
+
+    html = f'''<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<title>SOLUNA zone flags</title><style>
+  *{{margin:0;box-sizing:border-box}}
+  body{{font-family:"Hiragino Sans",sans-serif;background:#fff;color:#0a0507}}
+  .flag{{width:210mm;height:296mm;page-break-after:always;display:flex;flex-direction:column;
+       align-items:center;justify-content:center;gap:10mm;background:#0a0507;color:#f4e8d0}}
+  .brand{{font-size:8mm;letter-spacing:2.2mm;color:#d4af37;font-weight:700}}
+  .letter{{font-size:95mm;font-weight:900;line-height:1;color:#d4af37;
+       font-family:"Hiragino Mincho ProN",serif}}
+  .say{{font-size:6.5mm;text-align:center;line-height:1.8;color:#f4e8d0}}
+  .qr{{width:80mm;height:80mm;background:#fff;padding:4mm;border-radius:4mm}}
+  .url{{font-size:4mm;color:#a8977e;font-family:monospace}}
+  @media screen{{body{{padding:20px;background:#333}} .flag{{margin:0 auto 20px;
+       transform:scale(.45);transform-origin:top center;margin-bottom:-150mm}}}}
+</style></head><body>{"".join(pages)}</body></html>'''
+    return web.Response(text=html, content_type="text/html")
 
 
 async def api_geo(request):
@@ -349,6 +521,7 @@ async def api_geo(request):
             state["geo"] = {"lat": float(body["lat"]), "lng": float(body["lng"])}
         except (KeyError, TypeError, ValueError):
             raise web.HTTPBadRequest(text='{"lat":21.33,"lng":-158.08} or {"clear":true}')
+    _save_state()
     await _broadcast_text(state, _config_msg(state))
     return web.json_response({"ok": True, "geo": state["geo"],
                               "listeners": len(state["listeners"])})
@@ -364,6 +537,7 @@ async def api_align(request):
     state = _chan(name)
     body = await request.json()
     state["base_ms"] = float(body.get("base_ms", 0.0))
+    _save_state()
     await _broadcast_text(state, _config_msg(state))
     return web.json_response({"ok": True, "base_ms": state["base_ms"],
                               "listeners": len(state["listeners"])})
@@ -383,6 +557,7 @@ async def api_zones(request):
         raise web.HTTPBadRequest(
             text='{"zones":{"A":15.0,...}} (delay_ms) or {"zones_m":{"A":15,...}} (距離m)')
     state["zones"] = {str(k).upper(): round(float(v), 1) for k, v in zones.items()}
+    _save_state()
     await _broadcast_text(state, _config_msg(state))
     return web.json_response({"ok": True, "zones": state["zones"]})
 
@@ -440,6 +615,11 @@ async def status(request):
             "cue": st["cue"],
             "light": st["light"],
             "geo": st["geo"],
+            "show": {"i": st.get("show_i", -1) + 1,
+                     "total": len(st.get("show") or []),
+                     "next": ((st.get("show") or [])[st.get("show_i", -1) + 1]["label"]
+                              if st.get("show") and st.get("show_i", -1) + 1 < len(st["show"])
+                              else None)},
         }
     return web.json_response({"server_epoch_ms": time.time() * 1000.0,
                               "lead": LEAD, "cue_lead": CUE_LEAD, "channels": out})
@@ -477,6 +657,7 @@ async def mic(request):
 def main():
     port = int(os.environ.get("PORT", "8900"))
     os.makedirs(ASSETS, exist_ok=True)
+    _load_state()   # クラッシュ/再起動からショー状態を復元
     app = web.Application(client_max_size=256 * 1024 * 1024)   # 映像アップロード対応
     app.add_routes([
         web.get("/", index),
@@ -494,6 +675,8 @@ def main():
         web.post("/api/align", api_align),
         web.post("/api/light", api_light),
         web.post("/api/geo", api_geo),
+        web.post("/api/show", api_show),
+        web.get("/flags", flags_page),
         web.get("/api/assets", api_assets),
         web.post("/api/upload", api_upload),
         web.static("/assets", ASSETS),

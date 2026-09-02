@@ -417,6 +417,7 @@ async function onPreload(m){                    // 開演前DL: 再生はしな�
   }catch(e){ $('cue').textContent = T.fail; }
 }
 async function onCue(m){
+  if (m.zones && !m.zones.includes(ZONE)) return;   // 他ゾーン宛(ウォークテスト)は無視
   $('cue').textContent = T.ready;
   pendingCue = m;
   lastCueId = m.id;

@@ -90,6 +90,7 @@
     <div class="row">
       <div><label>ADMIN TOKEN</label><input id="tok" type="password" style="width:180px" placeholder="SOLUNA_ADMIN"></div>
       <div><label>CHANNEL</label><input id="ch" type="text" style="width:120px" value="festival"></div>
+      <div style="align-self:flex-end"><a href="/flags" target="_blank" style="color:var(--gold);font-size:.8rem;text-decoration:none">🚩 ゾーン旗を印刷 ›</a></div>
     </div>
   </section>
 
@@ -156,6 +157,23 @@
   </section>
 
   <section>
+    <h2>SHOW <small>セットリスト — 各ステップ=曲+映像+ライトの束。NEXTだけで一晩を進行</small></h2>
+    <table id="showTab" style="font-size:.78rem">
+      <thead><tr><th></th><th>label</th><th>audio</th><th>video</th><th>light</th><th>bpm</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="row mt">
+      <button id="stepAdd">+ step</button>
+      <button id="showApply">APPLY SHOW</button>
+      <button class="ghost" id="showReset">⏮ RESET</button>
+    </div>
+    <div class="row mt">
+      <button class="gold fire" id="showNext">⏭ NEXT — 次のステップを一斉発火</button>
+    </div>
+    <div class="cuenow" id="shownow"></div>
+  </section>
+
+  <section>
     <h2>LIGHT <small>SOLUNAモード — 全端末の画面が同期カラーライトになる</small></h2>
     <div class="row" id="patRow">
       <button data-pat="pulse">PULSE</button>
@@ -215,7 +233,8 @@ function renderZones(){
       <td><input class="mono" type="number" value="${d}" data-z="${z}" min="0" step="1"></td>
       <td class="mono" data-ms="${z}">${(d/C*1000+HAAS).toFixed(1)}</td>
       <td class="mono devn ${n?'':'zero'}" data-dev="${z}">${n}</td>
-      <td><button class="ghost" data-del="${z}">✕</button></td>`;
+      <td style="white-space:nowrap"><button class="ghost" data-walk="${z}" title="このゾーンだけ試聴(ウォークテスト)">🔊</button>
+      <button class="ghost" data-del="${z}">✕</button></td>`;
     tb.appendChild(tr);
   }
   tb.oninput = e=>{
@@ -224,6 +243,12 @@ function renderZones(){
     tb.querySelector(`[data-ms="${z}"]`).textContent = (zonesM[z]/C*1000+HAAS).toFixed(1);
   };
   tb.onclick = e=>{
+    const w = e.target.dataset.walk;
+    if (w){                                  // ウォークテスト: このゾーンだけ鳴らす
+      const u = $('url').value || '/assets/fest_demo.mp3';
+      call('/api/cue', {url:u, zones:[w], lead:2, gain:parseFloat($('gain').value||1)});
+      return;
+    }
     const z = e.target.dataset.del; if(!z) return;
     delete zonesM[z]; renderZones();
   };
@@ -290,6 +315,43 @@ $('fire').onclick = ()=> call('/api/cue', {
 // 本番の音/光を落とすボタンは誤タップ1発で死なないよう確認を挟む
 $('stop').onclick = ()=>{ if (confirm('全端末のキュー再生を停止します。OK?')) call('/api/cue', {stop:true}); };
 
+// ---- show runner ----
+const PATS = ['—','pulse','beat','wave','plasma','audio','strobe','solid'];
+let showSteps = JSON.parse(localStorage.getItem('soluna_show')||'[]');
+if (!showSteps.length) showSteps = [{label:'opening', url:'', video:'', pat:'audio', bpm:120}];
+function renderShow(){
+  const tb = $('showTab').querySelector('tbody'); tb.innerHTML='';
+  showSteps.forEach((st, i)=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="mono">${i+1}</td>
+      <td><input data-f="label" data-i="${i}" value="${st.label||''}" style="width:90px"></td>
+      <td><input data-f="url" data-i="${i}" value="${st.url||''}" placeholder="/assets/…mp3" style="width:150px"></td>
+      <td><input data-f="video" data-i="${i}" value="${st.video||''}" placeholder="…mp4" style="width:120px"></td>
+      <td><select data-f="pat" data-i="${i}">${PATS.map(p=>`<option${p===st.pat?' selected':''}>${p}</option>`).join('')}</select></td>
+      <td><input data-f="bpm" data-i="${i}" type="number" value="${st.bpm||120}" style="width:64px"></td>
+      <td><button class="ghost" data-sdel="${i}">✕</button></td>`;
+    tb.appendChild(tr);
+  });
+  tb.oninput = e=>{
+    const f = e.target.dataset.f; if (!f) return;
+    showSteps[+e.target.dataset.i][f] = f==='bpm' ? parseFloat(e.target.value) : e.target.value;
+    localStorage.setItem('soluna_show', JSON.stringify(showSteps));
+  };
+  tb.onclick = e=>{
+    const i = e.target.dataset.sdel; if (i===undefined) return;
+    showSteps.splice(+i,1); renderShow();
+    localStorage.setItem('soluna_show', JSON.stringify(showSteps));
+  };
+}
+$('stepAdd').onclick = ()=>{ showSteps.push({label:`step${showSteps.length+1}`,url:'',video:'',pat:'—',bpm:120}); renderShow(); };
+$('showApply').onclick = ()=> call('/api/show', { steps: showSteps.map(st=>({
+    label: st.label, url: st.url||undefined, video: st.video||undefined,
+    light: st.pat && st.pat!=='—' ? {pattern:st.pat, colors:[$('col1').value,$('col2').value],
+                                     bpm: st.bpm||120} : undefined }))});
+$('showNext').onclick = ()=> call('/api/show', {next:true});
+$('showReset').onclick = ()=>{ if (confirm('進行位置を先頭に戻します。OK?')) call('/api/show', {reset:true}); };
+renderShow();
+
 // ---- light ----
 let selPat = 'pulse';
 document.querySelectorAll('#patRow [data-pat]').forEach(b=>{
@@ -327,6 +389,8 @@ setInterval(async ()=>{
     $('cuenow').textContent = c.cue ? `● ACTIVE: ${c.cue.id} ${c.cue.url} gain=${c.cue.gain}${c.cue.loop?' loop':''}` : '';
     $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}` : '';
     $('geonow').textContent = c.geo ? `● STAGE: ${c.geo.lat.toFixed(5)}, ${c.geo.lng.toFixed(5)} — 来場者は📍で自動ゾーン` : '';
+    if (c.show && c.show.total)
+      $('shownow').textContent = `● STEP ${c.show.i}/${c.show.total}` + (c.show.next ? ` — 次: ${c.show.next}` : ' — 最後まで発火済み');
     if (!assetsLoaded) loadAssets();
   }catch(e){}
 }, 2000);
