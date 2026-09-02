@@ -9,39 +9,43 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SOLUNA mic — koe-claude</title>
+<link rel="stylesheet" href="/ui/soluna.css">
 <style>
-  :root { color-scheme: dark; }
-  body { margin:0; background:#0b0f14; color:#dfe7ef; font-family:-apple-system,sans-serif;
-         min-height:100vh; display:flex; flex-direction:column; align-items:center;
-         justify-content:center; gap:22px; text-align:center; }
-  h1 { font-size:15px; font-weight:600; letter-spacing:.2em; color:#7fd4e4; margin:0; }
-  #orb { width:150px; height:150px; border-radius:50%; border:none; cursor:pointer;
-         background:radial-gradient(circle at 35% 35%, #1f3944, #0e1a20);
-         box-shadow:0 0 40px #0b2a33; color:#cfe; font-size:44px;
-         transition:box-shadow .15s, transform .1s; }
-  #orb.on { background:radial-gradient(circle at 35% 35%, #135b6e, #0b2f3a);
-            box-shadow:0 0 60px #17707f; }
-  #orb:active { transform:scale(.96); }
-  #st { font-size:13px; color:#8aa3b5; min-height:2.4em; white-space:pre-line; }
-  #lvl { width:220px; height:6px; border-radius:3px; background:#152029; overflow:hidden; }
-  #lvlbar { height:100%; width:0%; background:linear-gradient(90deg,#2ab3c9,#7fe0a8); }
-  .tag { font-size:11px; color:#57707f; }
+  /* page: one orb. Tap = talk. Everything else whispers. */
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;text-align:center;padding:24px 18px}
+  .brandrow{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .brandrow .title{font-family:var(--serif);font-size:1.25rem;color:var(--txt)}
+  #setup{flex-direction:column;align-items:center}
+  #setup .box{display:flex;flex-direction:column;gap:10px;width:min(300px,86vw)}
+  #setup .s-btn{flex-direction:column;gap:2px}
+  #orb{width:168px;height:168px;border-radius:50%;border:1px solid rgba(212,175,55,.35);cursor:pointer;color:var(--txt);font-size:52px;
+       background:radial-gradient(circle at 35% 35%,#2b2118,#120b0e);box-shadow:0 0 44px rgba(212,175,55,.18), inset 0 1px 0 rgba(255,255,255,.08);
+       transition:box-shadow .2s,transform .1s,background .3s}
+  #orb.on{background:radial-gradient(circle at 35% 35%,#e2c464,#8a6b14);color:#1a1206;box-shadow:0 0 70px rgba(212,175,55,.55)}
+  @media (prefers-reduced-motion:no-preference){ #orb.on{animation:pulse 1.6s ease-in-out infinite} @keyframes pulse{50%{box-shadow:0 0 96px rgba(212,175,55,.75)}} }
+  #orb:active{transform:scale(.96)}
+  #st{font-size:.95rem;color:var(--txt);min-height:2.6em;white-space:pre-line;line-height:1.6;max-width:26rem}
+  #lvl{width:240px;height:8px;border-radius:4px;background:var(--panel2);border:1px solid var(--line);overflow:hidden}
+  #lvlbar{height:100%;width:0%;background:linear-gradient(90deg,var(--gold),var(--gold2))}
+  .tag{font-size:.72rem;color:var(--dim);font-family:var(--mono)}
+  .tag a{color:var(--mute)}
 </style></head><body>
-<h1>SOLUNA × KOE-CLAUDE</h1>
+<div class="brandrow">
+  <div class="s-brand"><span class="mark"></span>SOLUNA · MIC <small>koe-claude</small></div>
+  <div class="title">タップして、話すだけ。<span class="dim small" style="display:block;font-family:var(--sans)">Tap the orb, then talk.</span></div>
+</div>
 <div id="setup" style="display:none;">
-  <div style="display:flex; flex-direction:column; gap:10px; width:240px;">
-    <input id="inId" placeholder="なまえ / ID (例: kenny)" autocapitalize="off"
-           style="padding:12px; border-radius:10px; border:1px solid #24404d; background:#101a21; color:#dfe7ef; font-size:16px;">
-    <input id="inTok" placeholder="アクセスキー (招待リンクなら不要)" autocapitalize="off"
-           style="padding:12px; border-radius:10px; border:1px solid #24404d; background:#101a21; color:#dfe7ef; font-size:16px;">
-    <button id="go" style="padding:13px; border-radius:10px; border:none; background:#17707f; color:#eaffff; font-size:16px;">はじめる</button>
+  <div class="box">
+    <input class="s-input" id="inId" placeholder="なまえ / ID (例: kenny)" autocapitalize="off">
+    <input class="s-input" id="inTok" placeholder="アクセスキー (招待リンクなら不要)" autocapitalize="off">
+    <button class="s-btn primary" id="go">はじめる<small>start — allows the microphone</small></button>
   </div>
 </div>
-<button id="orb" style="display:none;">🎙</button>
+<button id="orb" style="display:none;" aria-label="talk">🎙</button>
 <div id="lvl" style="display:none;"><div id="lvlbar"></div></div>
 <div id="st">読み込み中…</div>
 <div class="tag" id="tg"></div>
-<div class="tag"><a id="logout" href="#" style="color:#3d5a68; display:none;">ログアウト(ID/キーを消す)</a></div>
+<div class="tag"><a id="logout" href="#" style="display:none;">ログアウト(ID/キーを消す)</a></div>
 <script>
 const q = new URLSearchParams(location.search);
 // 招待リンク(?token=)で開いたらキーを保存 → 以後は素のURLでもログイン済み
