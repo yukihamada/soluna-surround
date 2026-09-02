@@ -140,7 +140,10 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
   between models) plus per-zone gain from the console.
 - **Asset delivery** — `/assets/` is served with `Cache-Control: public` and CORS;
   set `SOLUNA_ASSET_BASE=https://cdn…` and every device fetches tracks from your
-  CDN/R2 instead of the sync server (PRELOAD burst leaves the VM entirely).
+  CDN/R2 **first**, falling back to the sync server if the object isn't there yet
+  (PRELOAD burst leaves the VM entirely; an unsynced upload still plays).
+  `tools/r2-sync.sh` pushes the assets folder to the bucket (R2: create bucket →
+  `wrangler r2 bucket cors set` with GET/HEAD from `*` → custom domain → sync).
 - **Persistent data** — `SOLUNA_DATA_DIR` (a Fly volume at `/data` in the shipped
   config) holds tracks and `state.json` across redeploys.
 - **Privacy** — coordinates never leave the phone; only the nearest zone letter is
@@ -327,6 +330,8 @@ FOH卓 matrix/aux out ──▶ USBオーディオIF ──▶ source.py --input
 5. **PRELOAD**: 開演30分前までに音源・映像を📥PRELOAD(全端末が事前DL — FIRE時の
    ダウンロード集中をゼロにする)。DEVICESパネルの **preloaded** が来場者数に近づくのを見る。
    大規模ならCDN/R2を `SOLUNA_ASSET_BASE` に指定して配布を同期サーバから外す
+   (端末はCDN→サーバ直の順に取りに行くので、CDN未同期の曲でも止まらない)。
+   アップロード後は `tools/r2-sync.sh` でバケットへ同期してからPRELOAD
 6. **本番**: SHOWパネルにセットリスト(各ステップ=曲+映像+ライトの束)を組み、
    **NEXTボタンだけで進行**。単発はFIRE/LIGHTで割り込み可。DJ交代は `/dj` の
    トークン付き招待リンクを渡すだけ

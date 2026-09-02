@@ -200,9 +200,22 @@ class Player:
     def fetch_track(self, url):
         if url in self.cache:
             return self.cache[url]
-        full = self.resolve_url(url)
-        with urlopen(Request(full, headers={"User-Agent": f"soluna-node/{VERSION}"}), timeout=60) as r:
-            data = r.read()
+        # CDN(asset_base)が先、失敗したらサーバ直(R2未同期の曲でもショーは止まらない)
+        candidates = [self.resolve_url(url)]
+        direct = (self.http_base or "") + url if url.startswith("/") else url
+        if direct not in candidates:
+            candidates.append(direct)
+        data, last = None, None
+        for full in candidates:
+            try:
+                with urlopen(Request(full, headers={"User-Agent": f"soluna-node/{VERSION}"}), timeout=60) as r:
+                    data = r.read()
+                break
+            except Exception as e:
+                last = e
+                print(f"[play {self.pos}] fetch failed {full}: {e}")
+        if data is None:
+            raise last or RuntimeError("fetch failed")
         buf = decode_to_f32_mono(data, SR)
         self.cache[url] = buf
         return buf

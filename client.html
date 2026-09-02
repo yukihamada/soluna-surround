@@ -412,10 +412,9 @@ const vEl = $('videoLayer');
 let videoCue=null, videoRAF=0, videoBlobUrl=null, videoBlobSrc=null;
 const isVideoUrl = u => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u||'');
 async function loadVideo(url){
-  url = resolveUrl(url);
   if (videoBlobSrc === url && videoBlobUrl) return;
   $('cue').textContent = T.ready;
-  const res = await fetch(url);
+  const res = await fetchAsset(url);          // CDN→サーバ直フォールバック
   const blob = await res.blob();
   if (videoBlobUrl) URL.revokeObjectURL(videoBlobUrl);
   videoBlobUrl = URL.createObjectURL(blob); videoBlobSrc = url;
@@ -471,10 +470,20 @@ vEl.addEventListener('click', ()=>{
 $('vHint').onclick = ()=>{ vEl.muted=false; $('vHint').classList.remove('show'); };
 
 // ---- CUE MODE: 事前配布ファイルを playAt で一斉スケジュール -------------------
+// CDN(asset_base)が先・失敗したらサーバ直へフォールバック(未同期の曲でもショーは止まらない)
+async function fetchAsset(url){
+  const cdn = resolveUrl(url);
+  if (cdn !== url){
+    try { const r = await fetch(cdn); if (r.ok) return r; console.warn('cdn', r.status, cdn); }
+    catch(e){ console.warn('cdn fail', e); }
+  }
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('fetch '+r.status);
+  return r;
+}
 async function loadTrack(url){
   if (cueBufUrl === url && cueBuf) return;
-  const res = await fetch(resolveUrl(url));
-  if (!res.ok) throw new Error('fetch '+res.status);
+  const res = await fetchAsset(url);
   const raw = await res.arrayBuffer();
   cueBuf = await ctx.decodeAudioData(raw);
   cueBufUrl = url;
