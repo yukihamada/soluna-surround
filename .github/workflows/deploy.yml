@@ -13,6 +13,8 @@ jobs:
           python-version: "3.12"
       - run: pip install aiohttp qrcode numpy websockets
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: image manifest (Dockerfile COPY covers every local import)
+        run: python3 tests/test_image_manifest.py
       - name: node unit (play.py)
         run: python3 tests/test_node.py
       - name: protocol (server subprocess)

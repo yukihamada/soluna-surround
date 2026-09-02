@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /app
 RUN pip install --no-cache-dir aiohttp qrcode
-COPY server.py client.html admin.html dj.html mic.html manifest.webmanifest sw.js ./
+COPY server.py showctl.py discover.py client.html admin.html dj.html mic.html manifest.webmanifest sw.js ./
 COPY icons ./icons
 RUN mkdir -p assets
 ENV PORT=8080
