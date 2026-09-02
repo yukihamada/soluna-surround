@@ -162,7 +162,7 @@ RestartSec=2
 LimitNOFILE=65536
 Nice=-5
 AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# (CapabilityBoundingSet は付けない: /setup の sudo -n が setuid できず「unable to change to root gid」で死ぬ)
 
 [Install]
 WantedBy=multi-user.target

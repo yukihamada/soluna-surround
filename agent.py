@@ -444,11 +444,18 @@ class Agent:
                 sh(["nmcli", "con", "down", "soluna-ap"], timeout=15)
                 ap_firewall(False)
                 t_end = now_t + AP_RETRY_WAIT_S
+                tried = set()
                 while time.time() < t_end:
                     if wlan_state() == "connected":
                         log("AP: upstream is back — staying on it")
                         self.ap_since = None
                         return
+                    # 自動再接続を待つだけでは戻らないことがある(手動downやautoconnect-blocked)→ 明示的に上げる
+                    for prof in upstream:
+                        if prof not in tried:
+                            tried.add(prof)
+                            sh(["nmcli", "con", "up", prof], timeout=25)
+                            break
                     time.sleep(3)
                 log("AP: upstream still gone — re-raising AP")
             else:
