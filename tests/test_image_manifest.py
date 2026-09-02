@@ -14,9 +14,10 @@ local_py = {f[:-3] for f in os.listdir(ROOT) if f.endswith(".py")}
 imported = set(re.findall(r"^(?:import|from)\s+([A-Za-z_][\w]*)", src, re.M))
 for mod in sorted(imported & local_py):
     check(f"Dockerfile COPY {mod}.py", f"{mod}.py" in copied)
-for page in ("client.html", "admin.html", "dj.html", "mic.html", "sw.js", "manifest.webmanifest"):
+for page in ("client.html", "admin.html", "dj.html", "mic.html", "sw.js", "manifest.webmanifest", "about.html", "setup.html", "welcome.html"):
     check(f"Dockerfile COPY {page}", page in copied)
 check("Dockerfile pip has aiohttp+qrcode", "aiohttp" in docker and "qrcode" in docker)
 check("Dockerfile COPY ui (shared css)", "ui" in copied)
+check("Dockerfile COPY site (about screenshots)", "site" in copied)
 print(f"\n== PASS {ok} / FAIL {fail} ==")
 sys.exit(1 if fail else 0)

@@ -267,6 +267,13 @@ async def main():
               and body_txt.count('section class="flag"') == 6
               and 'class="qr"' in body_txt)
 
+        # 10i2) /about 製品サイト + /site 画像
+        r = await s.get(f"{BASE}/about")
+        t_about = await r.text()
+        check("/about 200 + 見出し + 画面画像リンク", r.status == 200 and "ひとつの時計" in t_about and "/site/client-idle.png" in t_about)
+        r = await s.get(f"{BASE}/site/client-idle.png")
+        check("/site/client-idle.png 配信", r.status == 200 and r.headers.get("Content-Type", "").startswith("image/png"))
+
         # 10j) 入場QR(/flags?gate=1)=1ページ・?gate=1 のURL
         r = await s.get(f"{BASE}/flags?ch=flagstest&gate=1")
         body_txt = await r.text()

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SOLUNA Sound — 会場ごと、ひとつの時計で鳴る</title>
+<meta name="description" content="スマホ・Raspberry Piスピーカー・プロジェクター・会場の灯体を1本の時計で同期させる、オープンソースのフェス音響システム。Dante/AES67/OSC/タイムコード対応。Piは電源を入れるだけ。">
+<meta property="og:title" content="SOLUNA Sound"><meta property="og:description" content="会場ごと、ひとつの時計で鳴る。観客のスマホは繋いで▶だけ。"><meta property="og:image" content="/site/client-playing.png">
+<link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  .hero{padding:56px 0 30px;text-align:center}
+  .hero h1{font-family:var(--serif);font-size:clamp(2rem,6vw,3.2rem);line-height:1.2;margin:18px 0 12px;text-wrap:balance}
+  .hero p{color:var(--dim);font-size:1.05rem;max-width:34em;margin:0 auto 26px;text-wrap:balance}
+  .hero .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  .hero .cta .s-btn{min-width:200px}
+  .en{display:block;font-size:.82rem;color:var(--dim);font-weight:400;letter-spacing:0;font-family:var(--sans)}
+  section.blk{margin-top:64px}
+  section.blk>h2{font-family:var(--mono);font-size:.72rem;letter-spacing:.3em;color:var(--gold);margin:0 0 18px;display:flex;align-items:center;gap:12px}
+  section.blk>h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px}
+  .step b.k{display:block;font-family:var(--serif);font-size:1.8rem;color:var(--gold);line-height:1;margin-bottom:10px}
+  .step h3{margin:0 0 6px;font-size:1.05rem}
+  .step p{margin:0;color:var(--dim);font-size:.92rem}
+  .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+  .shots figure{margin:0}.shots img,.wide img{width:100%;display:block;border-radius:14px;border:1px solid var(--line)}
+  .shots figcaption{font-size:.75rem;color:var(--dim);margin-top:8px;line-height:1.5}
+  .wide{margin-top:14px}
+  table.s-table td:first-child{white-space:nowrap;color:var(--gold2)}
+  .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .lead{font-size:1.05rem;max-width:36em;color:var(--txt)}
+  .lead b{color:var(--gold2)}
+  .list{display:grid;gap:8px}
+  .list div{display:grid;grid-template-columns:1.4em 1fr;gap:8px;color:var(--txt)}
+  .list div span{color:var(--gold)}
+  footer{margin-top:70px;padding-top:18px;border-top:1px solid var(--line);font-size:.8rem;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between}
+  .fest{background:linear-gradient(180deg,rgba(212,175,55,.08),transparent);border:1px solid rgba(212,175,55,.3)}
+</style></head><body>
+<div class="s-wrap">
+  <nav class="s-bar"><span class="s-brand"><span class="mark"></span>SOLUNA · SOUND</span>
+    <span style="margin-left:auto;display:flex;gap:14px;font-size:.82rem"><a href="/">🎧 参加</a><a href="/admin">🎚 FOH</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a></span></nav>
+
+  <header class="hero">
+    <div class="s-brand" style="justify-content:center"><span class="mark"></span>OPEN SOURCE · MIT</div>
+    <h1>会場ごと、<br>ひとつの時計で鳴る。</h1>
+    <p>観客のスマホ、Raspberry Piのスピーカー、プロジェクター、会場の灯体。全部が同じ瞬間に鳴り、光る。アプリなし、一本のリンクとタップひとつ。<br><span class="en">The venue is the speaker. The crowd is the light show. No app — one link, one tap.</span></p>
+    <div class="cta"><a class="s-btn primary" href="/?zone=A">▶ いま2台のスマホで試す<small>open this on two phones</small></a><a class="s-btn ghost" href="https://github.com/yukihamada/soluna-surround#readme">仕組みを読む<small>README · 日本語/English</small></a></div>
+  </header>
+
+  <section class="blk"><h2>どう動くか <span class="en">how it works</span></h2>
+    <div class="steps">
+      <div class="step"><b class="k">1</b><h3>時計をそろえる</h3><p>サーバが唯一の時計。各端末は自分のズレを測って合わせる。LANで±1〜3ms、LTEで±10〜20ms、Piの箱の中なら±0.5ms。</p></div>
+      <div class="step"><b class="k">2</b><h3>音は先に配る</h3><p>入口のQRで曲は先に届いている。本番の「鳴らせ」は「いつ」だけを配るので、5,000台でも帯域は増えない。</p></div>
+      <div class="step"><b class="k">3</b><h3>距離のぶん遅らせる</h3><p>ステージから遠い端末ほど遅らせて、音の波面に乗せる。ゾーンの旗かGPSで自動。だから会場全体で位相がそろう。</p></div>
+    </div>
+  </section>
+
+  <section class="blk"><h2>画面 <span class="en">screens</span></h2>
+    <div class="shots">
+      <figure><img src="/site/client-idle.png" alt="観客ページ: ゾーンを選んで▶"><figcaption><b>観客</b>: ゾーンを選んで ▶ だけ。細かいことは畳んである。</figcaption></figure>
+      <figure><img src="/site/client-playing.png" alt="再生中: NOW PLAYING"><figcaption><b>再生中</b>: 曲名とアーティストが出る。光の演出はこの上に重なる。</figcaption></figure>
+      <figure><img src="/site/client-gate.png" alt="入場QRモード"><figcaption><b>入場QR</b>: 並んでいる間に曲を受け取り、中では通信なしで鳴る。</figcaption></figure>
+      <figure><img src="/site/welcome.png" alt="ウェルカム画面"><figcaption><b>箱のWi-Fi</b>に繋ぐと、この画面が勝手に開く。</figcaption></figure>
+    </div>
+    <div class="wide"><img src="/site/admin-desktop-top.png" alt="FOHコンソール"></div>
+    <p class="s-hint" style="margin-top:8px">FOHコンソール。上に「接続・鳴っている・準備OK・失敗」の一文。ショーの順番どおりに、進める → 鳴らす → 光らせる → ゾーン → 端末 → Pi箱 → 記録 → 設定。</p>
+  </section>
+
+  <section class="blk"><h2>既存のフェスにそのまま刺さる <span class="en">plugs into what you already run</span></h2>
+    <p class="lead">卓の <b>aux を1本</b>入れるか、<b>Dante/AES67</b> のストリームを受ける。照明卓から <b>OSC</b> で cue を打ち、<b>タイムコード</b>に乗せ、<b>Art-Net/sACN</b> で会場の灯体をスマホと同じ時計に乗せる。</p>
+    <div style="overflow-x:auto"><table class="s-table">
+      <tr><th>持っているもの</th><th>つなぎ方</th></tr>
+      <tr><td>Dante</td><td>Dante Virtual Soundcard か AVIO USB で入力、または機器のAES67モードでマルチキャスト受信(<code>--aes67</code>・<code>--sap</code>で自動発見)</td></tr>
+      <tr><td>AES67 / Ravenna</td><td>そのまま受信。チャンネル割当は <code>--map</code></td></tr>
+      <tr><td>MADI / AVB / アナログ / USB</td><td>オーディオインターフェース経由で <code>--input</code>。PA融合は80ms</td></tr>
+      <tr><td>QLab / grandMA / Eos / Ableton</td><td>OSC で <code>/soluna/cue</code> <code>/soluna/go</code> <code>/soluna/light</code>。タイムコードは <code>/soluna/tc</code> か LTC 音声</td></tr>
+      <tr><td>会場の灯体</td><td>Art-Net / sACN 出力。スマホと同じパターン・同じ時計で</td></tr>
+      <tr><td>プロジェクター / LEDウォール</td><td><code>/screen</code> を開いた MacBook + HDMI</td></tr>
+    </table></div>
+  </section>
+
+  <section class="blk"><h2>Piは、電源を入れるだけ <span class="en">the SOLUNA box</span></h2>
+    <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
+      <div class="step"><h3>勝手に集まる</h3><p>箱同士が見つけ合い、1台がサーバ(時計の親)に。残りはスピーカー。設定はゼロ。</p></div>
+      <div class="step"><h3>1台死んでも続く</h3><p>10秒ごとにショーの控えを持ち合い、サーバが消えたら15〜20秒で別の箱が引き継ぐ。プロセスが落ちれば6秒で自己復旧。</p></div>
+      <div class="step"><h3>繋ぐと画面が開く</h3><p>箱のWi-Fi「SOLUNA」に入ると設定画面が自動で開く。パスワード無しでも、箱のWeb以外は遮断された閉じた網。</p></div>
+      <div class="step"><h3>どのDACでも</h3><p>USB、GPIOのI2S DAC、内蔵。刺せば自動で切り替わる。ゾーンの割当はFOH画面から。</p></div>
+    </div>
+    <div class="shots" style="margin-top:14px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+      <figure><img src="/site/setup-top.png" alt="箱の設定画面"><figcaption><b>箱の設定</b>(実機で撮影): 役割・スピーカー・Wi-Fi・自前AP。SSHは要らない。</figcaption></figure>
+      <figure><img src="/site/flags-gate.png" alt="入場QRの印刷"><figcaption><b>印刷物もサーバから</b>: ゾーンの旗と入場QR、A4で。</figcaption></figure>
+    </div>
+  </section>
+
+  <section class="blk"><h2>数字 <span class="en">measured, not promised</span></h2>
+    <div class="nums">
+      <div class="s-tile"><small>on one Pi 4</small><b>5,000</b><div class="sub">同時接続・CUE到達100%</div></div>
+      <div class="s-tile"><small>node sync</small><b>±0.5<span style="font-size:.9rem">ms</span></b><div class="sub">箱の中のスピーカー</div></div>
+      <div class="s-tile"><small>phones on lan</small><b>±1–3<span style="font-size:.9rem">ms</span></b><div class="sub">LTEは±10–20ms</div></div>
+      <div class="s-tile"><small>self-heal</small><b>6<span style="font-size:.9rem">s</span></b><div class="sub">サーバ強制終了から復旧</div></div>
+      <div class="s-tile"><small>automated checks</small><b>321</b><div class="sub">デプロイ前に毎回</div></div>
+      <div class="s-tile"><small>light show bandwidth</small><b>0</b><div class="sub">色は端末が時計から計算</div></div>
+    </div>
+    <p class="s-hint" style="margin-top:10px">未実施のもの: 屋外GPSの実精度、実iPhone多台数の一晩、実Dante機器・LTC・照明卓・灯体との接続(合成信号でのみ検証)。正直に <a href="https://github.com/yukihamada/soluna-surround#verified">README の Verified</a> に。</p>
+  </section>
+
+  <section class="blk"><h2>使いどころ <span class="en">where it fits</span></h2>
+    <div class="list">
+      <div><span>●</span>フェスの中後方の明瞭度。ディレイタワーの代わりに、客席15m格子のPiスピーカー+観客のスマホ</div>
+      <div><span>●</span>サイレント/分散型のパーティー、屋外映画、光の演出をスマホの群れで</div>
+      <div><span>●</span>企業イベント・展示。プロジェクターと来場者の端末を同じ時計に乗せる</div>
+      <div><span>●</span>リビングで2台のスマホからでも、同じコードが動く</div>
+    </div>
+  </section>
+
+  <footer><span>SOLUNA Sound · MIT · <a href="https://github.com/yukihamada/soluna-surround">github.com/yukihamada/soluna-surround</a></span><span>位置情報は端末の中だけで使い、送信しません。</span></footer>
+</div>
+<script defer src="https://enabler-analytics.fly.dev/t.js"></script>
+</body></html>

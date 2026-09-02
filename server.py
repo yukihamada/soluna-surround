@@ -1105,6 +1105,10 @@ async def index(request):
     return web.FileResponse(os.path.join(HERE, "client.html"))
 
 
+async def about_page(request):
+    return web.FileResponse(os.path.join(HERE, "about.html"))
+
+
 async def admin_page(request):
     return web.FileResponse(os.path.join(HERE, "admin.html"))
 
@@ -1256,6 +1260,7 @@ def main():
         web.get("/", index),
         web.get("/screen", index),   # プロジェクター/LEDウォール用(同じclient・screenモード)
         web.get("/admin", admin_page),
+        web.get("/about", about_page),      # 製品サイト(何か・画面・つなぎ方・箱・数字)
         web.get("/dj", dj_page),
         web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),
@@ -1284,6 +1289,7 @@ def main():
         web.static("/assets", ASSETS),
         web.static("/icons", os.path.join(HERE, "icons")),
         web.static("/ui", os.path.join(HERE, "ui")),          # 共有デザインシステム(soluna.css)
+        web.static("/site", os.path.join(HERE, "site")),      # /about 用スクリーンショット
     ])
     ip = os.environ.get("LAN_IP", "127.0.0.1")
     _mdns_publish(port)
