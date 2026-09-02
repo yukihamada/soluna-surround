@@ -98,7 +98,15 @@
       <div style="align-self:flex-end;font-size:.72rem;color:var(--dim)"><label style="display:inline"><input type="checkbox" id="remember"> この端末に記憶</label>
         <button class="ghost" id="logout" style="margin-left:6px;padding:4px 10px;font-size:.7rem">LOGOUT</button></div>
       <div><label>CHANNEL</label><input id="ch" type="text" style="width:120px" value="festival"></div>
-      <div style="align-self:flex-end"><a href="/flags" target="_blank" style="color:var(--gold);font-size:.8rem;text-decoration:none">🚩 ゾーン旗を印刷 ›</a></div>
+      <div style="align-self:flex-end"><a href="/flags" target="_blank" style="color:var(--gold);font-size:.8rem;text-decoration:none">🚩 ゾーン旗を印刷 ›</a>
+        &nbsp; <a href="/flags?gate=1" target="_blank" style="color:var(--gold);font-size:.8rem;text-decoration:none">🎫 入場QRを印刷 ›</a></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <div><label>会場Wi-Fi SSID(前方ゾーン用・空=案内なし)</label><input id="netSsid" type="text" style="width:180px" placeholder="SOLUNA-Front"></div>
+      <div><label>Wi-Fi推奨ゾーン(カンマ区切り)</label><input id="netZones" type="text" style="width:120px" placeholder="A,B"></div>
+      <div style="align-self:flex-end"><button class="ghost" id="netApply" style="padding:6px 12px;font-size:.75rem">回線案内を配信</button>
+        <button class="ghost" id="netClear" style="padding:6px 12px;font-size:.75rem">消す</button></div>
+      <div style="align-self:flex-end;font-size:.7rem;color:var(--dim);max-width:340px">観客はLTE、前方だけ会場Wi-Fi、が無線のスケール解。入場QRで音源を入口で先読み=開演時DLゼロ</div>
     </div>
   </section>
 
@@ -305,6 +313,9 @@ $('zapply').onclick = async ()=>{
   localStorage.setItem('soluna_zones_g', JSON.stringify(zonesG));
   await call('/api/zones', {zones_m: zonesM, gains_db: zonesG});
 };
+$('netApply').onclick = ()=> call('/api/net', {ssid: $('netSsid').value.trim(),
+  wifi_zones: $('netZones').value.split(/[,\s]+/).filter(Boolean).map(z=>z.toUpperCase())});
+$('netClear').onclick = ()=> call('/api/net', {clear:true});
 $('zadd').onclick = ()=>{
   const used = Object.keys(zonesM);
   for (const c of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'){

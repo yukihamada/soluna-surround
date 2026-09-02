@@ -101,12 +101,13 @@ def _chan(name):
         "preload": None,          # 事前配布済み音源URL(FIRE前のDLバースト回避)
         "show": None,             # セットリスト [{label,url,video,light},...]
         "show_i": -1,             # 進行位置(次のNEXTで show_i+1 を発火)
+        "net": None,              # 回線案内 {"ssid","wifi_zones":[..]} 前方=会場Wi-Fi/後方=LTE
     })
 
 
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
-            "geo", "preload", "show", "show_i")
+            "geo", "preload", "show", "show_i", "net")
 
 
 def _save_state():
@@ -154,6 +155,7 @@ def _config_msg(state):
                        "base_ms": state["base_ms"], "geo": state["geo"],
                        "zone_gain_db": state.get("zone_gain_db") or {},
                        "asset_base": ASSET_BASE or None, "ver": VERSION,
+                       "net": state.get("net"), "preload": state.get("preload"),
                        "server_ms": now() * 1000.0})
 
 
@@ -511,6 +513,18 @@ async def flags_page(request):
         qr_svg = None
 
     pages = []
+    if request.query.get("gate") == "1":
+        # 入場QR: ゾーン無し(GPS自動/後で選ぶ)・開いた瞬間に音源を先読み → 開演時のDLバーストをゼロに
+        url = f"{base}/?gate=1" + (f"&ch={ch}" if ch != "festival" else "")
+        qr = qr_svg(url) if qr_svg else f'<div class="url">{url}</div>'
+        pages.append(f'''<section class="flag">
+  <div class="brand">SOLUNA · SOUND</div>
+  <div class="letter" style="font-size:40mm;line-height:1.2">入場<br><span style="font-size:22mm">ENTRANCE</span></div>
+  <div class="say">いま読み取ると、中に入る前に音の準備が終わります。<br>Scan now — your phone gets the sound ready before you're inside.</div>
+  {qr}
+  <div class="url">{url}</div>
+</section>''')
+        zones = []
     for z in zones:
         url = f"{base}/?zone={z}" + (f"&ch={ch}" if ch != "festival" else "")
         qr = qr_svg(url) if qr_svg else f'<div class="url">{url}</div>'
@@ -575,6 +589,36 @@ async def api_align(request):
     await _broadcast_text(state, _config_msg(state))
     return web.json_response({"ok": True, "base_ms": state["base_ms"],
                               "listeners": len(state["listeners"])})
+
+
+async def api_preload(request):
+    """入場QR用(認証なし・極小): いま端末が先読みすべき音源URL。WSを張らずにDLだけ済ませる。
+    無線対策の要=開演時のDLバーストを入口に分散させる。"""
+    state = _chan(request.query.get("ch", "festival"))
+    url = state.get("preload") or (state["cue"] or {}).get("url")
+    video = (state["cue"] or {}).get("video")
+    return web.json_response({"url": url, "video": video, "asset_base": ASSET_BASE or None},
+                             headers={"Cache-Control": "public, max-age=10"})
+
+
+async def api_net(request):
+    """回線案内: {"ssid":"SOLUNA-Front","wifi_zones":["A","B"]} → 前方ゾーンの端末に
+    「会場Wi-Fiへ」、それ以外に「モバイル回線のままでOK」を表示。null で消す。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    state = _chan(request.query.get("ch", "festival"))
+    body = await request.json()
+    if not body or body.get("clear"):
+        state["net"] = None
+    else:
+        zones = body.get("wifi_zones") or []
+        if not isinstance(zones, list):
+            raise web.HTTPBadRequest(text='{"ssid":"...","wifi_zones":["A","B"]}')
+        state["net"] = {"ssid": str(body.get("ssid") or "")[:64],
+                        "wifi_zones": [str(z).upper() for z in zones][:26]}
+    _save_state()
+    await _broadcast_text(state, _config_msg(state))
+    return web.json_response({"ok": True, "net": state["net"]})
 
 
 async def api_zones(request):
@@ -819,6 +863,8 @@ def main():
         web.get("/audio", audio_ws),
         web.post("/api/cue", api_cue),
         web.post("/api/zones", api_zones),
+        web.get("/api/preload", api_preload),
+        web.post("/api/net", api_net),
         web.post("/api/align", api_align),
         web.post("/api/light", api_light),
         web.post("/api/geo", api_geo),

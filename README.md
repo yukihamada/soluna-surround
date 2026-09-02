@@ -182,6 +182,8 @@ payload: interleaved int16 PCM
 | `POST /api/cue` | `{url?, video?, lead\|at, gain, loop}` · `{preload:true}` · `{stop}` |
 | `POST /api/light` | `{pattern, colors, bpm, speed, brightness}` / `{stop}` |
 | `POST /api/zones` | `{zones_m:{A:0,B:15,…}}` measured meters → live delays |
+| `POST /api/net` | admin | `{"ssid":"SOLUNA-Front","wifi_zones":["A","B"]}` — phones in those zones show "join venue Wi-Fi", the rest "stay on mobile data"; `{"clear":true}` removes |
+| `GET /api/preload` | public, tiny | `{url, video, asset_base}` — what a phone should prefetch; used by the gate QR (`/flags?gate=1`) before any WebSocket is opened |
 | `POST /api/align` | `{base_ms}` global trim vs house PA |
 | `POST /api/geo` | `{lat,lng}` stage location for GPS auto-delay |
 | `POST /api/upload?name=` | raw-body track/video upload → `/assets/<name>` |
@@ -200,9 +202,10 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 
 | Test | Result |
 |---|---|
-| Protocol suite (`tests/`, runs in CI before every deploy) | 65 protocol + 20 node + 9 auth/load checks PASS (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
+| Protocol suite (`tests/`, runs in CI before every deploy) | 72 protocol + 20 node + 9 auth/load checks PASS (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
 | **10,000 concurrent devices — one process, LAN** | 9,999/10,000 connected in 17 s, **cue reached 100%**, identical epochs, 791 ms delivery spread vs 8 s lead, median RTT under load 29 ms |
 | Video sync | 23 ms drift; 2 ms mid-track loop join |
+| Gate prefetch (headless browser) | `/?gate=1` reports *Ready* before any tap; the track sits in Cache Storage; the later fetch made **0 network requests**; per-zone network hint renders for Wi-Fi and LTE zones |
 | Production E2E | join → sync → light → GPS auto-delay, headless browser vs the live deploy |
 | **Real devices** | two iPhones, ears-on: music, light show and timecode video locked — then a real track with onset-flash lighting |
 | **Physical Pi node** | Raspberry Pi 4 + GPIO I2S DAC (PCM5102A) joined the cloud deploy (`nodes=1`), took a zone walk-test cue, played in sync (±60 ms vs cloud clock, **±0.5 ms** when the server runs on the same Pi) |
@@ -234,6 +237,27 @@ CI runs the test suite first and smokes `/health` after the deploy.
 ```bash
 python3 tests/test_node.py && python3 tests/test_protocol.py && python3 tests/test_djauth_load.py
 ```
+
+### How it scales over the air (the radio is the ceiling)
+
+The server holds thousands of clients; **what runs out first is Wi-Fi association
+capacity** (≈50–80 phones per access point), not bandwidth — a CUE-mode phone sends one
+~100-byte ping every 3 s, relaxing to every 10 s once stable (tightened again for a few
+seconds when a cue lands). So:
+
+1. **Audience = their own LTE/5G + this server (cloud) + CDN.** Zero venue infrastructure,
+   ±10–20 ms — right for light, video, effects. Wired Pi nodes carry the PA.
+2. **Gate prefetch kills the showtime burst.** Print the entrance QR (`/flags?gate=1`, or
+   the 🎫 link in `/admin`): the phone downloads the track while queueing, into Cache
+   Storage / the service worker, and FIRE later costs it zero bytes. Verified headless.
+3. **Venue Wi-Fi only where ±1–3 ms matters** (front zones). Tell the phones:
+   `POST /api/net {"ssid":"SOLUNA-Front","wifi_zones":["A","B"]}` — they show the hint
+   themselves, LTE zones are told to stay on mobile data.
+4. **Or make every Pi node an access point**: hang an outdoor AP off each node's Ethernet
+   (PoE), 33 nodes × ~60 phones ≈ 2,000 on your own network. The Pi's built-in radio is
+   not that AP (20–30 clients).
+5. **Measure before deciding**: `docs/field-test.md` — 3 phones, 3 carriers, front / middle
+   / back, pass criteria included.
 
 ### Pi as the server — the "SOLUNA box"
 

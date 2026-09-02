@@ -149,6 +149,8 @@
     </div>
   </details>
   <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
+  <div class="hint" id="gateHint" hidden style="color:var(--gold,#d4af37);font-weight:600"></div>
+  <div class="hint" id="netHint" hidden></div>
   <div class="hint" data-i18n="hint2">音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。</div>
   <div class="hint" data-i18n="hint3">画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。</div>
   <div class="hint" data-i18n="privacy" style="opacity:.7">位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。</div>
@@ -176,6 +178,9 @@ const I18N = {
         autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離', trimL:'微調整(耳合わせ)',
         preloaded:'準備OK', hint2:'音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。',
         hint3:'画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。',
+        gatePrep:'🎫 音の準備中… このまま数秒お待ちください', gateOk:'🎫 準備OK。会場に入ったら ▶ を押してください(通信なしで鳴ります)',
+        gateNone:'🎫 まだ配布前です。会場で ▶ を押せば自動で受け取ります', gateFail:'🎫 準備に失敗しました。会場で ▶ を押せばその場で受け取ります',
+        netWifi:'📶 このゾーンは会場Wi-Fi「{ssid}」に接続すると同期が良くなります', netLte:'📶 このゾーンはモバイル回線のままでOK(会場Wi-Fiは前方ゾーン専用)',
         privacy:'位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。',
         gainL:'音量補正(機種差)', batL:'電池', dimTap:'タップで表示',
         waiting:'つながっています — 音を待っています', playing:'♪ 再生中' },
@@ -187,6 +192,9 @@ const I18N = {
         autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST', trimL:'FINE TRIM',
         preloaded:'ready', hint2:'No sound? On iPhone, flip the silent switch off and turn the volume up.',
         hint3:'Locking the screen stops the sound (browser limitation). The screen dims by itself when idle to save battery.',
+        gatePrep:'🎫 Getting the sound ready… a few seconds', gateOk:'🎫 Ready. Once inside, tap ▶ (plays without downloading)',
+        gateNone:'🎫 Nothing to prepare yet — tap ▶ inside and it arrives by itself', gateFail:'🎫 Preparation failed — tap ▶ inside and it downloads there',
+        netWifi:'📶 In this zone, join venue Wi-Fi "{ssid}" for tighter sync', netLte:'📶 In this zone, stay on mobile data (venue Wi-Fi is for the front zones)',
         privacy:'Your location is used only on this device to compute the distance to the stage. Only the nearest zone letter is sent — never coordinates.',
         gainL:'LEVEL TRIM (device)', batL:'BATTERY', dimTap:'tap to show',
         waiting:'connected — waiting for sound', playing:'♪ playing' },
@@ -283,6 +291,8 @@ function onPong(m){
   pingCount++;
   if (pingCount === 10){                  // 収束後はサーバ負荷を下げる(5000台対策)
     clearInterval(pingTimer); pingTimer = setInterval(sendPing, 3000);
+  } else if (pingCount === 40){           // 安定後はさらに緩める=無線の占有を1/20に(cue到着時に再度締める)
+    clearInterval(pingTimer); pingTimer = setInterval(sendPing, 10000);
   }
   // 生のepochオフセットは無意味な巨大数なので、同期精度(±bestRTT/2)を見せる
   $('off').textContent = '±' + (best.rtt/2).toFixed(1)+'ms';
@@ -290,6 +300,10 @@ function onPong(m){
   if (pendingCue && cueBuf) armCue();     // 同期がとれた時点で保留キューを発火
 }
 const serverNowSec = () => (performance.now() + offsetMs) / 1000;
+function tightenSync(){                    // cue/preload到着=本番が近い → 数秒だけ密にpingしてオフセットを更新
+  if (!ws || ws.readyState !== 1) return;
+  pingCount = 0; clearInterval(pingTimer); pingTimer = setInterval(sendPing, 500); sendPing();
+}
 
 // ---- zone delay -------------------------------------------------------------
 let trimMs = parseFloat(localStorage.getItem('soluna_trim')||'0') || 0;  // 耳で合わせる微調整
@@ -380,6 +394,7 @@ function stopGeoWatch(){
   geoWatchId=null; clearInterval(geoPollTimer); geoPollTimer=null; geoStableFixes=0;
 }
 function renderZones(){
+  try{ renderNetHint(); }catch(e){}
   const p = $('picker'); p.innerHTML='';
   for (const z of Object.keys(zones)){
     const b = document.createElement('button');
@@ -471,16 +486,44 @@ $('vHint').onclick = ()=>{ vEl.muted=false; $('vHint').classList.remove('show');
 
 // ---- CUE MODE: 事前配布ファイルを playAt で一斉スケジュール -------------------
 // CDN(asset_base)が先・失敗したらサーバ直へフォールバック(未同期の曲でもショーは止まらない)
+const MEDIA_CACHE = 'soluna-media-v1';
+async function cacheGet(key){ try{ if (!('caches' in window)) return null; return await (await caches.open(MEDIA_CACHE)).match(key); }catch(e){ return null; } }
+async function cachePut(key, res){ try{ if ('caches' in window) await (await caches.open(MEDIA_CACHE)).put(key, res.clone()); }catch(e){} }
 async function fetchAsset(url){
+  const hit = await cacheGet(url);                 // 入場時に先読み済みなら通信ゼロ
+  if (hit) return hit;
   const cdn = resolveUrl(url);
   if (cdn !== url){
-    try { const r = await fetch(cdn); if (r.ok) return r; console.warn('cdn', r.status, cdn); }
+    try { const r = await fetch(cdn); if (r.ok){ await cachePut(url, r); return r; } console.warn('cdn', r.status, cdn); }
     catch(e){ console.warn('cdn fail', e); }
   }
   const r = await fetch(url);
   if (!r.ok) throw new Error('fetch '+r.status);
+  await cachePut(url, r);
   return r;
 }
+// ---- GATE MODE(入場QR): ▶を押す前・WSを張らずに音源だけ先読み → 開演時のDLバーストをゼロに ----
+const GATE = qs.get('gate') === '1';
+let netInfo = null;
+function renderNetHint(){
+  const el = $('netHint'); if (!netInfo){ el.hidden = true; return; }
+  const wifi = (netInfo.wifi_zones||[]).includes(ZONE);
+  el.textContent = wifi ? T.netWifi.replace('{ssid}', netInfo.ssid||'') : T.netLte;
+  el.hidden = false;
+}
+async function gatePrefetch(){
+  const el = $('gateHint'); el.hidden = false; el.textContent = T.gatePrep;
+  try{
+    const ch = qs.get('ch') || 'festival';
+    const info = await (await fetch(`/api/preload?ch=${encodeURIComponent(ch)}`)).json();
+    assetBase = info.asset_base || assetBase;
+    if (!info.url && !info.video){ el.textContent = T.gateNone; return; }
+    try { await Promise.race([navigator.serviceWorker?.ready, new Promise(r=>setTimeout(r, 1500))]); } catch(e){}
+    for (const u of [info.url, info.video].filter(Boolean)){ const r = await fetchAsset(u); await r.arrayBuffer(); }
+    el.textContent = T.gateOk;
+  }catch(e){ console.warn('gate', e); el.textContent = T.gateFail; }
+}
+if (GATE && !SCREEN) gatePrefetch();
 async function loadTrack(url){
   if (cueBufUrl === url && cueBuf) return;
   const res = await fetchAsset(url);
@@ -705,12 +748,12 @@ function connect(){
       if (m.t==='pong') onPong(m);
       else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0;
         srvSr=m.sr||48000; stageGeo=m.geo||null; assetBase=m.asset_base||null;
-        zoneGainDb=m.zone_gain_db||{}; renderZones();
+        zoneGainDb=m.zone_gain_db||{}; netInfo=m.net||null; renderZones(); renderNetHint();
         if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100) * levelGain();
         if (stageGeo && autoZone) startGeoWatch();
         if (cueBuf && pendingCue) armCue(); }
-      else if (m.t==='cue') onCue(m).catch(err=>{ $('cue').textContent=T.fail; sendReport('failed'); console.error(err); });
-      else if (m.t==='preload') onPreload(m);
+      else if (m.t==='cue'){ tightenSync(); onCue(m).catch(err=>{ $('cue').textContent=T.fail; sendReport('failed'); console.error(err); }); }
+      else if (m.t==='preload'){ tightenSync(); onPreload(m); }
       else if (m.t==='cue_stop') onCueStop();
       else if (m.t==='light') onLight(m);
       else if (m.t==='light_stop') onLightStop();

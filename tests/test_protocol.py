@@ -267,6 +267,42 @@ async def main():
               and body_txt.count('section class="flag"') == 6
               and 'class="qr"' in body_txt)
 
+        # 10j) 入場QR(/flags?gate=1)=1ページ・?gate=1 のURL
+        r = await s.get(f"{BASE}/flags?ch=flagstest&gate=1")
+        body_txt = await r.text()
+        check("flags gate=1: 入場QR 1ページ", r.status == 200
+              and body_txt.count('section class="flag"') == 1
+              and ("/?gate=1&amp;ch=flagstest" in body_txt or "/?gate=1&ch=flagstest" in body_txt))
+
+        # 10k) /api/preload(無認証・極小)= preload URL を返す → 入場時の先読み用
+        r = await s.post(f"{BASE}/api/cue?ch=gatech", json={"url": "/assets/x.mp3", "preload": True},
+                         headers={"x-soluna-admin": ADMIN})
+        r = await s.get(f"{BASE}/api/preload?ch=gatech")
+        b = await r.json()
+        check("api/preload: url=preload先", r.status == 200 and b.get("url") == "/assets/x.mp3", str(b))
+        r = await s.get(f"{BASE}/api/preload?ch=neverseen")
+        b = await r.json()
+        check("api/preload: 未配布ch → url=null", b.get("url") is None, str(b))
+
+        # 10l) /api/net 回線案内 → config に乗る・clear で消える
+        r = await s.post(f"{BASE}/api/net?ch=gatech", json={"ssid": "SOLUNA-Front", "wifi_zones": ["a", "B"]},
+                         headers={"x-soluna-admin": ADMIN})
+        b = await r.json()
+        check("api/net: 保存(大文字化)", b["net"] == {"ssid": "SOLUNA-Front", "wifi_zones": ["A", "B"]}, str(b))
+        r = await s.post(f"{BASE}/api/net?ch=gatech", json={"ssid": "x", "wifi_zones": ["A"]})
+        check("api/net: 無認証は403", r.status == 403)
+        ws_n = await s.ws_connect(f"{BASE}/audio?role=listen&ch=gatech&zone=A")
+        cfg_n = None
+        for _ in range(4):
+            m = await asyncio.wait_for(ws_n.receive(), 3)
+            if m.type == aiohttp.WSMsgType.TEXT and json.loads(m.data).get("t") == "config":
+                cfg_n = json.loads(m.data); break
+        check("config に net+preload が乗る", cfg_n is not None and cfg_n.get("net", {}).get("ssid") == "SOLUNA-Front"
+              and cfg_n.get("preload") == "/assets/x.mp3", str(cfg_n and {k: cfg_n.get(k) for k in ("net", "preload")}))
+        await ws_n.close()
+        r = await s.post(f"{BASE}/api/net?ch=gatech", json={"clear": True}, headers={"x-soluna-admin": ADMIN})
+        check("api/net: clear → null", (await r.json())["net"] is None)
+
         # 11) play.py の遅延計算(ユニット)
         sys.path.insert(0, "/Users/yuki/workspace/soluna-surround")
         try:
