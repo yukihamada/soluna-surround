@@ -61,10 +61,10 @@ to reconnect to the new server (it retries by itself if started with the `.local
 - **Pi AP** (`SOLUNA`, 2.4 GHz for range): the Pi 4's radio holds about **20–30 clients**
   reliably — enough for the other boxes and a few staff phones, not for a crowd. Crowd
   phones ride LTE + the cloud deploy, or venue Wi-Fi (see README "How it scales over the
-  air"). The AP password is generated once per box (`/etc/soluna/ap.psk`, 0600); flashing
-  from one laptop bakes the same PSK into every card (`tools/pi-flash.sh` → `AP_PSK`) so all
-  boxes can join whichever box became the server. The SSID/password are shown only on
-  `/admin` (NODES), never printed on flags.
+  air"). The AP is **open (no password) by default** and closed by a firewall instead — see
+  "Open Wi-Fi, still safe" below; `AP_SECURITY=wpa` (fleet PSK baked by `tools/pi-flash.sh`) and
+  `owe` are available. Whatever the mode, the boxes flashed from one laptop share the SSID and
+  find whichever box became the server.
 - If the box's `wlan0` is already on an upstream network (venue Wi-Fi, phone tethering),
   no AP is raised — the boxes just use that network.
 - `SOLUNA_AP=0` in `/etc/soluna/agent.env` disables the AP; `SOLUNA_AP_BAND=a` picks 5 GHz.
@@ -103,15 +103,15 @@ that may become the server: `/opt/soluna/admin-token`.
 - **引き継ぎ ≈15〜20秒**: ノードは10秒ごとにショー状態の控えを持つので、新サーバがそれを
   取り込みキュー/ゾーン/ライト/セットリスト位置ごと再配信。LIVE配信だけは送出側の再接続が必要。
 - **PiだけでAP**: 上流Wi-Fiが無い箱がサーバになると SSID `SOLUNA` を立てる(2.4GHz)。収容は
-  20〜30台=他の箱+スタッフ端末向け。観客はLTE+クラウド、または会場Wi-Fi。SSID/パスワードは
-  `/admin` NODESだけに表示(旗には刷らない)。
+  20〜30台=他の箱+スタッフ端末向け。観客はLTE+クラウド、または会場Wi-Fi。**既定はパスワード無し**
+  (箱側の閘門で閉じる。下記「Open Wi-Fi, still safe」)。WPA2/Enhanced Open も /setup で選べる。
 - **ゾーン割当は /admin から**: NODESの行にゾーン文字/位置/ゲインを入れて ASSIGN。箱に保存され、
   再接続時にもサーバから再送されるので、SDを焼き直しても割当は残ります。
 - **箱同士は有線推奨**(小型PoEスイッチ)。選挙も有線の箱を優先します。
 
 ## Plug in → a page opens (captive portal + `/setup`)
 
-Join the box's Wi-Fi **SOLUNA** (default password `solunasound`, change it in `/setup`) and the
+Join the box's Wi-Fi **SOLUNA** (no password by default — see below) and the
 phone opens the welcome page by itself — the OS connectivity probe (Apple `hotspot-detect`,
 Android `generate_204`, Windows NCSI, Firefox) gets our landing instead of "Success", and every
 DNS name resolves to the box while the AP is up. Two buttons: **🎧 join the sound** (audience
@@ -128,9 +128,9 @@ page) and **⚙ set this box up**.
 | Own AP | on/off, SSID, password (8–63), 2.4/5 GHz | `agent.env` + `ap.psk`, agent re-raises the AP |
 | Box | hostname, admin token (show / regenerate), restart node/server, update from GitHub, reboot, logs | `sudo -n` via `/etc/sudoers.d/soluna` (only those commands) |
 
-Auth: the admin token, **or** simply being on the box's own AP / localhost
-(`SOLUNA_SETUP_OPEN=1`, default on a box — the WPA2 PSK is the key). Set `SETUP_OPEN=0` at
-install time to require the token everywhere. Cloud deploys never expose `/setup` (`SOLUNA_BOX` unset).
+Auth: the admin token, **or** being on the box's own AP / localhost **within 10 minutes of
+power-on** (`SOLUNA_SETUP_OPEN=window`, the default — the person who just plugged the box in is
+the person allowed to configure it; `always` / `never` exist). After the window: token, or reboot. Cloud deploys never expose `/setup` (`SOLUNA_BOX` unset).
 
 ### AP policy (so a box never strands itself)
 
@@ -142,14 +142,15 @@ A flaky uplink must not turn a box into an unreachable island. The agent therefo
 2. marks the AP connection `autoconnect=no`, so after a reboot the saved uplink is tried first;
 3. while in AP mode, every **10 min** (`SOLUNA_AP_RETRY_S`) drops the AP for 45 s to see whether
    the uplink is back, and re-raises it if not;
-4. uses a **known default password** (`solunasound`, or the fleet PSK baked by `pi-flash.sh`) and
-   prints SSID + PSK in the journal and on `/setup` / `/admin` NODES.
+4. never hides behind an unknown secret: the AP is open by default; if you choose `wpa`, the PSK
+   is the documented default `solunasound` (or the fleet PSK baked by `pi-flash.sh`) and is shown
+   in the journal and on `/setup` / `/admin` NODES.
 
 Field note (2026-09-02): the first Pi 4 ran a build without rule 1/2/4 — its tethering uplink
 dropped for a moment, it became AP "SOLUNA" with a random PSK, and nobody could get in.
 Recovery = `tools/pi-rescue.sh`: pull the microSD, run the script against `bootfs`, put it back;
-a one-shot cloud-init disables the AP autoconnect, sets the known PSK, re-joins the saved uplink
-and updates the box.
+a one-shot cloud-init disables the AP autoconnect, switches the AP to open, re-joins the saved
+uplink and updates the box.
 
 ### Open Wi-Fi, still safe (no password by default)
 

@@ -7,9 +7,10 @@
 #       [WIFI_SSID="venue" WIFI_PSK="…"]          # optional upstream Wi-Fi (internet for the install)
 #       [SERVER=wss://…  ZONE=B POS=C]            # optional: pin to one server / preset zone
 #       [WIFI_COUNTRY=JP] [PI_PASS=raspberry] [AP_PSK=…]
-# Every card also gets the boxes' own Wi-Fi "SOLUNA" (client side) with a shared PSK read/generated
-# at ~/.config/soluna-sound/ap.psk, and the same PSK as /etc/soluna/ap.psk (used when this box is the
-# server and raises the AP). The PSK never enters the repo.
+# Every card also gets the boxes' own Wi-Fi "SOLUNA" (client side). Default AP_SECURITY=open: no
+# password (the box is closed by its firewall — see docs/pi-box.md). AP_SECURITY=wpa bakes a shared PSK
+# (~/.config/soluna-sound/ap.psk, generated once per laptop, never committed) into every card and
+# into /etc/soluna/ap.psk so the boxes can still find each other.
 set -euo pipefail
 # tools/pi-flash.sh --customize-only <disk> KEY=VAL…   → skip writing, only configure bootfs
 CUSTOMIZE_ONLY=0; if [ "${1:-}" = "--customize-only" ]; then CUSTOMIZE_ONLY=1; shift; IMG=""; else IMG="${1:?image.img}"; shift; fi
@@ -18,7 +19,7 @@ for kv in "$@"; do export "$kv"; done
 WIFI_SSID="${WIFI_SSID:-}"; WIFI_PSK="${WIFI_PSK:-}"
 HOSTNAME="${HOSTNAME:-soluna-box}"; SERVER="${SERVER:-auto}"
 ZONE="${ZONE:-}"; POS="${POS:-}"; CH="${CH:-festival}"; WIFI_COUNTRY="${WIFI_COUNTRY:-JP}"; PI_PASS="${PI_PASS:-raspberry}"
-AP_SSID="${AP_SSID:-SOLUNA}"
+AP_SSID="${AP_SSID:-SOLUNA}"; AP_SECURITY="${AP_SECURITY:-open}"
 # shared PSK for the boxes' own Wi-Fi (generated once per flashing laptop, never committed)
 AP_PSK_FILE="$HOME/.config/soluna-sound/ap.psk"
 if [ -z "${AP_PSK:-}" ]; then
@@ -110,6 +111,13 @@ write_files:
 - path: /etc/soluna/ap.psk
   permissions: "0600"
   content: "$AP_PSK"
+- path: /etc/soluna/agent.env
+  permissions: "0644"
+  content: |
+    SOLUNA_AP=1
+    SOLUNA_AP_SSID=$AP_SSID
+    SOLUNA_AP_SECURITY=$AP_SECURITY
+    SOLUNA_AP_PSK=$AP_PSK
 - path: /usr/local/bin/soluna-diag
   permissions: "0755"
   content: |
@@ -135,8 +143,7 @@ network:
       optional: true
       access-points:
 $( [ -n "$WIFI_SSID" ] && printf '        "%s":\n          password: "%s"\n' "$WIFI_SSID" "$PSK_HASH" )
-        "$AP_SSID":
-          password: "$AP_PSK_HASH"
+$( if [ "$AP_SECURITY" = wpa ]; then printf '        "%s":\n          password: "%s"\n' "$AP_SSID" "$AP_PSK_HASH"; else printf '        "%s": {}\n' "$AP_SSID"; fi )
 NET
 echo "instance-id: $HOSTNAME-$(date +%s)" > "$BOOT/meta-data"
 # USB gadget mode: plug the Pi's USB-C into a laptop → "RNDIS/Ethernet Gadget" NIC → ssh over USB,
@@ -185,4 +192,4 @@ echo "${CMD% } systemd.run=/boot/firmware/firstrun.sh systemd.run_success_action
 sync; if [ "${NO_EJECT:-0}" = 1 ]; then echo "(NO_EJECT=1: left mounted for inspection)"; else diskutil eject "$DISK"; fi
 echo "✅ flashed. Insert into the Pi, power on (DAC attached). Zero config: it joins a server or becomes one."
 echo "   ~3-5 min later: ssh pi@$HOSTNAME.local  (pass: $PI_PASS)  → journalctl -u soluna-agent -u soluna-node -f"
-echo "   FOH: /admin NODES → assign its zone.   boxes' Wi-Fi: SSID $AP_SSID (psk in $AP_PSK_FILE)"
+echo "   FOH: /admin NODES → assign its zone.   boxes' Wi-Fi: SSID $AP_SSID ($( [ "$AP_SECURITY" = wpa ] && echo "psk in $AP_PSK_FILE" || echo "open — no password, firewalled" ))"

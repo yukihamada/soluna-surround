@@ -11,7 +11,7 @@ Every Pi runs this. It makes the boxes find each other and keep the show alive w
              (Ethernet up > longest uptime > lowest hostname); others yield
   SERVER     start soluna-server, publish mDNS + beacon, restore the standby copy if fresh
              (< 10 min) so cues / zones / light / setlist position resume; node → localhost;
-             if wlan0 has no upstream, raise a Wi-Fi AP "SOLUNA" (psk /etc/soluna/ap.psk)
+             if wlan0 has no upstream (120 s grace), raise the Wi-Fi AP "SOLUNA" (open by default, firewalled)
   HEAL       server /health fails 5× → back to DISCOVER (→ election, ≈15–20 s takeover);
              own server fails 3× → restart it; node service down → start it;
              audio card list changes → restart node; every action is logged to journal
@@ -185,7 +185,7 @@ def write_env(path, updates):
 AP_GRACE_S = float(os.environ.get("SOLUNA_AP_GRACE_S", "120"))    # 上流が消えてからAPを立てるまでの猶予
 AP_RETRY_S = float(os.environ.get("SOLUNA_AP_RETRY_S", "600"))    # AP中、保存済み上流へ戻る試行の間隔
 AP_RETRY_WAIT_S = float(os.environ.get("SOLUNA_AP_RETRY_WAIT_S", "45"))
-DEFAULT_AP_PSK = "solunasound"
+DEFAULT_AP_PSK = "solunasound"   # wpa を選んだときの既定PSK(ルータのラベル方式: 既知・/setupで変更・pi-flash.sh は艦隊PSKを焼き込む)
 # AP のセキュリティ: open(既定・パスワード無し。安全は「箱が閉じている」ことで担保=下の ap_firewall)
 #                    wpa(PSK)・owe(Enhanced Open: 暗号化ありパスワード無し。対応端末のみ)
 AP_SECURITY_DEFAULT = "open"
@@ -243,7 +243,7 @@ def ap_firewall(enable: bool, iface="wlan0"):
     sh([ipt, "-N", "SOLUNA_AP_FWD"], timeout=5)
     sh([ipt, "-A", "SOLUNA_AP_FWD", "-j", "DROP"], timeout=5)
     sh([ipt, "-I", "FORWARD", "-i", iface, "-j", "SOLUNA_AP_FWD"], timeout=5)
-    log("AP firewall: on via iptables (web/ws only, no forwarding)")   # ルータのラベルと同じ考え方: 既知の初期値・/setup で変更・pi-flash.sh は艦隊PSKを焼き込む
+    log("AP firewall: on via iptables (web/ws only, no forwarding)")
 
 
 def saved_upstream_wifi():

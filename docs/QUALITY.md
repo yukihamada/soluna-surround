@@ -73,7 +73,7 @@ Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in sof
 | # | I want… | Score | Evidence / gap |
 |---|---|---|---|
 | 1 | flash, power on, done | 🧪 95 | Zero-config agent on the real Pi 4: booted → elected itself server in 12 s → node repointed to localhost (±0.5 ms). Two-box election/yield only unit-tested [field: 2nd Pi] |
-| 2 | no laptop needed | ✅ | Lone Pi = server + node verified; the Wi-Fi AP raised itself for real when the tethering uplink dropped (SSID SOLUNA seen from the Mac). Now with grace / autoconnect-off / retry / known PSK so it never strands itself |
+| 2 | no laptop needed | ✅ | Lone Pi = server + node verified; the Wi-Fi AP raised itself for real when the tethering uplink dropped (SSID SOLUNA seen from the Mac). Now with a 120 s grace, autoconnect off, periodic uplink retry and an open (firewalled) AP so it never strands itself |
 | 2c | join without a password, still safe | ✅ | Open AP + nft/iptables gate (80/8900 only, no SSH, no forwarding), client isolation, `/setup` open only 10 min after power-on, `/admin` always token; owe/wpa selectable |
 | 2b | plug in → a page opens, settings without SSH | 🧪 95 | Captive portal (Apple/Android/Windows probes) + `/setup` (role, speaker, Wi-Fi, AP, hostname, token, update, logs, 🔔 tone) — 34 headless checks; real-phone sheet pop-up pending [field] |
 | 3 | it to heal itself | ✅ | Real Pi: `kill -9` of the server → back in 6 s (systemd + agent), assigned zone survives, node keeps sync; 20 s start grace so a cold start is never mistaken for a crash; udev DAC hot-plug; hardware watchdog armed (reboot path itself not provoked) |
