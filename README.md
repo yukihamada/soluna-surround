@@ -155,6 +155,14 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
 - **Power** — audience screens auto-dim to black after 45 s idle (light show
   excepted), GPS drops from continuous watch to 60 s polls once the distance settles,
   battery level is reported so FOH can see a crowd running low.
+- **Show control, the festival's way** — SOLUNA slots under the systems a show already
+  runs instead of adding an operator: **OSC in** (`SOLUNA_OSC_PORT`; QLab / Ableton /
+  grandMA / Eos fire `/soluna/cue`, `/soluna/go`, `/soluna/light`… — same code path as the
+  HTTP API, future-timetag bundles become the cue's `at`), **timecode** (`POST
+  /api/timecode` or `ltc.py` decoding LTC audio → cues and setlist steps take
+  `"tc":"01:00:10:00"`, 24/25/30/29.97DF), and **Art-Net / sACN out** (`SOLUNA_ARTNET`,
+  `SOLUNA_SACN`: the running light pattern rendered to DMX at 40 Hz so real fixtures wave
+  in step with the phones). All off by default; details in `docs/show-control.md`.
 - **Level trim** — a per-device ±12 dB slider (phone speakers differ by 6–10 dB
   between models) plus per-zone gain from the console.
 - **Asset delivery** — `/assets/` is served with `Cache-Control: public` and CORS;
@@ -202,6 +210,9 @@ payload: interleaved int16 PCM
 | `GET /api/nodes` | admin | boxes with `stale` flag, their assignments, the server box's AP SSID/password |
 | `POST /api/nodes/assign` | admin | `{"host":"soluna-box-2","zone":"C","pos":"L","gain_db":-3}` → saved + pushed live to that box; `{"host":…,"clear":true}` |
 | `GET /api/preload` | public, tiny | `{url, video, asset_base}` — what a phone should prefetch; used by the gate QR (`/flags?gate=1`) before any WebSocket is opened |
+| `POST /api/timecode` | admin | `{"tc":"01:00:00:00","fps":30}` — "right now the show timecode is X" (also OSC `/soluna/tc`, or `ltc.py` from LTC audio); then `/api/cue` and setlist steps accept `"tc":"01:00:10:00"` instead of `lead`. 24/25/30/29.97DF. `GET` returns the anchor + estimated current tc |
+| OSC `udp/$SOLUNA_OSC_PORT` | LAN, no auth | `/soluna/cue url [lead] [gain]` · `/soluna/preload` · `/soluna/stop` · `/soluna/go` · `/soluna/show/goto i` · `/soluna/light pattern [c1] [c2] [bpm]` · `/soluna/light/stop` · `/soluna/align ms` · `/soluna/zone name ms` · `/soluna/tc "HH:MM:SS:FF" [fps]` — trailing `"ch=<name>"` selects a channel; bundle timetag → `at`. See `docs/show-control.md` |
+| DMX out `SOLUNA_ARTNET` / `SOLUNA_SACN` | env | `ip[:universe]` — active light pattern → Art-Net ArtDMX / sACN E1.31 at 40 Hz, `SOLUNA_DMX_FIXTURES` RGB fixtures from `SOLUNA_DMX_START`; blackout once on stop |
 | `POST /api/align` | `{base_ms}` global trim vs house PA |
 | `POST /api/geo` | `{lat,lng}` stage location for GPS auto-delay |
 | `POST /api/upload?name=` | raw-body track/video upload → `/assets/<name>` |
@@ -245,6 +256,8 @@ accuracy, dozens of real iPhones at once.
 
 ```bash
 SOLUNA_ADMIN=<secret> SOLUNA_DJ_TOKEN=<secret> PORT=8900 python3 server.py
+# show-control bridges (LAN only, all optional): OSC in, DMX out
+SOLUNA_OSC_PORT=9000 SOLUNA_ARTNET=192.168.1.255:0 SOLUNA_DMX_FIXTURES=12 python3 server.py
 ```
 
 Included `fly.toml` ships `connections` concurrency (20k hard) — the default
@@ -442,6 +455,15 @@ DanteをAES67モードにできない卓は Dante Virtual Soundcard か AVIO USB
 - 切断は自動再接続(音楽は時計から再計算して曲中復帰)。配信(push)はトークン認証で乗っ取り防止
 - 実証: **1万台同時(LAN・単一プロセス)**(到達100%・開始時刻完全一致・配信ばらつき791ms/猶予8秒)・
   実機iPhone2台の実聴で音/光/映像の同期を確認済み。テスト94項目はCIで毎デプロイ前に実行
+
+### 既存の制御系につなぐ(OSC / タイムコード / Art-Net・sACN)
+
+卓を増やさない。QLab・Ableton・grandMA・Eos から OSC で `/soluna/cue` `/soluna/go`
+`/soluna/light` を叩ける(`SOLUNA_OSC_PORT`、HTTP API と同じ本体)。再生卓のタイムコード
+(LTC 音声は `python3 ltc.py --device N` で復号 → `/api/timecode`)を 1 回教えれば、キューと
+セットリストは `"tc":"01:00:10:00"` で発火時刻を書ける(24/25/30/29.97DF)。進行中のライトは
+`SOLUNA_ARTNET` / `SOLUNA_SACN` で DMX に落ちて会場の灯体がスマホと同じ波を渡る。
+全て既定 OFF・詳細と卓ごとの設定例= `docs/show-control.md`。
 
 ### 既知の制約(正直に)
 
