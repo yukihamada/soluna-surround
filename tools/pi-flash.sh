@@ -24,7 +24,7 @@ AP_SSID="${AP_SSID:-SOLUNA}"; AP_SECURITY="${AP_SECURITY:-open}"
 AP_PSK_FILE="$HOME/.config/soluna-sound/ap.psk"
 if [ -z "${AP_PSK:-}" ]; then
   if [ -s "$AP_PSK_FILE" ]; then AP_PSK=$(tr -d '\n' < "$AP_PSK_FILE")
-  else mkdir -p "$(dirname "$AP_PSK_FILE")"; AP_PSK=$(LC_ALL=C tr -dc 'abcdefghjkmnpqrstuvwxyz23456789' < /dev/urandom | head -c 12)
+  else mkdir -p "$(dirname "$AP_PSK_FILE")"; AP_PSK=$(head -c 400 /dev/urandom | LC_ALL=C tr -dc 'abcdefghjkmnpqrstuvwxyz23456789' | head -c 12)   # head first: tr on /dev/urandom + pipefail = SIGPIPE(141)
        (umask 077; echo "$AP_PSK" > "$AP_PSK_FILE"); echo "   generated boxes' Wi-Fi PSK → $AP_PSK_FILE"; fi
 fi
 IMAGER="/Applications/Raspberry Pi Imager.app/Contents/MacOS/rpi-imager"
@@ -32,7 +32,9 @@ IMAGER="/Applications/Raspberry Pi Imager.app/Contents/MacOS/rpi-imager"
 echo "▶ target $DISK:"; diskutil info "$DISK" | grep -E "Device / Media Name|Disk Size|Removable|Protocol" || true
 diskutil list "$DISK" | grep -qiE "SD|Removable|external" || echo "⚠ not obviously removable — check the disk above"
 if [ "$CUSTOMIZE_ONLY" = 0 ]; then
-read -r -p "ERASE $DISK and write $IMG? [yes/N] " a; [ "$a" = yes ] || exit 1
+if [ "${YES:-0}" = 1 ]; then echo "   YES=1 → erasing $DISK without prompt"; else
+  read -r -p "ERASE $DISK and write $IMG? [yes/N] " a; [ "$a" = yes ] || { echo "aborted (set YES=1 for non-interactive)"; exit 1; }
+fi
 diskutil unmountDisk force "$DISK"   # 消去対象: 他プロセスが掴んでいても外す
 # Prefer raw dd (needs sudo; rdisk = unbuffered, ~3x faster). Fall back to Imager CLI.
 RDISK="${DISK/\/dev\/disk//dev/rdisk}"
