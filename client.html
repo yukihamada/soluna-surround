@@ -8,141 +8,133 @@
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
 <title>SOLUNA SOUND</title>
 <style>
-  :root{
-    --ink:#0a0507; --cream:#f4e8d0; --dim:rgba(244,232,208,.5);
-    --gold:#d4af37; --gold2:#f5d16b; --ok:#7fc9a2;
-    --serif:"Shippori Mincho","Hiragino Mincho ProN",serif;
-    --sans:"Zen Kaku Gothic New","Hiragino Sans",system-ui,sans-serif;
-    --mono:"IBM Plex Mono",ui-monospace,monospace;
-  }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{background:var(--ink);color:var(--cream);font-family:var(--sans);
-       min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
-       justify-content:center;padding:28px 24px;text-align:center;gap:18px;overflow-x:hidden}
-  /* 夜の会場: 上から金のグロー、下から遠い緑のグロー */
-  body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:-1;
-       background:radial-gradient(60% 42% at 50% -6%, rgba(212,175,55,.16), transparent 70%),
-                  radial-gradient(50% 34% at 50% 108%, rgba(127,201,162,.07), transparent 70%)}
-  h1{font-size:.78rem;letter-spacing:.44em;color:var(--gold);font-weight:700;
-     font-family:var(--mono);text-indent:.44em}
-  .zonelabel{font-size:.7rem;letter-spacing:.18em;color:var(--dim)}
-  /* 月のオーブ: ゾーン/距離を宿す。待機中はゆっくり呼吸する */
-  .orb{position:relative;width:172px;height:172px;display:flex;align-items:center;
-       justify-content:center;margin:2px 0 4px}
+  /* 観客ページ: 暗い会場で片手。上から「ここはどこ / 自分のゾーン / ▶」だけ見えれば良い。
+     トークン・共通部品は /ui/soluna.css。ここはこのページ固有の形だけ。 */
+  :root{ --cream:var(--txt); --gold2:#f5d16b; --ok:#7fc9a2; }
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+       justify-content:center;padding:26px 22px 40px;text-align:center;gap:16px;overflow-x:hidden}
+  body::before{background:radial-gradient(60% 42% at 50% -6%, rgba(212,175,55,.18), transparent 70%),
+                          radial-gradient(50% 34% at 50% 108%, rgba(127,201,162,.07), transparent 70%)}
+  /* brand */
+  .brand{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .brand .mark{width:26px;height:26px;border-radius:50%;
+       background:conic-gradient(from 200deg,var(--gold) 0 50%,var(--moon) 50% 100%);box-shadow:0 0 22px rgba(212,175,55,.4)}
+  h1{font-family:var(--serif);font-size:1.35rem;letter-spacing:.32em;color:var(--gold);font-weight:700;text-indent:.32em;line-height:1}
+  .tag{font-size:.7rem;letter-spacing:.12em;color:var(--dim)}
+  /* zone orb: ゾーン(または距離)を宿す。待機中はゆっくり呼吸 */
+  .zonelabel{font-size:.66rem;letter-spacing:.18em;color:var(--dim)}
+  .orb{position:relative;width:160px;height:160px;display:flex;align-items:center;justify-content:center;margin:-4px 0 0}
   .orb::before{content:"";position:absolute;inset:0;border-radius:50%;
-       background:conic-gradient(from 210deg, rgba(212,175,55,.55), rgba(212,175,55,.06) 40%,
-                  rgba(212,175,55,.30) 68%, rgba(212,175,55,.55));
+       background:conic-gradient(from 210deg, rgba(212,175,55,.55), rgba(212,175,55,.06) 40%, rgba(212,175,55,.30) 68%, rgba(212,175,55,.55));
        -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
        mask:radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px))}
   .orb::after{content:"";position:absolute;inset:14px;border-radius:50%;
        background:radial-gradient(circle at 34% 30%, rgba(212,175,55,.20), rgba(212,175,55,.045) 58%, transparent 75%);
        box-shadow:0 0 44px rgba(212,175,55,.13) inset}
-  .zone{position:relative;font-family:var(--serif);font-size:3.4rem;font-weight:700;line-height:1;
-       background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;
-       background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.02em;
-       filter:drop-shadow(0 0 18px rgba(212,175,55,.35))}
+  .zone{position:relative;font-family:var(--serif);font-size:3.6rem;font-weight:700;line-height:1;
+       background:linear-gradient(135deg,var(--gold),var(--gold2));-webkit-background-clip:text;background-clip:text;
+       -webkit-text-fill-color:transparent;letter-spacing:.02em;filter:drop-shadow(0 0 18px rgba(212,175,55,.35))}
   @media (prefers-reduced-motion:no-preference){
     .orb{animation:breathe 5.2s ease-in-out infinite}
     @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
     body.live .orb{animation-duration:2.6s}
   }
-  .picker{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;max-width:340px}
+  /* zone picker: 旗のようなチップ。選択中は金 */
+  .picker{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:100%}
+  body.live{padding-bottom:120px}   /* NOW PLAYING カードのぶん */
   .picker button{display:flex;width:46px;height:46px;align-items:center;justify-content:center;
-       border-radius:50%;border:1px solid rgba(212,175,55,.28);color:var(--gold);
-       background:rgba(212,175,55,.04);font-weight:700;font-size:1rem;cursor:pointer;
-       min-width:0;padding:0;font-family:var(--serif);
+       border-radius:14px;border:1px solid rgba(212,175,55,.28);color:var(--gold);
+       background:rgba(212,175,55,.05);font-weight:700;font-size:1.15rem;cursor:pointer;padding:0;font-family:var(--serif);
        transition:transform .12s ease, background .2s, box-shadow .2s}
-  .picker button:active{transform:scale(.9)}
-  .picker button.on{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);
-       border-color:transparent;box-shadow:0 2px 18px rgba(212,175,55,.4)}
-  .main{appearance:none;border:none;border-radius:99px;padding:19px 52px;font-size:1.08rem;
-       font-weight:700;cursor:pointer;background:linear-gradient(135deg,var(--gold),var(--gold2));
-       color:var(--ink);min-width:250px;font-family:var(--sans);letter-spacing:.06em;
-       box-shadow:0 6px 30px rgba(212,175,55,.28), inset 0 1px 0 rgba(255,255,255,.35);
-       transition:transform .12s ease, box-shadow .2s}
+  .picker button:active{transform:scale(.92)}
+  .picker button.on{background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);border-color:transparent;
+       box-shadow:0 4px 20px rgba(212,175,55,.42)}
+  /* the one action */
+  .main{appearance:none;border:none;border-radius:99px;padding:20px 54px;font-size:1.12rem;font-weight:700;cursor:pointer;
+       background:linear-gradient(135deg,var(--gold),var(--gold2));color:var(--ink);min-width:270px;font-family:var(--sans);letter-spacing:.06em;
+       box-shadow:0 8px 34px rgba(212,175,55,.3), inset 0 1px 0 rgba(255,255,255,.35);transition:transform .12s ease, box-shadow .2s}
   .main:active{transform:scale(.965)}
-  .main.stop{background:rgba(255,90,90,.14);color:#ff9d9d;box-shadow:none;
-       border:1px solid rgba(255,90,90,.3)}
-  .grid{display:grid;grid-template-columns:auto auto;gap:5px 18px;font-size:.72rem;
-       color:var(--dim);font-variant-numeric:tabular-nums;font-family:var(--mono);text-align:left}
-  .grid b{color:var(--cream);font-weight:600;text-align:right}
-  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#4a413c;margin-right:6px;
-       transition:background .3s}
+  .main.stop{background:transparent;color:#ff9d9d;box-shadow:none;border:1px solid rgba(255,90,90,.35);font-weight:500;padding:14px 32px;font-size:.95rem;min-width:0}
+  /* status chip: 感情で伝える */
+  .statusrow{display:inline-flex;align-items:center;gap:9px;font-size:.86rem;color:var(--dim);padding:8px 16px;border-radius:999px;
+       border:1px solid var(--line);background:rgba(255,255,255,.02)}
+  .statusrow b{color:var(--cream);font-weight:600}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#4a413c;transition:background .3s}
   .dot.live{background:var(--ok);box-shadow:0 0 12px var(--ok)}
-  @media (prefers-reduced-motion:no-preference){
-    .dot.live{animation:pulse 2.2s ease-in-out infinite}
-    @keyframes pulse{50%{opacity:.5}}
-  }
-  .hint{font-size:.67rem;color:rgba(244,232,208,.34);max-width:310px;line-height:1.85}
-  .vol{display:flex;align-items:center;gap:12px;font-size:.75rem;color:var(--dim)}
+  @media (prefers-reduced-motion:no-preference){ .dot.live{animation:pulse 2.2s ease-in-out infinite} @keyframes pulse{50%{opacity:.5}} }
+  .vol{display:flex;align-items:center;gap:12px;font-size:.8rem;color:var(--dim)}
   input[type=range]{-webkit-appearance:none;appearance:none;width:210px;height:3px;border-radius:2px;
        background:linear-gradient(90deg, rgba(212,175,55,.5), rgba(212,175,55,.15));outline:none}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;
-       border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--gold2));
-       box-shadow:0 1px 8px rgba(212,175,55,.5);cursor:pointer}
-  details{transition:opacity .2s}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;
+       background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 1px 8px rgba(212,175,55,.5);cursor:pointer}
+  /* details fold */
+  details.s-fold{width:min(100%,360px);text-align:left;background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
+  details.s-fold>summary{text-align:center;letter-spacing:.14em;font-size:.72rem}
   summary::-webkit-details-marker{display:none}
-  summary{letter-spacing:.14em}
-  /* SOLUNAモード: 全画面カラーレイヤー(音と同じクロックで色が同期) */
-  #imageLayer{position:fixed;inset:0;z-index:98;display:none;background:#000 center/contain no-repeat}
-  #imageLayer.on{display:block}
-  #nowPlaying{position:fixed;left:0;right:0;bottom:14px;z-index:120;text-align:center;pointer-events:none;
-    font-family:"Zen Kaku Gothic New",sans-serif;text-shadow:0 1px 8px #000}
-  #nowPlaying small{display:block;font-size:.6rem;letter-spacing:.3em;color:#d4af37}
-  #nowPlaying b{display:block;font-size:1.1rem;color:#f4e8d0}
-  #nowPlaying span{font-size:.85rem;color:#c9b99a}
-  #muteBanner{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:130;background:#4a1010;color:#fff;
-    padding:6px 14px;border-radius:999px;font-size:.85rem}
-  @media (prefers-reduced-motion: reduce){ #lightLayer{transition:none} }
-  #lightLayer{position:fixed;inset:0;z-index:99;display:none;background:#000;
-       transition:none;touch-action:manipulation}
+  .grid{display:grid;grid-template-columns:auto 1fr;gap:7px 16px;font-size:.74rem;color:var(--dim);font-family:var(--mono);font-variant-numeric:tabular-nums;padding:6px 0 10px}
+  .grid b{color:var(--cream);font-weight:600;text-align:right}
+  .grid input[type=range]{width:100px;vertical-align:middle}
+  /* hints: 1行ずつ・アイコン付き */
+  .hints{display:flex;flex-direction:column;gap:6px;max-width:340px}
+  .hint{font-size:.7rem;color:rgba(242,231,211,.5);line-height:1.7}
+  .hint.privacy{font-size:.62rem;color:rgba(242,231,211,.34);margin-top:6px}
+  #gateHint{font-size:.86rem;color:var(--gold);font-weight:600;border:1px solid rgba(212,175,55,.35);background:rgba(212,175,55,.08);
+       border-radius:14px;padding:12px 16px;max-width:360px;line-height:1.6}
+  #netHint{font-size:.74rem;color:var(--moon);border:1px solid rgba(200,211,230,.25);border-radius:12px;padding:8px 14px;max-width:360px}
+  /* overlays */
+  #imageLayer{position:fixed;inset:0;z-index:98;display:none;background:#000 center/contain no-repeat;opacity:0;transition:opacity .6s}
+  #imageLayer.on{display:block;animation:fadein .6s forwards} @keyframes fadein{to{opacity:1}}
+  #nowPlaying{position:fixed;left:14px;right:14px;bottom:16px;z-index:120;text-align:center;pointer-events:none;
+       padding:12px 18px;border-radius:18px;background:rgba(10,5,7,.72);border:1px solid rgba(212,175,55,.28);backdrop-filter:blur(10px)}
+  #nowPlaying small{display:block;font-size:.58rem;letter-spacing:.3em;color:var(--gold);font-family:var(--mono)}
+  #nowPlaying b{display:block;font-family:var(--serif);font-size:1.25rem;color:var(--cream);margin-top:2px;font-weight:700}
+  #nowPlaying span{font-size:.82rem;color:var(--dim)}
+  #muteBanner{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:130;background:rgba(60,18,18,.9);color:#ffd6d6;
+       border:1px solid rgba(255,120,120,.35);padding:7px 16px;border-radius:999px;font-size:.82rem;backdrop-filter:blur(8px)}
+  #lightLayer{position:fixed;inset:0;z-index:99;display:none;background:#000;transition:none;touch-action:manipulation}
   #lightLayer.on{display:block}
-  /* 動画CUE: ライトの下のレイヤー。スクリーンモードではcoverで満たす */
-  #videoLayer{position:fixed;inset:0;z-index:98;display:none;width:100%;height:100%;
-       background:#000;object-fit:contain}
+  #videoLayer{position:fixed;inset:0;z-index:98;display:none;width:100%;height:100%;background:#000;object-fit:contain}
   #videoLayer.on{display:block}
   body.screen #videoLayer{object-fit:cover}
-  #vHint{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:101;
-       display:none;background:rgba(10,5,7,.75);border:1px solid rgba(212,175,55,.4);
-       border-radius:99px;padding:10px 20px;font-size:.85rem;color:#f4e8d0}
+  #vHint{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:101;display:none;background:rgba(10,5,7,.75);
+       border:1px solid rgba(212,175,55,.4);border-radius:99px;padding:10px 20px;font-size:.85rem;color:var(--cream)}
   #vHint.show{display:block}
-  /* スクリーンモード(/screen): プロジェクター/LEDウォール向け。UIを消し黒に徹する */
+  /* screen mode (/screen): UIを消し黒に徹する */
   body.screen{cursor:none}
-  body.screen.started .orb, body.screen.started .picker, body.screen.started .vol,
-  body.screen.started details, body.screen.started .hint, body.screen.started h1,
-  body.screen.started .zonelabel, body.screen.started .main{display:none}
+  body.screen.started .brand, body.screen.started .orb, body.screen.started .picker, body.screen.started .vol,
+  body.screen.started details, body.screen.started .hints, body.screen.started .zonelabel, body.screen.started .main,
+  body.screen.started .statusrow, body.screen.started #gateHint, body.screen.started #netHint{display:none}
   body.screen .main{min-width:300px;padding:24px 60px;font-size:1.25rem}
-  #lightHud{position:fixed;left:0;right:0;bottom:34px;z-index:100;display:none;
-       text-align:center;pointer-events:none}
+  #lightHud{position:fixed;left:0;right:0;bottom:34px;z-index:100;display:none;text-align:center;pointer-events:none}
   #lightHud.show{display:block}
-  #lightHud .chip{display:inline-flex;gap:14px;align-items:center;pointer-events:auto;
-       background:rgba(10,5,7,.72);border:1px solid rgba(212,175,55,.35);border-radius:99px;
-       padding:10px 18px;font-size:.85rem;color:#f4e8d0;backdrop-filter:blur(8px)}
-  #lightHud b{color:#d4af37;font-weight:900;font-size:1.05rem}
-  #lightExit{pointer-events:auto;border:none;background:rgba(255,80,80,.25);color:#ff8a8a;
-       border-radius:99px;padding:8px 16px;font-weight:800;font-size:.8rem}
-  /* 省電力: 触らずに一定時間たつと真っ黒に(OLEDで消費が最小・ロックしなくて済む) */
-  #dim{position:fixed;inset:0;background:#000;z-index:90;display:none;align-items:center;
-       justify-content:center;color:rgba(212,175,55,.35);font-size:.9rem;letter-spacing:.2em;text-align:center}
+  #lightHud .chip{display:inline-flex;gap:14px;align-items:center;pointer-events:auto;background:rgba(10,5,7,.72);
+       border:1px solid rgba(212,175,55,.35);border-radius:99px;padding:10px 18px;font-size:.85rem;color:var(--cream);backdrop-filter:blur(8px)}
+  #lightHud b{color:var(--gold);font-weight:900;font-size:1.05rem}
+  #lightExit{pointer-events:auto;border:none;background:rgba(255,80,80,.25);color:#ff8a8a;border-radius:99px;padding:8px 16px;font-weight:800;font-size:.8rem}
+  /* 省電力の暗転 */
+  #dim{position:fixed;inset:0;background:#000;z-index:90;display:none;align-items:center;justify-content:center;
+       color:rgba(212,175,55,.35);font-size:.9rem;letter-spacing:.2em;text-align:center}
   #dim.on{display:flex}
-  #dim small{display:block;margin-top:8px;font-size:.7rem;letter-spacing:.1em;color:rgba(244,232,208,.3)}
+  #dim small{display:block;margin-top:8px;font-size:.7rem;letter-spacing:.1em;color:rgba(242,231,211,.3)}
+  @media (max-height:700px){ .orb{width:132px;height:132px} .zone{font-size:3rem} body{gap:12px} }
 </style>
 </head>
 <body>
-  <h1>SOLUNA · SOUND</h1>
+  <div class="brand"><div class="mark"></div><h1>SOLUNA · SOUND</h1><div class="tag">あなたのスマホが、会場のスピーカーになる</div></div>
+  <div class="hint" id="gateHint" hidden></div>
   <div class="zonelabel" data-i18n="zoneLabel">あなたのゾーン(近くの旗の色/記号)</div>
   <div class="orb"><div class="zone" id="zoneBig">A</div></div>
   <div class="picker" id="picker"></div>
-  <button class="main" id="btn">▶ 音に参加する</button>
+  <button class="main" id="btn">▶ 参加する</button>
+  <div class="statusrow"><span class="dot" id="dot"></span><b id="st">停止中</b></div>
+  <div id="netHint" hidden></div>
   <div class="vol">🔉 <input type="range" id="vol" min="0" max="100" value="80"> 🔊</div>
-  <div style="display:flex;align-items:center;gap:8px;font-size:.78rem;color:rgba(244,232,208,.6)">
-    <span class="dot" id="dot"></span><b id="st" style="color:#f4e8d0">停止中</b>
-  </div>
-  <details style="font-size:.72rem;color:rgba(244,232,208,.45)">
-    <summary style="cursor:pointer;list-style:none" data-i18n="details">詳細</summary>
-    <div class="grid" style="margin-top:8px">
+  <details class="s-fold">
+    <summary data-i18n="details">詳細</summary>
+    <div class="grid">
       <span data-i18n="zoneDelay">ゾーン遅延</span><b id="dly">—</b>
       <span data-i18n="clock">同期精度</span><b id="off">—</b>
       <span>RTT</span><b id="rtt">—</b>
@@ -150,20 +142,18 @@
       <span data-i18n="geoL">ステージ距離</span><b id="geo">—</b>
       <span data-i18n="liveL">ライブ受信</span><b id="fr">0</b>
       <span data-i18n="trimL">微調整(耳合わせ)</span>
-      <b><input type="range" id="trim" min="-50" max="50" step="1" value="0"
-           style="width:110px;vertical-align:middle"> <span id="trimV">0ms</span></b>
+      <b><input type="range" id="trim" min="-50" max="50" step="1" value="0"> <span id="trimV">0ms</span></b>
       <span data-i18n="gainL">音量補正(機種差)</span>
-      <b><input type="range" id="gdb" min="-12" max="12" step="1" value="0"
-           style="width:110px;vertical-align:middle"> <span id="gdbV">0dB</span></b>
+      <b><input type="range" id="gdb" min="-12" max="12" step="1" value="0"> <span id="gdbV">0dB</span></b>
       <span data-i18n="batL">電池</span><b id="bat">—</b>
     </div>
   </details>
-  <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
-  <div class="hint" id="gateHint" hidden style="color:var(--gold,#d4af37);font-weight:600"></div>
-  <div class="hint" id="netHint" hidden></div>
-  <div class="hint" data-i18n="hint2">音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。</div>
-  <div class="hint" data-i18n="hint3">画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。</div>
-  <div class="hint" data-i18n="privacy" style="opacity:.7">位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。</div>
+  <div class="hints">
+    <div class="hint" data-i18n="hint">🚩 近くの旗と同じゾーンを選ぶと、会場全体で音がそろいます。画面はつけたままで。</div>
+    <div class="hint" data-i18n="hint2">🔈 音が出ない時: iPhoneはサイレントスイッチをOFF・音量を上げて。</div>
+    <div class="hint" data-i18n="hint3">🔋 画面ロックで音は止まります。触らなければ自動で暗くなり電池を節約します。</div>
+    <div class="hint privacy" data-i18n="privacy">位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。</div>
+  </div>
   <div id="dim"><div id="dimTxt">SOLUNA · SOUND<br><small data-i18n="dimTap">タップで表示</small></div></div>
 
   <video id="videoLayer" playsinline webkit-playsinline preload="auto"></video>
@@ -185,12 +175,12 @@ const $ = id => document.getElementById(id);
 const I18N = {
   ja: { zoneLabel:'あなたのゾーン(近くの旗の色/記号)', status:'状態', zoneDelay:'ゾーン遅延',
         clock:'同期精度', cueL:'キュー', liveL:'ライブ受信',
-        hint:'近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。',
-        join:'▶ 音に参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
+        hint:'🚩 近くの旗と同じゾーンを選ぶと、会場全体で音がそろいます。画面はつけたままで。',
+        join:'▶ 参加する', leave:'■ 抜ける', idle:'停止中', conn:'接続中',
         ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細',
         autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離', trimL:'微調整(耳合わせ)',
-        preloaded:'準備OK', hint2:'音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。',
-        hint3:'画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。',
+        preloaded:'準備OK', hint2:'🔈 音が出ない時: iPhoneはサイレントスイッチをOFF・音量を上げて。',
+        hint3:'🔋 画面ロックで音は止まります。触らなければ自動で暗くなり電池を節約します。',
         npL:'NOW PLAYING', muted:'FOHにより一時ミュート中', gatePrep:'🎫 音の準備中… このまま数秒お待ちください', gateOk:'🎫 準備OK。会場に入ったら ▶ を押してください(通信なしで鳴ります)',
         gateNone:'🎫 まだ配布前です。会場で ▶ を押せば自動で受け取ります', gateFail:'🎫 準備に失敗しました。会場で ▶ を押せばその場で受け取ります',
         netWifi:'📶 このゾーンは会場Wi-Fi「{ssid}」に接続すると同期が良くなります', netLte:'📶 このゾーンはモバイル回線のままでOK(会場Wi-Fiは前方ゾーン専用)',
@@ -199,12 +189,12 @@ const I18N = {
         waiting:'つながっています — 音を待っています', playing:'♪ 再生中' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
-        hint:'Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
-        join:'▶ JOIN THE SOUND', leave:'■ LEAVE', idle:'idle', conn:'connected',
+        hint:'🚩 Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
+        join:'▶ JOIN', leave:'■ LEAVE', idle:'idle', conn:'connected',
         ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details',
         autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST', trimL:'FINE TRIM',
-        preloaded:'ready', hint2:'No sound? On iPhone, flip the silent switch off and turn the volume up.',
-        hint3:'Locking the screen stops the sound (browser limitation). The screen dims by itself when idle to save battery.',
+        preloaded:'ready', hint2:'🔈 No sound? On iPhone, flip the silent switch off and turn the volume up.',
+        hint3:'🔋 Locking the screen stops the sound (browser limitation). It dims by itself when idle to save battery.',
         npL:'NOW PLAYING', muted:'Muted by FOH for a moment', gatePrep:'🎫 Getting the sound ready… a few seconds', gateOk:'🎫 Ready. Once inside, tap ▶ (plays without downloading)',
         gateNone:'🎫 Nothing to prepare yet — tap ▶ inside and it arrives by itself', gateFail:'🎫 Preparation failed — tap ▶ inside and it downloads there',
         netWifi:'📶 In this zone, join venue Wi-Fi "{ssid}" for tighter sync', netLte:'📶 In this zone, stay on mobile data (venue Wi-Fi is for the front zones)',
