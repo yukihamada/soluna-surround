@@ -10,6 +10,12 @@ primary_region = "lax"
   auto_start_machines = true
   min_machines_running = 1
 
+  # 1万台のWSを受ける: 既定(数百)のままだとプロキシが接続を弾く
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 12000
+    hard_limit = 20000
+
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  size = "shared-cpu-2x"
+  memory = "1gb"
