@@ -21,7 +21,7 @@ for f in "$DIR"/*; do
   esac
   echo "→ $BUCKET/$name ($ct)"
   "$WR" r2 object put "$BUCKET/$name" --file "$f" --content-type "$ct" \
-        --cache-control "public, max-age=86400" >/dev/null
+        --cache-control "public, max-age=86400" --remote >/dev/null   # --remote: wrangler v4 defaults to a LOCAL bucket
   n=$((n+1))
 done
 echo "synced $n file(s) to r2://$BUCKET"
