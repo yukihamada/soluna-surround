@@ -42,6 +42,7 @@ import struct
 import time
 import os
 from aiohttp import web, WSMsgType
+import showctl          # OSC in / timecode / Art-Net・sACN out(依存ゼロ)
 
 SR = 48000
 # live mode: schedule this far ahead of "now"。既存ハウスPAとの融合時は
@@ -102,12 +103,13 @@ def _chan(name):
         "show": None,             # セットリスト [{label,url,video,light},...]
         "show_i": -1,             # 進行位置(次のNEXTで show_i+1 を発火)
         "net": None,              # 回線案内 {"ssid","wifi_zones":[..]} 前方=会場Wi-Fi/後方=LTE
+        "tc": None,               # タイムコード基準 {"epoch","frames","fps","drop","tc"}(cue を tc で指定)
     })
 
 
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
-            "geo", "preload", "show", "show_i", "net")
+            "geo", "preload", "show", "show_i", "net", "tc")
 
 
 def _save_state():
@@ -319,24 +321,37 @@ async def _fanout(name, state, data: bytes):
 
 # ---- admin API -------------------------------------------------------------
 
-async def api_cue(request):
-    if not _admin_ok(request):
-        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
-    name = request.query.get("ch", "festival")
-    state = _chan(name)
-    body = await request.json()
+class BadRequest(ValueError):
+    """HTTP 400 / OSC ログ行 に共通で使う入力エラー。"""
 
+
+def _cue_at(state, body):
+    """cue の発火時刻: at(epoch秒) > tc(番組タイムコード) > lead(秒後)。"""
+    if body.get("at"):                       # サーバepoch秒を直接指定
+        return float(body["at"])
+    if body.get("tc"):                       # 番組タイムコードで指定(/api/timecode で基準を教えてあること)
+        anchor = state.get("tc")
+        if not anchor:
+            raise BadRequest("tc given but no timecode anchor: POST /api/timecode first")
+        try:
+            return showctl.tc_epoch(anchor, str(body["tc"]))
+        except ValueError as e:
+            raise BadRequest(str(e))
+    return now() + float(body.get("lead") or CUE_LEAD)
+
+
+async def do_cue(state, body: dict) -> dict:
+    """POST /api/cue と OSC /soluna/cue が共有する本体。"""
     if body.get("stop"):
         state["cue"] = None
         _save_state()
         await _broadcast_text(state, json.dumps({"t": "cue_stop"}))
-        return web.json_response({"ok": True, "stopped": True,
-                                  "listeners": len(state["listeners"])})
+        return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
 
     url = body.get("url")            # 音声(WebAudio=サンプル精度)
     video = body.get("video")        # 映像(video要素=クロックにドリフト補正で追従)
     if not url and not video:
-        raise web.HTTPBadRequest(text="url (audio) and/or video required")
+        raise BadRequest("url (audio) and/or video required")
 
     if body.get("preload"):
         url = url or video
@@ -345,12 +360,8 @@ async def api_cue(request):
         state["preload"] = url
         _save_state()
         await _broadcast_text(state, json.dumps({"t": "preload", "url": url}))
-        return web.json_response({"ok": True, "preloaded": url,
-                                  "listeners": len(state["listeners"])})
-    if body.get("at"):                       # サーバepoch秒を直接指定
-        at = float(body["at"])
-    else:                                    # lead秒後(サーバ時計基準・推奨)
-        at = now() + float(body.get("lead") or CUE_LEAD)
+        return {"ok": True, "preloaded": url, "listeners": len(state["listeners"])}
+    at = _cue_at(state, body)
     cue = {
         "id": body.get("id") or f"cue-{int(at * 1000)}",
         "at": at,                                # server-epoch seconds (sample 0)
@@ -366,8 +377,54 @@ async def api_cue(request):
     state["cue"] = cue
     _save_state()
     await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
-    return web.json_response({"ok": True, "cue": cue,
-                              "listeners": len(state["listeners"])})
+    return {"ok": True, "cue": cue, "listeners": len(state["listeners"])}
+
+
+def _admin_state(request):
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    return _chan(request.query.get("ch", "festival"))
+
+
+async def api_cue(request):
+    state = _admin_state(request)
+    try:
+        return web.json_response(await do_cue(state, await request.json()))
+    except BadRequest as e:
+        raise web.HTTPBadRequest(text=str(e))
+
+
+LIGHT_PATTERNS = ("solid", "pulse", "beat", "wave", "plasma", "strobe", "audio")
+
+
+def _light_from(body: dict, id_prefix="light") -> dict:
+    pattern = body.get("pattern", "pulse")
+    if pattern not in LIGHT_PATTERNS:
+        raise BadRequest("pattern must be one of " + "|".join(LIGHT_PATTERNS))
+    return {
+        "id": body.get("id") or f"{id_prefix}-{int(now() * 1000)}",
+        "pattern": pattern,
+        "colors": body.get("colors") or ["#d4af37", "#7fc9a2"],
+        "bpm": float(body.get("bpm", 120)),
+        "speed": float(body.get("speed", 1.0)),
+        "brightness": float(body.get("brightness", 1.0)),
+        "at": float(body.get("at") or now()),   # パターン位相の基準時刻
+    }
+
+
+async def do_light(state, body: dict) -> dict:
+    """POST /api/light と OSC /soluna/light が共有する本体。DMX 出力は state["light"] を
+    40Hz で読む showctl.DmxOut が拾うので、ここでは状態更新+配信だけ。"""
+    if body.get("stop"):
+        state["light"] = None
+        _save_state()
+        await _broadcast_text(state, json.dumps({"t": "light_stop"}))
+        return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
+    light = _light_from(body)
+    state["light"] = light
+    _save_state()
+    await _broadcast_text(state, json.dumps({"t": "light", **light}))
+    return {"ok": True, "light": light, "listeners": len(state["listeners"])}
 
 
 async def api_light(request):
@@ -378,55 +435,20 @@ async def api_light(request):
            colors: ["#rrggbb", ...], bpm, speed, brightness, at?} or {stop:true}
     pattern=audio は再生中キューの音源から端末側がエネルギー包絡を解析して
     明るさに変換する(追加通信なし)。"""
-    if not _admin_ok(request):
-        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
-    name = request.query.get("ch", "festival")
-    state = _chan(name)
-    body = await request.json()
-
-    if body.get("stop"):
-        state["light"] = None
-        _save_state()
-        await _broadcast_text(state, json.dumps({"t": "light_stop"}))
-        return web.json_response({"ok": True, "stopped": True,
-                                  "listeners": len(state["listeners"])})
-
-    pattern = body.get("pattern", "pulse")
-    if pattern not in ("solid", "pulse", "beat", "wave", "plasma", "strobe", "audio"):
-        raise web.HTTPBadRequest(text="pattern must be one of "
-                                      "solid|pulse|beat|wave|plasma|strobe|audio")
-    light = {
-        "id": body.get("id") or f"light-{int(now() * 1000)}",
-        "pattern": pattern,
-        "colors": body.get("colors") or ["#d4af37", "#7fc9a2"],
-        "bpm": float(body.get("bpm", 120)),
-        "speed": float(body.get("speed", 1.0)),
-        "brightness": float(body.get("brightness", 1.0)),
-        "at": float(body.get("at") or now()),   # パターン位相の基準時刻
-    }
-    state["light"] = light
-    _save_state()
-    await _broadcast_text(state, json.dumps({"t": "light", **light}))
-    return web.json_response({"ok": True, "light": light,
-                              "listeners": len(state["listeners"])})
+    state = _admin_state(request)
+    try:
+        return web.json_response(await do_light(state, await request.json()))
+    except BadRequest as e:
+        raise web.HTTPBadRequest(text=str(e))
 
 
-async def api_show(request):
-    """ショーランナー: 一晩のセットリストを組み、NEXTボタンだけで進行する。
-    各ステップ = 音(url) + 映像(video) + ライト(light) の束を1つの同期瞬間として発火。
-    body: {steps:[{label,url?,video?,gain?,loop?,lead?,light:{pattern,colors,bpm,...}?}]}
-        | {next:true} | {goto:<1始まりの番号>} | {reset:true}"""
-    if not _admin_ok(request):
-        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
-    name = request.query.get("ch", "festival")
-    state = _chan(name)
-    body = await request.json()
-
+async def do_show(state, body: dict) -> dict:
+    """POST /api/show と OSC /soluna/go, /soluna/show/goto が共有する本体。"""
     if body.get("steps") is not None:
         steps = []
         for raw in body["steps"]:
             step: dict = {"label": str(raw.get("label") or f"step{len(steps)+1}")[:60]}
-            for k in ("url", "video"):
+            for k in ("url", "video", "tc"):
                 if raw.get(k):
                     step[k] = str(raw[k])
             for k in ("gain", "lead"):
@@ -440,29 +462,28 @@ async def api_show(request):
         state["show"] = steps
         state["show_i"] = -1
         _save_state()
-        return web.json_response({"ok": True, "steps": len(steps)})
+        return {"ok": True, "steps": len(steps)}
 
     if body.get("reset"):
         state["show_i"] = -1
         _save_state()
-        return web.json_response({"ok": True, "i": 0})
+        return {"ok": True, "i": 0}
 
     if body.get("goto") is not None:
         state["show_i"] = int(body["goto"]) - 2   # 次のNEXTで goto 番を発火
         _save_state()
-        return web.json_response({"ok": True, "next": int(body["goto"])})
+        return {"ok": True, "next": int(body["goto"])}
 
     if body.get("next"):
         show = state.get("show") or []
         i = state.get("show_i", -1) + 1
         if i >= len(show):
-            return web.json_response({"ok": False, "done": True,
-                                      "total": len(show)})
+            return {"ok": False, "done": True, "total": len(show)}
         step = show[i]
         state["show_i"] = i
         fired = {"i": i + 1, "total": len(show), "label": step["label"]}
         if step.get("url") or step.get("video"):
-            at = now() + float(step.get("lead") or CUE_LEAD)
+            at = _cue_at(state, step)             # lead / tc(番組タイムコード) どちらでも
             cue = {"id": f"show{i+1}-{step['label']}", "at": at,
                    "gain": float(step.get("gain", 1.0)),
                    "loop": bool(step.get("loop", False))}
@@ -474,21 +495,27 @@ async def api_show(request):
             await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
             fired["cue"] = cue["id"]
         if step.get("light"):
-            lr = step["light"]
-            light = {"id": f"showlight{i+1}",
-                     "pattern": lr.get("pattern", "pulse"),
-                     "colors": lr.get("colors") or ["#d4af37", "#7fc9a2"],
-                     "bpm": float(lr.get("bpm", 120)),
-                     "speed": float(lr.get("speed", 1.0)),
-                     "brightness": float(lr.get("brightness", 1.0)),
-                     "at": now()}
+            light = _light_from(dict(step["light"], at=None), id_prefix=f"showlight{i+1}")
+            light["id"] = f"showlight{i+1}"
             state["light"] = light
             await _broadcast_text(state, json.dumps({"t": "light", **light}))
             fired["light"] = light["pattern"]
         _save_state()
-        return web.json_response({"ok": True, **fired})
+        return {"ok": True, **fired}
 
-    raise web.HTTPBadRequest(text='{"steps":[...]} | {"next":true} | {"goto":n} | {"reset":true}')
+    raise BadRequest('{"steps":[...]} | {"next":true} | {"goto":n} | {"reset":true}')
+
+
+async def api_show(request):
+    """ショーランナー: 一晩のセットリストを組み、NEXTボタンだけで進行する。
+    各ステップ = 音(url) + 映像(video) + ライト(light) の束を1つの同期瞬間として発火。
+    body: {steps:[{label,url?,video?,gain?,loop?,lead?|tc?,light:{pattern,colors,bpm,...}?}]}
+        | {next:true} | {goto:<1始まりの番号>} | {reset:true}"""
+    state = _admin_state(request)
+    try:
+        return web.json_response(await do_show(state, await request.json()))
+    except BadRequest as e:
+        raise web.HTTPBadRequest(text=str(e))
 
 
 async def flags_page(request):
@@ -575,20 +602,50 @@ async def api_geo(request):
                               "listeners": len(state["listeners"])})
 
 
+async def do_align(state, base_ms: float) -> dict:
+    state["base_ms"] = float(base_ms)
+    _save_state()
+    await _broadcast_text(state, _config_msg(state))
+    return {"ok": True, "base_ms": state["base_ms"], "listeners": len(state["listeners"])}
+
+
 async def api_align(request):
     """既存ハウスPAとの位相合わせ: 全ゾーン一括トリム(ms, 負値=早める方向)。
     サウンドチェックでクリックをハウスPA+グリッド同時に鳴らし、フラム感が
     消えるまで ±5ms 刻みで追い込む。"""
-    if not _admin_ok(request):
-        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
-    name = request.query.get("ch", "festival")
-    state = _chan(name)
+    state = _admin_state(request)
     body = await request.json()
-    state["base_ms"] = float(body.get("base_ms", 0.0))
+    return web.json_response(await do_align(state, body.get("base_ms", 0.0)))
+
+
+def do_timecode(state, tc: str, fps: float = 30, drop=None, epoch=None) -> dict:
+    """「今(epoch)この瞬間の番組タイムコードは tc」を基準として保存。以後 cue の
+    {"tc":"01:00:10:00"} が epoch に変換できる。LTC(ltc.py)や OSC /soluna/tc から毎秒来てよい
+    (毎回上書き=再生卓のドリフトに追従)。"""
+    anchor = showctl.tc_anchor(str(tc), float(fps or 30), epoch if epoch is not None else now(), drop)
+    state["tc"] = anchor
     _save_state()
-    await _broadcast_text(state, _config_msg(state))
-    return web.json_response({"ok": True, "base_ms": state["base_ms"],
-                              "listeners": len(state["listeners"])})
+    return {"ok": True, "tc": anchor}
+
+
+async def api_timecode(request):
+    """POST {"tc":"01:00:00:00","fps":30} (;FF または fps=29.97 でドロップフレーム)。
+    GET → 現在の基準と、いまの番組タイムコード(推定)。"""
+    state = _admin_state(request)
+    if request.method == "GET":
+        anchor = state.get("tc")
+        cur = None
+        if anchor:
+            frames = anchor["frames"] + int((now() - anchor["epoch"])
+                                            * showctl.tc_rate(anchor["fps"], anchor.get("drop"))[0])
+            cur = showctl.frames_to_tc(frames, anchor["fps"], anchor.get("drop"))
+        return web.json_response({"ok": True, "tc": anchor, "now_tc": cur})
+    body = await request.json()
+    try:
+        return web.json_response(do_timecode(state, body.get("tc"), body.get("fps", 30),
+                                             body.get("drop"), body.get("epoch")))
+    except (ValueError, TypeError) as e:
+        raise web.HTTPBadRequest(text=f'{{"tc":"HH:MM:SS:FF","fps":30}} — {e}')
 
 
 async def api_preload(request):
@@ -786,6 +843,7 @@ async def status(request):
             "cue": st["cue"],
             "light": st["light"],
             "geo": st["geo"],
+            "tc": st.get("tc"),
             "show": {"i": st.get("show_i", -1) + 1,
                      "total": len(st.get("show") or []),
                      "next": ((st.get("show") or [])[st.get("show_i", -1) + 1]["label"]
@@ -840,12 +898,85 @@ async def cache_headers(request, handler):
     return resp
 
 
+# ---- show control: OSC in / DMX out ------------------------------------------
+async def osc_dispatch(address, args, at, ch):
+    """OSC アドレス → 内部 API。HTTP と同じ本体(do_*)を呼ぶので挙動は同一。
+    at = バンドルの未来 timetag(あれば cue/light の基準時刻に使う)。認証なし=LANの卓専用。"""
+    state = _chan(ch)
+    a = list(args)
+
+    def f(i, default=None):
+        return float(a[i]) if len(a) > i and a[i] is not None else default
+
+    if address == "/soluna/cue":
+        if not a:
+            raise BadRequest("/soluna/cue <url> [lead] [gain]")
+        body = {"url": str(a[0]), "gain": f(2, 1.0)}
+        if at:
+            body["at"] = at
+        elif f(1) is not None:
+            body["lead"] = f(1)
+        return await do_cue(state, body)
+    if address == "/soluna/preload":
+        return await do_cue(state, {"url": str(a[0]), "preload": True})
+    if address == "/soluna/stop":
+        return await do_cue(state, {"stop": True})
+    if address == "/soluna/go":
+        return await do_show(state, {"next": True})
+    if address == "/soluna/show/goto":
+        return await do_show(state, {"goto": int(a[0])})
+    if address == "/soluna/light":
+        body = {"pattern": str(a[0]) if a else "pulse"}
+        cols = [str(c) for c in a[1:3] if isinstance(c, str)]
+        if cols:
+            body["colors"] = cols
+        if f(3) is not None:
+            body["bpm"] = f(3)
+        if at:
+            body["at"] = at
+        return await do_light(state, body)
+    if address == "/soluna/light/stop":
+        return await do_light(state, {"stop": True})
+    if address == "/soluna/align":
+        return await do_align(state, f(0, 0.0))
+    if address == "/soluna/zone":
+        zones = dict(state["zones"])
+        zones[str(a[0]).upper()] = round(f(1, 0.0), 1)
+        state["zones"] = zones
+        _save_state()
+        await _broadcast_text(state, _config_msg(state))
+        return {"ok": True, "zones": zones}
+    if address == "/soluna/tc":
+        return do_timecode(state, str(a[0]), f(1, 30.0))
+    raise BadRequest(f"unknown OSC address {address} (see showctl.OSC_ADDRESSES)")
+
+
+async def _start_showctl(app):
+    osc_port = int(os.environ.get("SOLUNA_OSC_PORT") or 0)
+    if osc_port:
+        app["osc"] = await showctl.OscServer.start(osc_dispatch, osc_port)
+        print(f"   OSC in: udp/{osc_port}  ({len(showctl.OSC_ADDRESSES)} addresses, no auth — LAN only)")
+    artnet = os.environ.get("SOLUNA_ARTNET") or ""
+    sacn = os.environ.get("SOLUNA_SACN") or ""
+    if artnet or sacn:
+        dmx_ch = os.environ.get("SOLUNA_DMX_CH", "festival")
+        dmx = showctl.DmxOut(lambda: _chan(dmx_ch).get("light"), artnet=artnet, sacn=sacn,
+                             fixtures=int(os.environ.get("SOLUNA_DMX_FIXTURES") or 8),
+                             artnet_port=int(os.environ.get("SOLUNA_ARTNET_PORT") or showctl.ARTNET_PORT),
+                             sacn_port=int(os.environ.get("SOLUNA_SACN_PORT") or showctl.SACN_PORT),
+                             start_ch=int(os.environ.get("SOLUNA_DMX_START") or 1), now=now)
+        app["dmx"] = dmx
+        app["dmx_task"] = asyncio.ensure_future(dmx.run())
+        print(f"   DMX out: {dmx.describe()}  fixtures={dmx.fixtures} (ch {dmx_ch})")
+
+
 def main():
     port = int(os.environ.get("PORT", "8900"))
     os.makedirs(ASSETS, exist_ok=True)
     _load_state()   # クラッシュ/再起動からショー状態を復元
     app = web.Application(client_max_size=256 * 1024 * 1024,   # 映像アップロード対応
                           middlewares=[cache_headers])
+    app.on_startup.append(_start_showctl)
     app.add_routes([
         web.get("/health", health),
         web.get("/api/state", api_state),
@@ -869,6 +1000,8 @@ def main():
         web.post("/api/light", api_light),
         web.post("/api/geo", api_geo),
         web.post("/api/show", api_show),
+        web.get("/api/timecode", api_timecode),
+        web.post("/api/timecode", api_timecode),
         web.get("/flags", flags_page),
         web.get("/api/assets", api_assets),
         web.post("/api/upload", api_upload),
