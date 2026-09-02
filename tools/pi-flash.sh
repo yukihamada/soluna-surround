@@ -82,7 +82,20 @@ users:
   lock_passwd: false
   passwd: "$USER_HASH"
   sudo: ALL=(ALL) NOPASSWD:ALL
+write_files:
+- path: /usr/local/bin/soluna-diag
+  permissions: "0755"
+  content: |
+    #!/bin/bash
+    # Dump network state to the FAT boot partition so it can be read on any laptop.
+    O=/boot/firmware/soluna-diag.txt
+    { date; echo "== nmcli dev"; nmcli dev; echo "== wifi list"; nmcli -f SSID,CHAN,SIGNAL,SECURITY dev wifi list 2>&1 | head -20;
+      echo "== connections"; nmcli -f NAME,TYPE,DEVICE con show 2>&1; echo "== ip"; ip -br a;
+      echo "== rfkill"; rfkill list 2>&1; echo "== NM log"; journalctl -u NetworkManager -b --no-pager 2>&1 | tail -40;
+      echo "== wpa/iwd"; journalctl -b --no-pager 2>&1 | grep -iE "wpa_supplicant|iwd|wlan0" | tail -30;
+      echo "== cloud-init"; cloud-init status --long 2>&1; tail -30 /var/log/cloud-init.log 2>&1; } > "\$O" 2>&1
 runcmd:
+- [ bash, -c, "raspi-config nonint do_wifi_country $WIFI_COUNTRY || true; rfkill unblock wifi || true; sleep 20; /usr/local/bin/soluna-diag" ]
 - [ bash, -c, "for i in \$(seq 1 60); do curl -fsS https://raw.githubusercontent.com >/dev/null 2>&1 && break; sleep 5; done; curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/tools/pi-setup.sh | SERVER='$SERVER' ZONE='$ZONE' POS='$POS' CH='$CH' SUDO_USER=pi bash > /var/log/soluna-install.log 2>&1" ]
 CLOUD
 cat > "$BOOT/network-config" <<NET
@@ -93,12 +106,15 @@ network:
     wlan0:
       dhcp4: true
       optional: true
-      regulatory-domain: "$WIFI_COUNTRY"
       access-points:
         "$WIFI_SSID":
           password: "$PSK_HASH"
 NET
 echo "instance-id: $HOSTNAME-$(date +%s)" > "$BOOT/meta-data"
+# USB gadget mode: plug the Pi's USB-C into a laptop → "RNDIS/Ethernet Gadget" NIC → ssh over USB,
+# no Wi-Fi needed for first contact / diagnosis. (Pi 4/Zero 2W; harmless on others.)
+grep -q "^dtoverlay=dwc2" "$BOOT/config.txt" || printf '\n[all]\ndtoverlay=dwc2,dr_mode=peripheral\n' >> "$BOOT/config.txt"
+grep -q "modules-load=dwc2" "$BOOT/cmdline.txt" || sed -i '' 's|rootwait|rootwait modules-load=dwc2,g_ether|' "$BOOT/cmdline.txt"
 # First-boot installer: waits for network, runs pi-setup.sh once, removes itself.
 cat > "$BOOT/soluna-install.sh" <<SH
 #!/bin/bash
