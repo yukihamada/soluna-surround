@@ -8,7 +8,9 @@
 #   SERVER  ws(s)://host[:port]   sync server (LAN FOH Mac in production, fly.dev for demos)
 #   CH      channel (default festival)      ZONE  zone letter (default A)
 #   POS     L|C|R (default C)               GAIN_DB node level trim (default 0)
-#   DEVICE  sounddevice name/index (default: auto = USB audio if present)
+#   DEVICE  sounddevice name/index (default: auto = USB > GPIO I2S DAC > built-in)
+#   DAC     GPIO I2S DAC overlay to enable in config.txt, e.g. hifiberry-dac (PCM5102A/MAX98357A
+#           boards without EEPROM), hifiberry-dacplus (PCM5122), iqaudio-dacplus. Needs a reboot.
 set -euo pipefail
 SERVER="${SERVER:-wss://soluna-sound.fly.dev}"; CH="${CH:-festival}"; ZONE="${ZONE:-A}"
 POS="${POS:-C}"; GAIN_DB="${GAIN_DB:-0}"; DEVICE="${DEVICE:-}"
@@ -23,6 +25,12 @@ curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/p
 chmod +x "$APP/play.py"
 # Output device: play.py --device auto prefers a USB DAC and falls back to the default card.
 DEV_ARG="--device ${DEVICE:-auto}"
+# GPIO I2S DAC: enable the overlay once (idempotent). Takes effect after reboot.
+CFG=/boot/firmware/config.txt; [ -f "$CFG" ] || CFG=/boot/config.txt
+if [ -n "${DAC:-}" ] && [ -f "$CFG" ] && ! grep -q "^dtoverlay=${DAC}\b" "$CFG"; then
+  echo "dtoverlay=${DAC}" | sudo tee -a "$CFG" >/dev/null
+  echo "   I2S DAC overlay added: dtoverlay=${DAC} (reboot to activate)"; NEED_REBOOT=1
+fi
 echo "   audio device: ${DEVICE:-auto (USB DAC if present)}"
 # Plug-and-play: when a USB sound card appears, restart the node so it moves to the DAC.
 sudo tee /etc/udev/rules.d/90-soluna-usb-audio.rules >/dev/null <<'RULE'
@@ -52,3 +60,4 @@ sudo systemctl enable --now soluna-node
 sleep 3
 sudo systemctl --no-pager status soluna-node | head -12
 echo "✅ node running. logs: journalctl -u soluna-node -f   |  change zone: edit /etc/systemd/system/soluna-node.service"
+[ -n "${NEED_REBOOT:-}" ] && echo "⚠ DAC overlay was added — run: sudo reboot  (node will pick the I2S DAC automatically after boot)"

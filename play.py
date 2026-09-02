@@ -369,8 +369,9 @@ async def net(player, server, ch, node_id):
 
 
 def pick_device(spec):
-    """--device auto: USB音源(名前にusbを含む出力デバイス)を優先、無ければ既定。
-    Piの内蔵3.5mmはノイズが多いので、USB DACが刺さっていれば必ずそちらを使う。"""
+    """--device auto: 外付けDACを優先、無ければ既定。
+    優先順: USB音源 > GPIO I2S DAC(HiFiBerry/PCM5102/MAX98357等) > 内蔵(bcm2835 3.5mm/HDMI)。
+    Piの内蔵3.5mmはノイズが多いので、外付けが1つでも見えれば必ずそちらを使う。"""
     if spec is None or spec == "" or spec == "default":
         return None
     if spec != "auto":
@@ -378,14 +379,21 @@ def pick_device(spec):
             return int(spec)
         except ValueError:
             return spec
+    BUILTIN = ("bcm2835", "vc4", "hdmi", "sysdefault", "default", "dmix", "pulse", "pipewire")
     try:
-        for i, d in enumerate(sd.query_devices()):
-            if d.get("max_output_channels", 0) >= 1 and "usb" in d.get("name", "").lower():
+        devs = [(i, d) for i, d in enumerate(sd.query_devices()) if d.get("max_output_channels", 0) >= 1]
+        for i, d in devs:
+            if "usb" in d.get("name", "").lower():
                 print(f"[play] output → USB audio: [{i}] {d['name']}")
+                return i
+        for i, d in devs:
+            n = d.get("name", "").lower()
+            if n and not any(b in n for b in BUILTIN):
+                print(f"[play] output → external DAC: [{i}] {d['name']}")
                 return i
     except Exception as e:
         print(f"[play] device scan failed: {e}")
-    print("[play] output → system default (no USB audio found)")
+    print("[play] output → system default (no USB/I2S DAC found)")
     return None
 
 
