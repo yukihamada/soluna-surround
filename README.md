@@ -193,6 +193,39 @@ payload: interleaved int16 PCM
 
 ---
 
+## What it looks like
+
+Real screenshots from the running app (headless Chromium against this repo, 2026-09-03).
+One design system for every surface — night sky, gold sun / pale moon, one obvious action per screen
+(`docs/DESIGN.md`).
+
+<p align="center">
+  <img src="docs/screens/client-idle.png" width="230" alt="Audience page before the tap: brand, one big gold ▶, zone chips">
+  <img src="docs/screens/client-playing.png" width="230" alt="Audience page playing: zone letter, NOW PLAYING card with title and artist">
+  <img src="docs/screens/client-gate.png" width="230" alt="Entrance QR mode: the track is prefetched before the show, 準備OK">
+  <img src="docs/screens/welcome.png" width="230" alt="Captive-portal landing when a phone joins the box's Wi-Fi: 🎧 join / ⚙ set up">
+</p>
+<p align="center"><sub>Audience: before the tap · playing with NOW PLAYING · entrance-QR prefetch · the page a phone opens by itself on the box's Wi-Fi</sub></p>
+
+<p align="center">
+  <img src="docs/screens/admin-desktop-top.png" width="760" alt="FOH console: status sentence, SHOW runner (NEXT), CUE preload→fire→stop/mute">
+</p>
+<p align="center"><sub>FOH console on a laptop (first screen) — the page continues: ③ LIGHT → ④ ZONES &amp; ALIGN → ⑤ DEVICES → ⑥ NODES → ⑦ STATE → ⑧ SETUP · <a href="docs/screens/admin-desktop.png">full page</a></sub></p>
+
+<p align="center">
+  <img src="docs/screens/admin-mobile-top.png" width="230" alt="FOH console on a phone">
+  <img src="docs/screens/setup-top.png" width="230" alt="Box setup page on a phone (taken on the real Pi 4 box): status, test tone, speaker zone/DAC, role, Wi-Fi">
+  <img src="docs/screens/dj.png" width="230" alt="DJ page: any device becomes the venue source">
+  <img src="docs/screens/mic.png" width="230" alt="Mic page">
+</p>
+<p align="center"><sub>Same console on a phone · Pi box setup, shot on the real box (no SSH) · DJ source · mic — <a href="docs/screens/">all screenshots</a></sub></p>
+
+<p align="center">
+  <img src="docs/screens/flags.png" width="340" alt="Printable A4 zone flags with QR">
+  <img src="docs/screens/flags-gate.png" width="340" alt="Printable entrance QR flag">
+</p>
+<p align="center"><sub>Print collateral straight from the server: zone flags (one A4 per zone) and the entrance QR</sub></p>
+
 ## The three faces
 
 | Surface | Who | What |
