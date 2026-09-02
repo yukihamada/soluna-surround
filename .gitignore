@@ -4,3 +4,7 @@ assets/
 .DS_Store
 state.json*
 .wrangler/
+*.psk
+node.json
+standby-state.json
+admin-token

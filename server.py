@@ -38,7 +38,10 @@ HTTP:
 """
 import asyncio
 import json
+import shutil
+import socket
 import struct
+import subprocess
 import time
 import os
 from aiohttp import web, WSMsgType
@@ -102,12 +105,20 @@ def _chan(name):
         "show": None,             # セットリスト [{label,url,video,light},...]
         "show_i": -1,             # 進行位置(次のNEXTで show_i+1 を発火)
         "net": None,              # 回線案内 {"ssid","wifi_zones":[..]} 前方=会場Wi-Fi/後方=LTE
+        "node_cfg": {},           # Piノードの割当 host -> {"zone","pos","gain_db"}(/adminから・接続時に再送)
     })
+
+
+# ---- Pi ボックス台帳(agent.py が5秒ごとに POST /api/nodes/report) ----------------
+# チャンネル非依存(箱は1台)。stale=最後の報告から SOLUNA_NODE_STALE_S 秒超。
+nodes: dict = {}
+_node_rate: dict = {}
+NODE_STALE_S = float(os.environ.get("SOLUNA_NODE_STALE_S", "15"))
 
 
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
-            "geo", "preload", "show", "show_i", "net")
+            "geo", "preload", "show", "show_i", "net", "node_cfg")
 
 
 def _save_state():
@@ -225,7 +236,8 @@ async def audio_ws(request):
     # role == listen
     meta = {"pos": request.query.get("pos", "L"),
             "zone": (request.query.get("zone") or "").upper() or None,
-            "d": request.query.get("d")}
+            "d": request.query.get("d"),
+            "host": (request.query.get("host") or "")[:64] or None}   # Piノードは自分のhostnameを名乗る
     state["listeners"][ws] = meta
     print(f"[listen] +{meta} ch={name} (n={len(state['listeners'])})")
     try:
@@ -236,6 +248,13 @@ async def audio_ws(request):
             await ws.send_str(json.dumps({"t": "cue", **state["cue"]}))
         if state["light"]:                    # 途中参加 → 進行中ライトも渡す
             await ws.send_str(json.dumps({"t": "light", **state["light"]}))
+        if meta["host"] and (state.get("node_cfg") or {}).get(meta["host"]):
+            cfg = state["node_cfg"][meta["host"]]   # /admin で割り当てたゾーンを再送(node.json消失でも復元)
+            await ws.send_str(json.dumps({"t": "assign", **cfg}))
+            if cfg.get("zone"):
+                meta["zone"] = str(cfg["zone"]).upper()
+            if cfg.get("pos"):
+                meta["pos"] = str(cfg["pos"]).upper()
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
                 try:
@@ -263,6 +282,8 @@ async def audio_ws(request):
                         "kind": str(m.get("kind") or "phone")[:8],
                         "t": now(),
                     }
+                    if m.get("host"):
+                        meta["host"] = str(m["host"])[:64]
             elif msg.type == WSMsgType.ERROR:
                 break
     finally:
@@ -709,9 +730,11 @@ def _devices_summary(st):
 
 async def health(request):
     n = sum(len(st["listeners"]) for st in channels.values())
-    return web.json_response({"ok": True, "version": VERSION,
+    t = now()
+    return web.json_response({"ok": True, "version": VERSION, "role": "server",
                               "uptime_s": round(time.time() - STARTED_AT, 1),
                               "listeners": n, "channels": len(channels),
+                              "nodes": sum(1 for v in nodes.values() if t - v["t"] <= NODE_STALE_S),
                               "data_dir": DATA_DIR, "asset_base": ASSET_BASE or None,
                               "server_epoch_ms": now() * 1000.0})
 
@@ -745,6 +768,117 @@ async def api_state(request):
             await _broadcast_text(st, json.dumps({"t": "light", **st["light"]}))
     _save_state()
     return web.json_response({"ok": True, "imported": list(chans.keys())})
+
+
+async def api_nodes_report(request):
+    """Pi の agent.py が5秒ごとに自分の健康状態を届ける(LAN・無認証・IPごと1req/s)。
+    位置情報は無い。psk は AP を立てている箱だけが載せる(/adminだけが読む)。"""
+    ip = request.remote or "?"
+    t = now()
+    if t - _node_rate.get(ip, 0.0) < 0.9:
+        raise web.HTTPTooManyRequests(text="1 report/s per ip")
+    _node_rate[ip] = t
+    try:
+        body = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="json body required")
+    host = str(body.get("host") or "")[:64]
+    if not host:
+        raise web.HTTPBadRequest(text="host required")
+    rec = {k: body.get(k) for k in ("ip", "role", "up_min", "temp", "load", "disk_free_mb",
+                                    "audio", "node", "server", "eth", "agent", "ap")}
+    rec["ip"] = str(rec.get("ip") or ip)[:45]
+    rec["role"] = str(rec.get("role") or "?")[:12]
+    rec["host"] = host
+    rec["t"] = t
+    nodes[host] = rec
+    if len(nodes) > 500:                       # 暴走した箱が台帳を膨らませない
+        oldest = sorted(nodes.items(), key=lambda kv: kv[1]["t"])[: len(nodes) - 500]
+        for k, _ in oldest:
+            nodes.pop(k, None)
+    return web.json_response({"ok": True, "server_epoch_ms": t * 1000.0})
+
+
+async def api_nodes(request):
+    """/admin NODES: 箱の一覧(stale 付き)+ このチャンネルの割当 + AP 情報。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    state = _chan(request.query.get("ch", "festival"))
+    t = now()
+    out = []
+    ap = None
+    cfg = state.get("node_cfg") or {}
+    online_hosts = {m.get("host") for st in channels.values() for m in st["listeners"].values() if m.get("host")}
+    for host, rec in sorted(nodes.items()):
+        r = dict(rec)
+        r["age_s"] = round(t - rec["t"], 1)
+        r["stale"] = r["age_s"] > NODE_STALE_S
+        r["ws"] = host in online_hosts
+        r["cfg"] = cfg.get(host) or {}
+        if rec.get("role") == "server" and rec.get("ap"):
+            ap = rec["ap"]
+        r.pop("ap", None)
+        out.append(r)
+    for host, c in cfg.items():                # 割当だけあって今は見えない箱も出す
+        if host not in nodes:
+            out.append({"host": host, "stale": True, "age_s": None, "ws": host in online_hosts,
+                        "cfg": c, "role": "?", "ip": None})
+    return web.json_response({"ok": True, "nodes": out, "stale_s": NODE_STALE_S,
+                              "meta": {"ap": ap, "server_host": socket.gethostname()}})
+
+
+async def api_nodes_assign(request):
+    """{"host":"soluna-node-2","zone":"C","pos":"L","gain_db":-3} → 保存 + その箱のWSへ即時 {"t":"assign"}。
+    {"host":..,"clear":true} で割当解除。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    state = _chan(request.query.get("ch", "festival"))
+    body = await request.json()
+    host = str(body.get("host") or "")[:64]
+    if not host:
+        raise web.HTTPBadRequest(text="host required")
+    cfg = state.setdefault("node_cfg", {})
+    if body.get("clear"):
+        cfg.pop(host, None)
+        _save_state()
+        return web.json_response({"ok": True, "host": host, "cfg": None, "pushed": 0})
+    c = dict(cfg.get(host) or {})
+    if body.get("zone") is not None:
+        c["zone"] = str(body["zone"]).upper()[:8] or None
+    if body.get("pos") is not None:
+        pos = str(body["pos"]).upper()[:1]
+        if pos not in ("L", "C", "R"):
+            raise web.HTTPBadRequest(text="pos must be L|C|R")
+        c["pos"] = pos
+    if body.get("gain_db") is not None:
+        c["gain_db"] = round(max(-24.0, min(24.0, float(body["gain_db"]))), 1)
+    cfg[host] = c
+    _save_state()
+    msg = json.dumps({"t": "assign", **c})
+    pushed = 0
+    for ws, meta in list(state["listeners"].items()):
+        if meta.get("host") == host:
+            try:
+                await asyncio.wait_for(ws.send_str(msg), timeout=2.0)
+                if c.get("zone"):
+                    meta["zone"] = c["zone"]
+                if c.get("pos"):
+                    meta["pos"] = c["pos"]
+                pushed += 1
+            except Exception:
+                pass
+    return web.json_response({"ok": True, "host": host, "cfg": c, "pushed": pushed})
+
+
+def _mdns_publish(port):
+    """LAN の Pi/ノードが `_soluna._tcp` で見つけられるように広告(avahi があれば)。クラウドでは無い=無害。"""
+    if os.environ.get("SOLUNA_MDNS", "1") != "1" or not shutil.which("avahi-publish-service"):
+        return None
+    try:
+        return subprocess.Popen(["avahi-publish-service", f"SOLUNA {socket.gethostname()}", "_soluna._tcp",
+                                 str(port), f"ver={VERSION}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        return None
 
 
 async def api_channel_delete(request):
@@ -865,6 +999,9 @@ def main():
         web.post("/api/zones", api_zones),
         web.get("/api/preload", api_preload),
         web.post("/api/net", api_net),
+        web.post("/api/nodes/report", api_nodes_report),
+        web.get("/api/nodes", api_nodes),
+        web.post("/api/nodes/assign", api_nodes_assign),
         web.post("/api/align", api_align),
         web.post("/api/light", api_light),
         web.post("/api/geo", api_geo),
@@ -876,6 +1013,7 @@ def main():
         web.static("/icons", os.path.join(HERE, "icons")),
     ])
     ip = os.environ.get("LAN_IP", "127.0.0.1")
+    _mdns_publish(port)
     print(f"\n🔊 SOLUNA Sound {VERSION}  http://{ip}:{port}/")
     print(f"   client http://{ip}:{port}/?zone=A   admin http://{ip}:{port}/admin")
     print(f"   data: {DATA_DIR}  assets: {ASSETS}"

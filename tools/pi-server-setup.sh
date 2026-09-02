@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # SOLUNA Sound — make a Raspberry Pi the SYNC SERVER (clock authority) of a venue.
-# Pairs with pi-setup.sh (speaker node). One Pi can run both = a self-contained "SOLUNA box":
-#   crowd phones + other Pi nodes all sync to this box, no internet needed.
+# Pairs with pi-setup.sh (zero-config box). Since v7 every box can become the server by election;
+# this script FORCES this box to be the server (writes /etc/soluna/force-server — the agent never
+# yields and other boxes follow it). Use it for the FOH box; plain boxes need only pi-setup.sh.
 #
 #   curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/tools/pi-server-setup.sh \
 #     | sudo -E bash                      # downloads the app from GitHub
@@ -85,9 +86,11 @@ Nice=-5
 [Install]
 WantedBy=multi-user.target
 UNIT
+$SUDO touch /etc/soluna/force-server          # soluna-agent: always server, never yield
 $SUDO systemctl daemon-reload
 $SUDO systemctl enable --now soluna-server
 $SUDO systemctl restart soluna-server
+[ -f /etc/systemd/system/soluna-agent.service ] && $SUDO systemctl restart soluna-agent || true
 
 # node on the same box → sync to localhost (zero network jitter)
 if [ "$LOCAL_NODE" = "1" ] && [ -f /etc/systemd/system/soluna-node.service ]; then

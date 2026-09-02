@@ -17,9 +17,16 @@ No browser, no tap. Runs the whole show protocol like a phone would:
 Decoding: ffmpeg if present (any format) → soundfile (wav/flac/ogg) → stdlib wave.
 Clock: median of the 3 lowest-RTT samples in a 30-sample window (same as client).
 """
-import argparse, asyncio, json, os, shutil, struct, subprocess, sys, threading, time, wave, io
+import argparse, asyncio, json, os, shutil, socket, struct, subprocess, sys, threading, time, wave, io
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    import discover                       # --server auto(ゼロコンフィグ: サーバを自動発見)
+except Exception:
+    discover = None
+NODE_JSON = os.environ.get("SOLUNA_NODE_JSON", "/opt/soluna/node.json")
 
 import numpy as np
 try:
@@ -105,6 +112,56 @@ class Player:
         self.light = None
         self.light_cmd = light_cmd
         self.http_base = None
+        self.host = socket.gethostname()
+        self.node_json = NODE_JSON
+
+    # ---- 割当(ゼロコンフィグ: /admin NODES から zone/pos/gain を押し込まれる) ----
+    def apply_assign(self, m):
+        """{"t":"assign","zone":"C","pos":"L","gain_db":-3} → 即時反映 + node.json に永続。
+        次回起動は node.json を読む(CLIで明示された値だけが上書きする)。"""
+        changed = False
+        if m.get("zone") is not None:
+            z = str(m["zone"]).upper() or None
+            if z != self.zone:
+                self.zone, changed = z, True
+        if m.get("pos") is not None:
+            pos = str(m["pos"]).upper()[:1]
+            if pos in PAN and pos != self.pos:
+                self.pos = pos
+                self.gl, self.gr = PAN[pos]
+                changed = True
+        if m.get("gain_db") is not None:
+            g = float(m["gain_db"])
+            if g != self.gain_db:
+                self.gain_db, changed = g, True
+        if changed:
+            self.rearm()
+            self.save_node_json()
+        return changed
+
+    def node_cfg(self):
+        return {"zone": self.zone, "pos": self.pos, "gain_db": self.gain_db}
+
+    def save_node_json(self, path=None):
+        path = path or self.node_json
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            with open(path + ".tmp", "w") as f:
+                json.dump(self.node_cfg(), f)
+            os.replace(path + ".tmp", path)
+            return True
+        except Exception as e:
+            print(f"[play {self.pos}] node.json not saved ({path}): {e}")
+            return False
+
+    @staticmethod
+    def load_node_json(path=None):
+        try:
+            with open(path or NODE_JSON) as f:
+                d = json.load(f)
+            return d if isinstance(d, dict) else {}
+        except Exception:
+            return {}
 
     # ---- sounddevice callback (audio thread) ----
     def callback(self, outdata, nframes, t, status):
@@ -267,11 +324,11 @@ class Player:
     def report(self):
         return {"t": "report", "st": self.state, "ctx": "running",
                 "acc": None if self.best_rtt_ms is None else self.best_rtt_ms / 2,
-                "cue": (self.cue or {}).get("id") or "", "kind": "node"}
+                "cue": (self.cue or {}).get("id") or "", "kind": "node", "host": self.host}
 
 
 async def session(player, server, ch, node_id):
-    url = f"{server}/audio?role=listen&ch={ch}&pos={player.pos}"
+    url = f"{server}/audio?role=listen&ch={ch}&pos={player.pos}&host={player.host}"
     if player.zone:
         url += f"&zone={player.zone}"
     u = urlparse(server)
@@ -340,6 +397,12 @@ async def session(player, server, ch, node_id):
                         player.on_light(m)
                     elif t == "light_stop":
                         player.on_light({"pattern": "off"})
+                    elif t == "assign":
+                        if player.apply_assign(m):
+                            print(f"[play {player.pos}] ASSIGN zone={player.zone} pos={player.pos} gain={player.gain_db}dB")
+                            await ws.send(json.dumps({"t": "zone", "zone": player.zone or ""}))
+                            await ws.send(json.dumps({"t": "pos", "pos": player.pos}))
+                            await ws.send(json.dumps(player.report()))
                 else:
                     if len(msg) <= HEADER.size:
                         continue
@@ -399,8 +462,10 @@ def pick_device(spec):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("pos", choices=["L", "C", "R", "l", "c", "r"])
-    ap.add_argument("--server", default="ws://127.0.0.1:8900")
+    ap.add_argument("pos", nargs="?", choices=["L", "C", "R", "l", "c", "r"],
+                    help="L|C|R(省略時: node.json の割当 → C)")
+    ap.add_argument("--server", default="auto",
+                    help="ws(s)://host:port。auto=/etc/soluna/node.env の SERVER、無ければ LAN 上のサーバを自動発見")
     ap.add_argument("--ch", default="festival")
     ap.add_argument("--zone", help="ゾーン名(A..F等)。サーバのzone表の遅延を適用")
     ap.add_argument("--gain-db", type=float, default=0.0, help="このノードの音量補正[dB]")
@@ -411,8 +476,18 @@ def main():
     a = ap.parse_args()
     if sd is None or websockets is None:
         sys.exit("pip install sounddevice websockets numpy  (and ffmpeg for mp3)")
-    player = Player(a.pos.upper(), zone=a.zone, light_cmd=a.light_cmd)
-    player.gain_db = a.gain_db
+    saved = Player.load_node_json()                      # /admin からの割当(前回)。CLI明示が優先
+    pos = (a.pos or saved.get("pos") or "C").upper()
+    zone = a.zone if a.zone is not None else saved.get("zone")
+    player = Player(pos, zone=zone, light_cmd=a.light_cmd)
+    player.gain_db = a.gain_db if a.gain_db != 0.0 else float(saved.get("gain_db") or 0.0)
+    if saved:
+        print(f"[play {pos}] node.json: zone={zone} pos={pos} gain={player.gain_db}dB")
+    server = a.server
+    if server == "auto":
+        if discover is None:
+            sys.exit("--server auto needs discover.py next to play.py")
+        server = discover.resolve_server("auto", wait=True, log=print)
 
     dev = pick_device(a.device)
     stream = sd.OutputStream(samplerate=SR, channels=2, dtype="float32",
@@ -431,7 +506,7 @@ def main():
     threading.Thread(target=status_loop, daemon=True).start()
 
     try:
-        asyncio.run(net(player, a.server, a.ch, a.node_id))
+        asyncio.run(net(player, server, a.ch, a.node_id))
     except KeyboardInterrupt:
         pass
     finally:
