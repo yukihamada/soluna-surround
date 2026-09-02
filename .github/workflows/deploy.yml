@@ -1,0 +1,39 @@
+name: Test & Deploy
+on:
+  push:
+    branches: [master]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install aiohttp qrcode numpy websockets
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: node unit (play.py)
+        run: python3 tests/test_node.py
+      - name: protocol (server subprocess)
+        run: python3 tests/test_protocol.py
+      - name: dj auth + fanout load
+        run: python3 tests/test_djauth_load.py
+  deploy:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: deploy-group
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: smoke /health
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS https://soluna-sound.fly.dev/health | grep -q '"ok": true'; then echo OK; exit 0; fi
+            sleep 3
+          done
+          echo "health check failed"; exit 1

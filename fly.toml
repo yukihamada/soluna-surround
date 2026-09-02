@@ -3,6 +3,14 @@ primary_region = "lax"
 
 [build]
 
+[env]
+  # 音源とstate.jsonは volume(/data) へ → 再デプロイで曲もサウンドチェックも消えない
+  SOLUNA_DATA_DIR = "/data"
+
+[[mounts]]
+  source = "soluna_data"
+  destination = "/data"
+
 [http_service]
   internal_port = 8080
   force_https = true
@@ -15,6 +23,13 @@ primary_region = "lax"
     type = "connections"
     soft_limit = 12000
     hard_limit = 20000
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
 
 [[vm]]
   size = "shared-cpu-2x"

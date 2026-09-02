@@ -4,7 +4,8 @@
 
 SOLUNA Sound turns every phone, laptop, projector and cheap speaker in a space into
 one phase-aligned system for **sound, light and video**. No app installs — one link,
-one tap, and you're inside it. Verified at **10,000 concurrent devices**.
+one tap, and you're inside it. One server process verified at **10,000 concurrent
+devices on a LAN** (cloud path measured to ~3k from a single test IP).
 
 <p align="center">
   <img src="media/how-it-works.svg" width="760"
@@ -118,6 +119,33 @@ targets cue delivery) while the rest of the field stays silent. And the show is
 position persist to `state.json` and come back on boot. Zone flags print
 themselves from `/flags` — A4, big letter, QR straight into the zone.
 
+### Running it for real (operations)
+
+- **Observability** — every device reports what it is *actually* doing
+  (`preloaded / playing / idle / failed`, AudioContext state, battery, sync accuracy;
+  never its location). `/status` aggregates them and the console shows
+  *"how many are really sounding"*, per zone — not just how many are connected.
+- **Speaker nodes run the same show** — `play.py` (Raspberry Pi) receives CUE,
+  PRELOAD, walk-test, SHOW steps and LIGHT (forwarded to a `--light-cmd` GPIO hook),
+  decodes any format via ffmpeg, joins mid-track, reconnects forever.
+- **Clock authority is monotonic** — the server timestamps from `monotonic()`
+  anchored once at boot, so an NTP step on the host can never jump the crowd.
+- **Hot standby** — `GET /api/state` exports the whole show; `POST /api/state` on a
+  second machine re-broadcasts it and phones resume mid-track. Both laptops NTP-synced
+  → cue epochs stay valid across the switch.
+- **Power** — audience screens auto-dim to black after 45 s idle (light show
+  excepted), GPS drops from continuous watch to 60 s polls once the distance settles,
+  battery level is reported so FOH can see a crowd running low.
+- **Level trim** — a per-device ±12 dB slider (phone speakers differ by 6–10 dB
+  between models) plus per-zone gain from the console.
+- **Asset delivery** — `/assets/` is served with `Cache-Control: public` and CORS;
+  set `SOLUNA_ASSET_BASE=https://cdn…` and every device fetches tracks from your
+  CDN/R2 instead of the sync server (PRELOAD burst leaves the VM entirely).
+- **Persistent data** — `SOLUNA_DATA_DIR` (a Fly volume at `/data` in the shipped
+  config) holds tracks and `state.json` across redeploys.
+- **Privacy** — coordinates never leave the phone; only the nearest zone letter is
+  sent. The audience page says so, in ja/en.
+
 ### Wire format (SL2)
 
 ```
@@ -151,7 +179,11 @@ payload: interleaved int16 PCM
 | `POST /api/upload?name=` | raw-body track/video upload → `/assets/<name>` |
 | `POST /api/show` | `{steps:[{label, url?, video?, light?}]}` set the setlist · `{next:true}` fire the next step · `{goto:i}` jump |
 | `GET /flags` | print-ready A4 zone flags with QR codes |
-| `GET /api/assets` · `GET /status` | asset list · listeners/zones/cue/light/show state |
+| `GET /api/assets` · `GET /status` | asset list · listeners/zones/cue/light/show state + `devices` summary |
+| `GET/POST /api/state` | export / import the whole show (hot standby) |
+| `DELETE /api/channel?ch=` | drop a test channel's saved state |
+| `GET /health` | liveness (version, uptime, listeners) — used by Fly checks and CI smoke |
+| `WS → {t:"report",…}` | device → FOH state report (state, ctx, battery, sync accuracy) |
 
 Admin endpoints take `x-soluna-admin` (env `SOLUNA_ADMIN`). Broadcasts are
 parallel with per-socket timeouts — one dying phone can't stall the crowd.
@@ -160,16 +192,19 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 
 | Test | Result |
 |---|---|
-| Protocol suite | 39/39 PASS (clock 0.2 ms, identical cue epochs, mid-join, geo/align/zones live re-broadcast, auth) |
-| **10,000 concurrent devices** | 9,999/10,000 connected in 17 s, **cue reached 100%**, identical epochs, 791 ms delivery spread vs 8 s lead, median RTT under load 29 ms |
+| Protocol suite (`tests/`, runs in CI before every deploy) | 65 protocol + 20 node + 9 auth/load checks PASS (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
+| **10,000 concurrent devices — one process, LAN** | 9,999/10,000 connected in 17 s, **cue reached 100%**, identical epochs, 791 ms delivery spread vs 8 s lead, median RTT under load 29 ms |
 | Video sync | 23 ms drift; 2 ms mid-track loop join |
 | Production E2E | join → sync → light → GPS auto-delay, headless browser vs the live deploy |
 | **Real devices** | two iPhones, ears-on: music, light show and timecode video locked — then a real track with onset-flash lighting |
 
-Honest limits: a 10k single-source test hits home-router NAT limits (~3k) — real
-crowds are 10k distinct IPs, and show-day runs the server on the FOH laptop (LAN)
-anyway. iOS Safari stops web audio on lock screen (the native Koe integration
-doesn't); LTE sync (±10–20 ms) is for effects — wired nodes carry the main PA duty.
+Honest limits: the 10k figure is a local (LAN) measurement of the server process; a
+10k run against the cloud deploy from a single test IP hits NAT limits at ~3k and
+has not been re-run from distributed sources. Real crowds are 10k distinct IPs and
+show-day runs the server on the FOH laptop (LAN) anyway. iOS Safari stops web audio
+on lock screen (the native Koe integration doesn't); LTE sync (±10–20 ms) is for
+effects — wired nodes carry the main PA duty. Not yet done in the field: outdoor GPS
+accuracy, a physical Pi node, dozens of real iPhones at once.
 
 ## Deploy
 
@@ -178,8 +213,13 @@ SOLUNA_ADMIN=<secret> SOLUNA_DJ_TOKEN=<secret> PORT=8900 python3 server.py
 ```
 
 Included `fly.toml` ships `connections` concurrency (20k hard) — the default
-few-hundred cap silently rejects a crowd. Uploaded assets live on the container FS:
-re-upload after a redeploy.
+few-hundred cap silently rejects a crowd — a `/health` check, and a 1 GB volume at
+`/data` (`SOLUNA_DATA_DIR`) so uploaded tracks and `state.json` survive redeploys.
+CI runs the test suite first and smokes `/health` after the deploy.
+
+```bash
+python3 tests/test_node.py && python3 tests/test_protocol.py && python3 tests/test_djauth_load.py
+```
 
 ## Roadmap
 
@@ -190,6 +230,10 @@ re-upload after a redeploy.
   distance, no GPS, no tape measure.
 - **Crowd imaging** — per-device pixel coordinates so 10,000 screens can carry
   pictures, not just waves.
+- **Node lighting driver** — a reference `--light-cmd` for WS281x strips on the Pi
+  nodes (the hook and the pattern protocol exist; the LED driver script does not yet).
+- **Acoustic level calibration** — pink-noise self-measurement through the phone mic
+  to set the per-device trim automatically (today it is a manual ±12 dB slider).
 
 ---
 
@@ -206,7 +250,7 @@ re-upload after a redeploy.
   オープニング映像を1万台の画面+ステージスクリーンで同時に流すこともできます
 - **既存の会場音響と共存**できます(メインスピーカーとサブは会場のものをそのまま使い、
   本システムは中後方の明瞭度と演出を担当)。単体でも完結します
-- 実証済み: **1万台同時接続で合図の到達率100%**・実機iPhoneでの実聴テスト済み
+- 実証済み: **1台のサーバで1万台同時接続(LAN実測)・合図の到達率100%**・実機iPhoneでの実聴テスト済み
 
 ### 主催者チェックリスト
 
@@ -215,6 +259,9 @@ re-upload after a redeploy.
 | サーバ | ノートPC(Mac)1台。会場のLANに置く(クラウド版はリハ・配布用) |
 | 来場者側 | 各自のスマホのみ。ゾーン旗のQR(またはGPS自動)で参加 |
 | ゾーン旗 | `/flags` を開いてそのままA4印刷(ゾーン文字+QR入り) |
+| 予備機 | ノートPCをもう1台(ホットスタンバイ)。主機の `/admin` → STATE → EXPORT で控えを取り、障害時は予備で IMPORT |
+| 電池 | 来場者の画面は放置45秒で自動暗転・GPSは距離確定後60秒間隔に落として節電。FOHで電池20%未満の台数が見える |
+| 位置情報 | 緯度経度は端末外へ出ません(最寄りゾーン記号のみ送信)。来場者ページに日英で明記済み |
 | 会場との調整 | FOH卓のmatrix/aux出力を1系統(既存PAと融合する場合)・電源・持込機器の申請 |
 | オプション | 客席内スピーカーノード(Raspberry Pi+アンプ、1台約$180)・スクリーン用Mac |
 | 安全 | ストロボ演出は光過敏対策で3Hz上限を実装済み。音量は各端末で調整可能 |
@@ -275,29 +322,43 @@ FOH卓 matrix/aux out ──▶ USBオーディオIF ──▶ source.py --input
    またはステージ前で「📍現在地をステージに設定」→ 来場者はGPSで自動ディレイ
 3. **PA位相合わせ**: クリック/リムショットを会場PAとグリッド両方から出し、
    **フラム(二度打ち感)が消えるまで ALIGN を±5→±1msで追い込む**(全端末一括・即時反映)
-4. **ウォークテスト**: ZONES表の🔊でそのゾーンだけに音を出し、歩いて確認
+4. **ウォークテスト**: ZONES表の🔊でそのゾーンだけに音を出し、歩いて確認。
+   **音量差**は ZONES の gain(dB) で遠いゾーンを持ち上げる。機種差は来場者側の±12dBスライダー
 5. **PRELOAD**: 開演30分前までに音源・映像を📥PRELOAD(全端末が事前DL — FIRE時の
-   ダウンロード集中をゼロにする。**再デプロイ後は音源の上げ直しが必要**)
+   ダウンロード集中をゼロにする)。DEVICESパネルの **preloaded** が来場者数に近づくのを見る。
+   大規模ならCDN/R2を `SOLUNA_ASSET_BASE` に指定して配布を同期サーバから外す
 6. **本番**: SHOWパネルにセットリスト(各ステップ=曲+映像+ライトの束)を組み、
    **NEXTボタンだけで進行**。単発はFIRE/LIGHTで割り込み可。DJ交代は `/dj` の
    トークン付き招待リンクを渡すだけ
 7. **強制終了**(ハードカット): STOP 1操作で全端末即時無音・消灯
 8. **障害時**: サーバ再起動でゾーン・位相・セットリスト・進行位置は自動復元
-   (state.json)。電源が飛んでもサウンドチェックは消えない
+   (state.json)。電源が飛んでもサウンドチェックは消えない。**主機が死んだら**予備Macで
+   STATE → IMPORT(控えは開演前に EXPORT)。端末は再接続後に進行中の曲へ曲中復帰する
+   (両Macの時計をNTPで揃えておくこと)
+9. **本番中の監視**: DEVICESパネル — **playing**(実際に鳴っている台数)/ **failed** /
+   **ctx suspended**(ロック・サイレントで無音の可能性)/ **battery<20%**。接続数でなく
+   「鳴っている数」を見る
 
 ### 音質・信頼性の仕様
 
 - 48kHz/16bit PCM(SL2)。配信元のサンプルレート(例: Macの44.1kHz)は全端末が自動追従
+- サーバの時計は**monotonic基準**(起動時に一度だけepochを取る) — ホストのNTP補正で
+  全端末が一斉に飛ぶことがない
+- Piスピーカーノード(`play.py`)はスマホと同じプロトコルを全部話す: CUE/PRELOAD/
+  ウォークテスト/SHOW/ライト(GPIOフック)。ffmpegで任意形式をデコード・曲中合流・
+  切断は必ず再接続
 - ライブ系のフレームは**サンプルカウンタ駆動のplayAt**を持ち、ネットワークジッタで
   タイムラインが曲がらない。間に合わないフレームは「位相を崩して鳴らす」のではなく捨てる
 - 全ブロードキャストは並列送信+ソケット毎タイムアウト — 瀕死の1台が全体を止めない
 - 切断は自動再接続(音楽は時計から再計算して曲中復帰)。配信(push)はトークン認証で乗っ取り防止
-- 実証: **1万台同時**(到達100%・開始時刻完全一致・配信ばらつき791ms/猶予8秒)・
-  実機iPhone2台の実聴で音/光/映像の同期を確認済み
+- 実証: **1万台同時(LAN・単一プロセス)**(到達100%・開始時刻完全一致・配信ばらつき791ms/猶予8秒)・
+  実機iPhone2台の実聴で音/光/映像の同期を確認済み。テスト94項目はCIで毎デプロイ前に実行
 
 ### 既知の制約(正直に)
 
 - iOSのWeb版は画面ロックで音が止まる(→ネイティブアプリ版は継続再生。Web版は
-  「画面はつけたまま」の案内文言を実装済み)
+  「画面はつけたまま」の案内文言+放置時の自動暗転(ロック不要で節電)を実装済み)
+- 未実施の物理検証: 屋外GPS実精度・Piノード実機・実iPhone多台数。1万台のクラウド経路
+  負荷試験は単一IPから約3千で頭打ち(NAT)のため未完 — 本番は会場LAN運用が正
 - LTE経由の±10〜20msはタイトな主音響には粗い — 主音響は有線ノード、スマホは演出に
 - クラウド版(fly.io)は遠隔リハ・配布用。本番はFOHのMacでローカル運用が正

@@ -1,40 +1,110 @@
 #!/usr/bin/env python3
 """
-SOLUNA Surround — native auto-playing speaker (no browser, no tap).
+SOLUNA Sound — speaker node (Raspberry Pi / any machine with an audio out).
+No browser, no tap. Runs the whole show protocol like a phone would:
 
-Connects to the server as a LISTEN device for a position (L/R/C), runs the
-same ping/pong clock-sync, and schedules every frame at its server `playAt`
-into a shared stream-sample ring buffer so multiple devices stay phase-locked.
-Pans its mono channel to its position so even a single stereo Mac demonstrates
-the L->C->R movement.
+  * LIVE  — SL2 PCM frames scheduled at server `playAt` (+ zone delay)      [v2]
+  * CUE   — pre-distributed track (mp3/wav/…) decoded once, scheduled at `at`
+            on the same clock; mid-join lands inside the track in phase       [v6]
+  * PRELOAD / cue_stop / zone walk-test (`zones:[..]`) / SHOW steps           [v6]
+  * LIGHT — pattern+phase received; forwarded to an optional hook command
+            (`--light-cmd`), e.g. a GPIO/WS281x driver script               [v6]
+  * REPORT — tells FOH what this node is really doing (playing/preloaded…)   [v6]
+  * reconnects forever (field WiFi drops must not kill a speaker)            [v6]
 
-  python3 play.py L --server ws://127.0.0.1:8900 --ch festival
+  python3 play.py L --server ws://192.168.1.10:8900 --ch festival --zone B
+
+Decoding: ffmpeg if present (any format) → soundfile (wav/flac/ogg) → stdlib wave.
+Clock: median of the 3 lowest-RTT samples in a 30-sample window (same as client).
 """
-import argparse, asyncio, json, struct, threading, time, sys
+import argparse, asyncio, json, os, shutil, struct, subprocess, sys, threading, time, wave, io
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
 import numpy as np
-import sounddevice as sd
-import websockets
+try:
+    import sounddevice as sd
+except Exception:            # CI / headless: 音デバイス無しでもプロトコル部分は使える
+    sd = None
+try:
+    import websockets
+except Exception:
+    websockets = None
 
 SR = 48000
 HEADER = struct.Struct("<3sBBBIId")
 RING_SEC = 4
 RING = RING_SEC * SR
 PAN = {"L": (1.0, 0.0), "C": (0.7071, 0.7071), "R": (0.0, 1.0)}
+VERSION = "v6"
+
+
+# ---- decode -----------------------------------------------------------------
+def decode_to_f32_mono(data: bytes, sr: int = SR) -> np.ndarray:
+    """任意フォーマット → float32 mono @sr。ffmpeg → soundfile → wave の順に試す。"""
+    if shutil.which("ffmpeg"):
+        p = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-f", "f32le",
+                            "-ac", "1", "-ar", str(sr), "pipe:1"],
+                           input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p.returncode == 0 and p.stdout:
+            return np.frombuffer(p.stdout, dtype="<f4").copy()
+    try:
+        import soundfile as sf
+        y, fs = sf.read(io.BytesIO(data), dtype="float32", always_2d=True)
+        y = y.mean(axis=1)
+        return _resample(y, fs, sr)
+    except Exception:
+        pass
+    with wave.open(io.BytesIO(data)) as w:
+        n, ch, fs, sw = w.getnframes(), w.getnchannels(), w.getframerate(), w.getsampwidth()
+        raw = w.readframes(n)
+        if sw == 2:
+            y = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
+        elif sw == 4:
+            y = np.frombuffer(raw, dtype="<i4").astype(np.float32) / 2147483648.0
+        elif sw == 1:
+            y = (np.frombuffer(raw, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+        else:
+            raise ValueError(f"unsupported wav sampwidth {sw}")
+        y = y.reshape(-1, ch).mean(axis=1)
+        return _resample(y, fs, sr)
+
+
+def _resample(y: np.ndarray, fs: int, sr: int) -> np.ndarray:
+    if fs == sr:
+        return y.astype(np.float32)
+    n_out = int(round(len(y) * sr / fs))
+    x_old = np.linspace(0.0, 1.0, num=len(y), endpoint=False)
+    x_new = np.linspace(0.0, 1.0, num=n_out, endpoint=False)
+    return np.interp(x_new, x_old, y).astype(np.float32)
 
 
 class Player:
-    def __init__(self, pos, zone=None):
+    def __init__(self, pos, zone=None, light_cmd=None):
         self.pos = pos
         self.zone = (zone or "").upper() or None
         self.zones = {}            # サーバconfig: zone -> delay_ms
+        self.zone_gain_db = {}     # サーバconfig: zone -> dB
         self.base_ms = 0.0         # ハウスPA位相合わせトリム
+        self.gain_db = 0.0         # このノード固有の音量補正(--gain-db)
+        self.asset_base = None
         self.gl, self.gr = PAN.get(pos.upper(), (0.7071, 0.7071))
         self.ring = np.zeros((RING, 2), dtype=np.float32)
         self.lock = threading.Lock()
         self.t0_stream = None      # stream time (s) at first callback
         self.t0_wall = None        # wall clock (s) at first callback
         self.epoch_off = None      # server_epoch = local_wall + epoch_off
+        self.sync = []             # [(rtt_ms, off_s)] window
+        self.best_rtt_ms = None
         self.stats = {"frames": 0, "late": 0, "under": 0}
+        # CUE: 曲全体を持ち、callbackでストリームサンプル位置から直接読む
+        self.cue = None            # {"id","buf","start","loop","gain"}  start=stream sample of sample0
+        self.cue_msg = None        # 最後に受けた cue(再同期用)
+        self.cache = {}            # url -> f32 buffer (PRELOAD)
+        self.state = "idle"        # idle|preloaded|playing|failed
+        self.light = None
+        self.light_cmd = light_cmd
+        self.http_base = None
 
     # ---- sounddevice callback (audio thread) ----
     def callback(self, outdata, nframes, t, status):
@@ -46,7 +116,34 @@ class Player:
         with self.lock:
             block = self.ring[idx].copy()
             self.ring[idx] = 0.0           # consume (avoid stale replay)
-        outdata[:] = block
+            cue = self.cue
+        if cue is not None:
+            block += self.cue_block(cue, start, nframes)
+        outdata[:] = np.clip(block, -1.0, 1.0)
+
+    def cue_block(self, cue, start, nframes):
+        """ストリームサンプル [start, start+nframes) に対応するCUE音を返す(pan込み)。"""
+        buf = cue["buf"]
+        n = len(buf)
+        pos = np.arange(start, start + nframes) - cue["start"]
+        out = np.zeros((nframes, 2), dtype=np.float32)
+        if n == 0:
+            return out
+        if cue["loop"]:
+            pos = pos % n
+            valid = np.ones(nframes, dtype=bool)
+        else:
+            valid = (pos >= 0) & (pos < n)
+            if not valid.any():
+                if pos[0] >= n and self.state == "playing":
+                    self.state = "idle"    # 曲が終わった
+                return out
+            pos = np.clip(pos, 0, n - 1)
+        mono = buf[pos] * cue["gain"] * self.level_gain()
+        mono[~valid] = 0.0
+        out[:, 0] = mono * self.gl
+        out[:, 1] = mono * self.gr
+        return out
 
     # ---- wall<->stream mapping ----
     def stream_sample_for_wall(self, wall):
@@ -56,6 +153,23 @@ class Player:
         z = self.zones.get(self.zone, 0.0) if self.zone else 0.0
         return max(0.0, (z + self.base_ms) / 1000.0)
 
+    def level_gain(self):
+        zg = self.zone_gain_db.get(self.zone, 0.0) if self.zone else 0.0
+        return float(10 ** ((self.gain_db + zg) / 20.0))
+
+    def on_pong(self, c_ms, s_ms):
+        now = time.time() * 1000
+        rtt = now - c_ms
+        off = (s_ms + rtt / 2 - now) / 1000.0
+        self.sync.append((rtt, off))
+        if len(self.sync) > 30:
+            self.sync.pop(0)
+        low3 = sorted(self.sync)[:3]
+        offs = sorted(o for _, o in low3)
+        self.epoch_off = offs[len(offs) // 2]
+        self.best_rtt_ms = low3[0][0]
+
+    # ---- LIVE ----
     def schedule(self, mono_f32, play_at):
         delay = self.delay_sec()
         eo, t0s, t0w = self.epoch_off, self.t0_stream, self.t0_wall
@@ -69,45 +183,150 @@ class Player:
             return
         n = len(mono_f32)
         idx = np.arange(start, start + n) % RING
+        g = self.level_gain()
         with self.lock:
-            self.ring[idx, 0] += mono_f32 * self.gl
-            self.ring[idx, 1] += mono_f32 * self.gr
+            self.ring[idx, 0] += mono_f32 * self.gl * g
+            self.ring[idx, 1] += mono_f32 * self.gr * g
         self.stats["frames"] += 1
 
+    # ---- CUE ----
+    def resolve_url(self, url):
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+        if self.asset_base and url.startswith("/assets/"):
+            return self.asset_base + "/" + url[len("/assets/"):]
+        return (self.http_base or "") + url
 
-async def net(player, server, ch):
+    def fetch_track(self, url):
+        if url in self.cache:
+            return self.cache[url]
+        full = self.resolve_url(url)
+        with urlopen(Request(full, headers={"User-Agent": f"soluna-node/{VERSION}"}), timeout=60) as r:
+            data = r.read()
+        buf = decode_to_f32_mono(data, SR)
+        self.cache[url] = buf
+        return buf
+
+    def arm_cue(self, m):
+        """cue メッセージ → ストリーム上の開始サンプルを計算(途中参加なら過去に置く=曲中位置)。"""
+        if m.get("zones") and (self.zone not in [z.upper() for z in m["zones"]]):
+            return False                                   # ウォークテスト: 他ゾーン宛
+        url = m.get("url")
+        if not url:                                        # 映像だけのcue: ノードは無関係
+            return False
+        if self.epoch_off is None or self.t0_stream is None:
+            self.cue_msg = m                               # 同期後に再試行
+            return False
+        buf = self.fetch_track(url)
+        target_wall = float(m["at"]) + self.delay_sec() - self.epoch_off
+        start = self.stream_sample_for_wall(target_wall)
+        with self.lock:
+            self.cue = {"id": m.get("id"), "buf": buf, "start": start,
+                        "loop": bool(m.get("loop")), "gain": float(m.get("gain", 1.0))}
+        self.cue_msg = m
+        self.state = "playing"
+        return True
+
+    def stop_cue(self):
+        with self.lock:
+            self.cue = None
+        self.cue_msg = None
+        if self.state == "playing":
+            self.state = "idle"
+
+    def rearm(self):
+        """ゾーン/遅延/時計が変わった → 同じcueを新しい位置で置き直す(曲中同期)。"""
+        if self.cue_msg:
+            try:
+                self.arm_cue(self.cue_msg)
+            except Exception as e:
+                print(f"[play {self.pos}] rearm failed: {e}")
+
+    # ---- LIGHT (hook) ----
+    def on_light(self, m):
+        self.light = m
+        if self.light_cmd:
+            try:
+                subprocess.Popen([self.light_cmd, json.dumps(m)])
+            except Exception as e:
+                print(f"[play {self.pos}] light-cmd failed: {e}")
+
+    def report(self):
+        return {"t": "report", "st": self.state, "ctx": "running",
+                "acc": None if self.best_rtt_ms is None else self.best_rtt_ms / 2,
+                "cue": (self.cue or {}).get("id") or "", "kind": "node"}
+
+
+async def session(player, server, ch, node_id):
     url = f"{server}/audio?role=listen&ch={ch}&pos={player.pos}"
     if player.zone:
         url += f"&zone={player.zone}"
-    best_rtt = float("inf")
-    async with websockets.connect(url, max_size=None) as ws:
+    u = urlparse(server)
+    player.http_base = f"{'https' if u.scheme == 'wss' else 'http'}://{u.netloc}"
+    async with websockets.connect(url, max_size=None, ping_interval=20) as ws:
+        player.sync.clear()
+
         async def pinger():
+            n = 0
             while True:
                 await ws.send(json.dumps({"t": "ping", "c": time.time() * 1000}))
-                await asyncio.sleep(0.5)
+                n += 1
+                if n % 10 == 0:
+                    await ws.send(json.dumps(player.report()))
+                await asyncio.sleep(0.5 if n < 10 else 3.0)
         ping_task = asyncio.create_task(pinger())
+        loop = asyncio.get_running_loop()
         try:
             async for msg in ws:
                 if isinstance(msg, str):
                     m = json.loads(msg)
-                    if m.get("t") == "config":
+                    t = m.get("t")
+                    if t == "config":
                         player.zones = {k.upper(): float(v)
                                         for k, v in (m.get("zones") or {}).items()}
+                        player.zone_gain_db = {k.upper(): float(v)
+                                               for k, v in (m.get("zone_gain_db") or {}).items()}
                         player.base_ms = float(m.get("base_ms", 0.0))
+                        player.asset_base = m.get("asset_base") or None
                         if int(m.get("sr", SR)) != SR:
                             print(f"[play {player.pos}] ⚠ source sr={m['sr']} != {SR}: "
-                                  f"ノード運用は48kHz送出(source.py)が前提。ピッチが狂います")
+                                  f"LIVEノード運用は48kHz送出(source.py)が前提。ピッチが狂います")
                         print(f"[play {player.pos}] config zone={player.zone} "
-                              f"delay={player.delay_sec()*1000:.1f}ms")
-                    elif m.get("t") == "pong":
-                        now = time.time() * 1000
-                        rtt = now - m["c"]
-                        nonlocal_best = rtt < best_rtt
-                        if nonlocal_best or player.epoch_off is None:
-                            best_rtt = min(best_rtt, rtt)
-                            server_at_recv = m["s"] + rtt / 2          # ms
-                            # server_epoch(s) = local_wall(s) + epoch_off
-                            player.epoch_off = (server_at_recv - now) / 1000.0
+                              f"delay={player.delay_sec()*1000:.1f}ms gain={player.level_gain():.2f}")
+                        await loop.run_in_executor(None, player.rearm)
+                    elif t == "pong":
+                        first = player.epoch_off is None
+                        player.on_pong(m["c"], m["s"])
+                        if first and player.cue_msg:
+                            await loop.run_in_executor(None, player.rearm)
+                    elif t == "preload":
+                        def _pre():
+                            try:
+                                player.fetch_track(m["url"])
+                                if player.state != "playing":
+                                    player.state = "preloaded"
+                            except Exception as e:
+                                player.state = "failed"
+                                print(f"[play {player.pos}] preload failed: {e}")
+                        await loop.run_in_executor(None, _pre)
+                        await ws.send(json.dumps(player.report()))
+                    elif t == "cue":
+                        def _cue():
+                            try:
+                                if player.arm_cue(m):
+                                    print(f"[play {player.pos}] CUE {m.get('id')} at={m['at']:.3f}")
+                            except Exception as e:
+                                player.state = "failed"
+                                print(f"[play {player.pos}] cue failed: {e}")
+                        await loop.run_in_executor(None, _cue)
+                        await ws.send(json.dumps(player.report()))
+                    elif t == "cue_stop":
+                        player.stop_cue()
+                        await ws.send(json.dumps(player.report()))
+                    elif t == "light":
+                        player.on_light(m)
+                    elif t == "light_stop":
+                        player.on_light({"pattern": "off"})
                 else:
                     if len(msg) <= HEADER.size:
                         continue
@@ -118,30 +337,57 @@ async def net(player, server, ch):
             ping_task.cancel()
 
 
+async def net(player, server, ch, node_id):
+    """切れても必ず戻る: 現場WiFiの瞬断でスピーカーが黙ったままにならない。
+    再接続後は config/cue が再送されるので、進行中の曲へ曲中復帰する。"""
+    backoff = 1.0
+    while True:
+        try:
+            print(f"[play {player.pos}] connecting {server} ch={ch}")
+            await session(player, server, ch, node_id)
+            backoff = 1.0
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            print(f"[play {player.pos}] disconnected: {e!r} — retry in {backoff:.0f}s")
+        player.epoch_off = None
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, 15.0)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("pos", choices=["L", "C", "R", "l", "c", "r"])
     ap.add_argument("--server", default="ws://127.0.0.1:8900")
     ap.add_argument("--ch", default="festival")
     ap.add_argument("--zone", help="ゾーン名(A..F等)。サーバのzone表の遅延を適用")
+    ap.add_argument("--gain-db", type=float, default=0.0, help="このノードの音量補正[dB]")
+    ap.add_argument("--light-cmd", help="ライト受信時に実行するコマンド(引数=JSON)。GPIO/WS281xドライバ等")
+    ap.add_argument("--node-id", default=os.uname().nodename if hasattr(os, "uname") else "node")
+    ap.add_argument("--device", help="sounddevice 出力デバイス名/番号")
     a = ap.parse_args()
-    player = Player(a.pos.upper(), zone=a.zone)
+    if sd is None or websockets is None:
+        sys.exit("pip install sounddevice websockets numpy  (and ffmpeg for mp3)")
+    player = Player(a.pos.upper(), zone=a.zone, light_cmd=a.light_cmd)
+    player.gain_db = a.gain_db
 
     stream = sd.OutputStream(samplerate=SR, channels=2, dtype="float32",
-                             blocksize=480, callback=player.callback)
+                             blocksize=480, callback=player.callback, device=a.device)
     stream.start()
-    print(f"[play {player.pos}] speaker live (pan L={player.gl} R={player.gr})")
+    print(f"[play {player.pos}] speaker live (pan L={player.gl} R={player.gr}) "
+          f"ffmpeg={'yes' if shutil.which('ffmpeg') else 'no (wav only)'}")
 
     def status_loop():
         while True:
             time.sleep(2)
             s = player.stats
-            print(f"[play {player.pos}] frames={s['frames']} late={s['late']} "
-                  f"epoch_off={'%.3f' % player.epoch_off if player.epoch_off else '—'}s")
+            print(f"[play {player.pos}] {player.state} frames={s['frames']} late={s['late']} "
+                  f"cue={(player.cue or {}).get('id') or '—'} "
+                  f"sync={'±%.1fms' % (player.best_rtt_ms/2) if player.best_rtt_ms else '—'}")
     threading.Thread(target=status_loop, daemon=True).start()
 
     try:
-        asyncio.run(net(player, a.server, a.ch))
+        asyncio.run(net(player, a.server, a.ch, a.node_id))
     except KeyboardInterrupt:
         pass
     finally:

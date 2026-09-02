@@ -113,6 +113,11 @@
   #lightHud b{color:#d4af37;font-weight:900;font-size:1.05rem}
   #lightExit{pointer-events:auto;border:none;background:rgba(255,80,80,.25);color:#ff8a8a;
        border-radius:99px;padding:8px 16px;font-weight:800;font-size:.8rem}
+  /* 省電力: 触らずに一定時間たつと真っ黒に(OLEDで消費が最小・ロックしなくて済む) */
+  #dim{position:fixed;inset:0;background:#000;z-index:90;display:none;align-items:center;
+       justify-content:center;color:rgba(212,175,55,.35);font-size:.9rem;letter-spacing:.2em;text-align:center}
+  #dim.on{display:flex}
+  #dim small{display:block;margin-top:8px;font-size:.7rem;letter-spacing:.1em;color:rgba(244,232,208,.3)}
 </style>
 </head>
 <body>
@@ -137,10 +142,17 @@
       <span data-i18n="trimL">微調整(耳合わせ)</span>
       <b><input type="range" id="trim" min="-50" max="50" step="1" value="0"
            style="width:110px;vertical-align:middle"> <span id="trimV">0ms</span></b>
+      <span data-i18n="gainL">音量補正(機種差)</span>
+      <b><input type="range" id="gdb" min="-12" max="12" step="1" value="0"
+           style="width:110px;vertical-align:middle"> <span id="gdbV">0dB</span></b>
+      <span data-i18n="batL">電池</span><b id="bat">—</b>
     </div>
   </details>
   <div class="hint" data-i18n="hint">近くのスピーカー旗と同じゾーンを選ぶと、会場全体で位相の揃った音になります。画面はつけたままで。</div>
   <div class="hint" data-i18n="hint2">音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。</div>
+  <div class="hint" data-i18n="hint3">画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。</div>
+  <div class="hint" data-i18n="privacy" style="opacity:.7">位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。</div>
+  <div id="dim"><div id="dimTxt">SOLUNA · SOUND<br><small data-i18n="dimTap">タップで表示</small></div></div>
 
   <video id="videoLayer" playsinline webkit-playsinline preload="auto"></video>
   <div id="vHint">🔇 タップで音を出す</div>
@@ -163,6 +175,9 @@ const I18N = {
         ready:'準備中…', done:'終了済み', fail:'取得失敗', exit:'✕ 抜ける', details:'詳細',
         autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離', trimL:'微調整(耳合わせ)',
         preloaded:'準備OK', hint2:'音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。',
+        hint3:'画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。',
+        privacy:'位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。',
+        gainL:'音量補正(機種差)', batL:'電池', dimTap:'タップで表示',
         waiting:'つながっています — 音を待っています', playing:'♪ 再生中' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
@@ -171,6 +186,9 @@ const I18N = {
         ready:'loading…', done:'ended', fail:'fetch failed', exit:'✕ LEAVE', details:'details',
         autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST', trimL:'FINE TRIM',
         preloaded:'ready', hint2:'No sound? On iPhone, flip the silent switch off and turn the volume up.',
+        hint3:'Locking the screen stops the sound (browser limitation). The screen dims by itself when idle to save battery.',
+        privacy:'Your location is used only on this device to compute the distance to the stage. Only the nearest zone letter is sent — never coordinates.',
+        gainL:'LEVEL TRIM (device)', batL:'BATTERY', dimTap:'tap to show',
         waiting:'connected — waiting for sound', playing:'♪ playing' },
 };
 const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
@@ -204,6 +222,44 @@ const customD = qs.get('d');              // ?d=<m> 距離を直接指定(スタ
 
 let ctx=null, ws=null, active=false, wakeLock=null;
 let frames=0, lastCueId=null, srvSr=48000;   // LIVE配信元の実サンプルレート(config)
+let assetBase=null, zoneGainDb={};           // config: CDN前置き / ゾーン別音量補正
+let gainDb = parseFloat(localStorage.getItem('soluna_gain_db')||'0') || 0;   // 機種差の音量補正
+// 端末(機種差)+ゾーン(FOH)の音量補正を線形ゲインへ
+function levelGain(){ return Math.pow(10, (gainDb + (zoneGainDb[ZONE]||0))/20); }
+// /assets/x → CDN/R2 (config.asset_base) に振り替える。無ければサーバ直
+function resolveUrl(u){
+  if (assetBase && u && u.startsWith('/assets/')) return assetBase + '/' + u.slice(8);
+  return u;
+}
+
+// ---- 端末→FOH 状態レポート(観測性): 何台が本当に鳴っているか -------------------
+// 位置情報は送らない(ゾーン記号のみ)。状態変化時+15秒ごと。
+let devState='idle', batLevel=null, batObj=null, bestRttMs=null;
+function sendReport(st){
+  if (st) devState = st;
+  if (!(ws && ws.readyState===1)) return;
+  ws.send(JSON.stringify({t:'report', st:devState, ctx: ctx ? ctx.state : 'none',
+    bat: batLevel, acc: bestRttMs===null ? null : bestRttMs/2,
+    cue: lastCueId||'', kind: SCREEN ? 'screen' : 'phone'}));
+}
+setInterval(()=>{ if (active) sendReport(); }, 15000);
+(async ()=>{ try{
+  if (navigator.getBattery){ batObj = await navigator.getBattery();
+    const upd = ()=>{ batLevel = batObj.level; $('bat').textContent = Math.round(batLevel*100)+'%' + (batObj.charging?'⚡':''); };
+    upd(); batObj.addEventListener('levelchange', upd); batObj.addEventListener('chargingchange', upd); }
+}catch(e){} })();
+
+// ---- 省電力: 触らずに一定時間で画面を真っ黒に(ライト中は例外)。タップで戻る --------
+const DIM_AFTER_MS = 45000;
+let dimTimer=null;
+function armDim(){
+  clearTimeout(dimTimer);
+  if (!active || SCREEN) return;
+  dimTimer = setTimeout(()=>{ if (active && !light) $('dim').classList.add('on'); }, DIM_AFTER_MS);
+}
+function undim(){ $('dim').classList.remove('on'); armDim(); }
+$('dim').addEventListener('click', undim);
+['touchstart','pointerdown','keydown'].forEach(ev => document.addEventListener(ev, ()=>{ if (active) armDim(); }, {passive:true}));
 let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null;
 
 // ---- clock sync: 直近windowの最小RTTサンプルのoffsetを採用 ------------------
@@ -223,6 +279,7 @@ function onPong(m){
                             .map(s=>s.off).sort((a,b)=>a-b);
   offsetMs = low3[Math.floor(low3.length/2)];
   const best = [...syncWin].sort((a,b)=>a.rtt-b.rtt)[0];
+  bestRttMs = best.rtt;
   pingCount++;
   if (pingCount === 10){                  // 収束後はサーバ負荷を下げる(5000台対策)
     clearInterval(pingTimer); pingTimer = setInterval(sendPing, 3000);
@@ -259,6 +316,17 @@ function outLatSec(){
 // ・QRでゾーン指定して開いた場合は旗が正なので初期OFF(📍タップでON)
 let stageGeo=null, geoWatchId=null, geoInfo='—';
 let autoDist=null, geoFixes=[], lastApplyT=0;
+// 省電力: 連続測位(高精度GPS)は電池を食う。距離が確定(5点)したら連続watchを止め、
+// 60秒ごとの単発測位に落とす(立ち止まって聴く客が大半。動けば次のpollで追従)。
+let geoPollTimer=null, geoStableFixes=0;
+const GEO_OPTS = {enableHighAccuracy:true, maximumAge:2000, timeout:15000};
+function geoToPolling(){
+  if (geoWatchId!==null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId=null;
+  clearInterval(geoPollTimer);
+  geoPollTimer = setInterval(()=>{ if (autoZone && stageGeo && active)
+    navigator.geolocation.getCurrentPosition(onGeoFix, ()=>{}, {enableHighAccuracy:true, maximumAge:30000, timeout:20000}); }, 60000);
+}
 let autoZone = !qs.get('zone') && !qs.get('pos');
 function havM(a,b){
   const R=6371000, r=x=>x*Math.PI/180;
@@ -284,6 +352,7 @@ function onGeoFix(pos){
   if (acc > 30) return;                            // 粗い測位で遅延を揺らさない
   geoFixes.push(d);
   if (geoFixes.length > 5) geoFixes.shift();
+  if (++geoStableFixes === 5 && geoWatchId!==null) geoToPolling();   // 距離確定→省電力ポーリングへ
   const med = [...geoFixes].sort((a,b)=>a-b)[Math.floor(geoFixes.length/2)];
   const now = performance.now();
   const moved = autoDist===null || Math.abs(med - autoDist) > 3.5;   // 3.5m ≒ 10ms
@@ -304,11 +373,11 @@ function startGeoWatch(){
       if (e.code === 1){ geoInfo = T.geoDenied; autoZone=false; renderZones(); }
       $('geo') && ($('geo').textContent = geoInfo);
     },
-    {enableHighAccuracy:true, maximumAge:2000, timeout:15000});
+    GEO_OPTS);
 }
 function stopGeoWatch(){
   if (geoWatchId!==null && navigator.geolocation) navigator.geolocation.clearWatch(geoWatchId);
-  geoWatchId=null;
+  geoWatchId=null; clearInterval(geoPollTimer); geoPollTimer=null; geoStableFixes=0;
 }
 function renderZones(){
   const p = $('picker'); p.innerHTML='';
@@ -316,7 +385,7 @@ function renderZones(){
     const b = document.createElement('button');
     b.textContent = z;
     if (z===ZONE) b.classList.add('on');
-    b.onclick = ()=>{ ZONE=z; autoZone=false; autoDist=null; geoFixes=[]; renderZones();   // 手動選択=自動OFF
+    b.onclick = ()=>{ ZONE=z; autoZone=false; autoDist=null; geoFixes=[]; stopGeoWatch(); renderZones();   // 手動選択=自動OFF
       if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
       if (cueBuf && lastCueId) armCue();   // ゾーン変更 → 遅延を替えて即リスケジュール
     };
@@ -327,7 +396,7 @@ function renderZones(){
     b.textContent = '📍';
     b.title = T.autoZone;
     if (autoZone) b.classList.add('on');
-    b.onclick = ()=>{ autoZone=true; renderZones(); startGeoWatch(); };
+    b.onclick = ()=>{ autoZone=true; geoStableFixes=0; renderZones(); startGeoWatch(); };
     p.appendChild(b);
   }
   $('zoneBig').textContent = customD ? customD+'m'
@@ -343,6 +412,7 @@ const vEl = $('videoLayer');
 let videoCue=null, videoRAF=0, videoBlobUrl=null, videoBlobSrc=null;
 const isVideoUrl = u => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u||'');
 async function loadVideo(url){
+  url = resolveUrl(url);
   if (videoBlobSrc === url && videoBlobUrl) return;
   $('cue').textContent = T.ready;
   const res = await fetch(url);
@@ -403,7 +473,8 @@ $('vHint').onclick = ()=>{ vEl.muted=false; $('vHint').classList.remove('show');
 // ---- CUE MODE: 事前配布ファイルを playAt で一斉スケジュール -------------------
 async function loadTrack(url){
   if (cueBufUrl === url && cueBuf) return;
-  const res = await fetch(url);
+  const res = await fetch(resolveUrl(url));
+  if (!res.ok) throw new Error('fetch '+res.status);
   const raw = await res.arrayBuffer();
   cueBuf = await ctx.decodeAudioData(raw);
   cueBufUrl = url;
@@ -413,8 +484,8 @@ async function loadTrack(url){
 async function onPreload(m){                    // 開演前DL: 再生はしない
   try{
     if (isVideoUrl(m.url)) await loadVideo(m.url); else await loadTrack(m.url);
-    $('cue').textContent = T.preloaded;
-  }catch(e){ $('cue').textContent = T.fail; }
+    $('cue').textContent = T.preloaded; sendReport('preloaded');
+  }catch(e){ $('cue').textContent = T.fail; sendReport('failed'); }
 }
 async function onCue(m){
   if (m.zones && !m.zones.includes(ZONE)) return;   // 他ゾーン宛(ウォークテスト)は無視
@@ -434,7 +505,7 @@ function armCue(){
   const src = ctx.createBufferSource();
   src.buffer = cueBuf; src.loop = !!m.loop;
   const g = ctx.createGain();
-  g.gain.value = (m.gain ?? 1) * ($('vol').value/100);
+  g.gain.value = (m.gain ?? 1) * ($('vol').value/100) * levelGain();
   src.connect(g); g.connect(ctx.destination);
   cueGainNode = g;
 
@@ -458,12 +529,15 @@ function armCue(){
   }
   cueSrc = src;
   $('cue').textContent = m.id;
+  sendReport('playing');
+  src.onended = ()=>{ if (cueSrc===src && !m.loop) sendReport('idle'); };
 }
 function onCueStop(){
   pendingCue=null; lastCueId=null;
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
   stopVideo();
   $('cue').textContent = '—';
+  if (active) sendReport('idle');
 }
 
 // ---- SOLUNA MODE: 全画面カラー同期 ------------------------------------------
@@ -554,6 +628,7 @@ function lightLoop(){
 }
 function onLight(m){
   light = m;
+  $('dim').classList.remove('on');            // ライト中は暗転しない(光が演出)
   $('lightLayer').classList.add('on');
   $('hudZone').textContent = customD ? customD+'m'
     : (autoZone && autoDist!==null) ? `📍${autoDist.toFixed(0)}m` : ZONE;
@@ -562,7 +637,7 @@ function onLight(m){
   if (!lightRAF) lightLoop();
 }
 function onLightStop(){
-  light = null;
+  light = null; armDim();
   $('lightLayer').classList.remove('on');
   $('lightHud').classList.remove('show');
 }
@@ -590,7 +665,7 @@ function onFrame(buf){
   const playAt = dv.getFloat64(14, true);
   const pcm = new Int16Array(buf, HEADER, nsamp);
   const f32 = new Float32Array(nsamp);
-  const vol = $('vol').value/100;
+  const vol = $('vol').value/100 * levelGain();
   for (let i=0;i<nsamp;i++) f32[i] = pcm[i] / 32768 * vol;
   // 配信元の実レート(例: Macの44.1kHz)でバッファを作る — 再生時にctxへ自動リサンプル
   const ab = ctx.createBuffer(1, nsamp, srvSr);
@@ -613,16 +688,19 @@ function connect(){
   ws = new WebSocket(`${proto}//${location.host}/audio?role=listen&ch=${encodeURIComponent(ch)}&zone=${ZONE}&pos=${qs.get('pos')||''}`);
   ws.binaryType = 'arraybuffer';
   ws.onopen = ()=>{ setLive(true); syncWin.length=0; pingCount=0;
-    clearInterval(pingTimer); pingTimer=setInterval(sendPing, 500); sendPing(); };
+    clearInterval(pingTimer); pingTimer=setInterval(sendPing, 500); sendPing();
+    setTimeout(()=>sendReport(), 1500); };
   ws.onmessage = e=>{
     if (typeof e.data === 'string'){
       const m = JSON.parse(e.data);
       if (m.t==='pong') onPong(m);
       else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0;
-        srvSr=m.sr||48000; stageGeo=m.geo||null; renderZones();
+        srvSr=m.sr||48000; stageGeo=m.geo||null; assetBase=m.asset_base||null;
+        zoneGainDb=m.zone_gain_db||{}; renderZones();
+        if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100) * levelGain();
         if (stageGeo && autoZone) startGeoWatch();
         if (cueBuf && pendingCue) armCue(); }
-      else if (m.t==='cue') onCue(m).catch(err=>{ $('cue').textContent=T.fail; console.error(err); });
+      else if (m.t==='cue') onCue(m).catch(err=>{ $('cue').textContent=T.fail; sendReport('failed'); console.error(err); });
       else if (m.t==='preload') onPreload(m);
       else if (m.t==='cue_stop') onCueStop();
       else if (m.t==='light') onLight(m);
@@ -657,8 +735,8 @@ async function start(){
   silent.buffer = ctx.createBuffer(1, SR, SR); silent.loop = true;
   silent.connect(ctx.destination); silent.start();
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
-  active = true; frames=0; $('fr').textContent=0;
-  connect();
+  active = true; frames=0; $('fr').textContent=0; devState='idle';
+  connect(); armDim();
   if (stageGeo && autoZone) startGeoWatch();   // 参加タップ=ユーザー起点で位置許可を出す
   if (SCREEN){
     document.body.classList.add('started');
@@ -666,7 +744,8 @@ async function start(){
   }
 }
 function stop(){
-  active=false; onCueStop(); onLightStop(); stopGeoWatch();
+  active=false; clearTimeout(dimTimer); $('dim').classList.remove('on');
+  onCueStop(); onLightStop(); stopGeoWatch();
   if(ws){try{ws.close()}catch(e){}}
   if(ctx){try{ctx.close()}catch(e){}} ctx=null;
   try{ wakeLock?.release(); }catch(e){}
@@ -675,7 +754,7 @@ function stop(){
   setLive(false);
 }
 $('btn').onclick = ()=> active ? stop() : start();
-$('vol').oninput = ()=>{ if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100); };
+$('vol').oninput = ()=>{ if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100) * levelGain(); };
 // 微調整: 動かすと250ms後に新しい遅延で曲中同期し直す(±50ms)
 $('trim').value = trimMs; $('trimV').textContent = trimMs + 'ms';
 let trimTimer = null;
@@ -687,8 +766,19 @@ $('trim').oninput = ()=>{
   clearTimeout(trimTimer);
   trimTimer = setTimeout(()=>{ if (cueBuf && pendingCue) armCue(); }, 250);
 };
-document.addEventListener('visibilitychange', ()=>{      // 画面復帰時に再同期
-  if (!document.hidden && active && ctx){ ctx.resume(); sendPing(); if (cueBuf && pendingCue) armCue(); }
+$('gdb').value = gainDb; $('gdbV').textContent = (gainDb>0?'+':'') + gainDb + 'dB';
+$('gdb').oninput = ()=>{
+  gainDb = parseFloat($('gdb').value) || 0;
+  $('gdbV').textContent = (gainDb>0?'+':'') + gainDb + 'dB';
+  localStorage.setItem('soluna_gain_db', gainDb);
+  if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100) * levelGain();
+};
+document.addEventListener('visibilitychange', async ()=>{      // 画面復帰時に再同期+wakeLock再取得
+  if (!document.hidden && active && ctx){
+    ctx.resume(); sendPing(); if (cueBuf && pendingCue) armCue();
+    try { if (!wakeLock || wakeLock.released) wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
+    armDim(); sendReport();
+  }
 });
 renderZones();
 </script>

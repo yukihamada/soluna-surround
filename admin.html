@@ -25,6 +25,12 @@
        margin-right:auto;font-family:var(--monoF)}
   .pill{display:flex;align-items:center;gap:7px;font-size:.72rem;color:var(--dim)}
   .pill b{color:var(--txt);font-size:.95rem}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+  .tile{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px 12px}
+  .tile small{display:block;font-size:.6rem;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}
+  .tile b{font-size:1.35rem;font-weight:800;color:var(--txt)}
+  .tile.ok b{color:#7fc9a2} .tile.warn b{color:#e0b64a} .tile.bad b{color:#ff8a8a}
+  .tile .sub{font-size:.62rem;color:var(--dim);margin-top:2px}
   .led{width:9px;height:9px;border-radius:50%;background:#555}
   .led.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
   .led.off{background:var(--bad)}
@@ -89,15 +95,31 @@
     <h2>SETUP</h2>
     <div class="row">
       <div><label>ADMIN TOKEN</label><input id="tok" type="password" style="width:180px" placeholder="SOLUNA_ADMIN"></div>
+      <div style="align-self:flex-end;font-size:.72rem;color:var(--dim)"><label style="display:inline"><input type="checkbox" id="remember"> この端末に記憶</label>
+        <button class="ghost" id="logout" style="margin-left:6px;padding:4px 10px;font-size:.7rem">LOGOUT</button></div>
       <div><label>CHANNEL</label><input id="ch" type="text" style="width:120px" value="festival"></div>
       <div style="align-self:flex-end"><a href="/flags" target="_blank" style="color:var(--gold);font-size:.8rem;text-decoration:none">🚩 ゾーン旗を印刷 ›</a></div>
     </div>
   </section>
 
   <section>
-    <h2>ZONES <small>ステージからの実測距離[m]を入れて APPLY — delay = d/343 + 15ms</small></h2>
+    <h2>DEVICES <small>端末の実状態(接続数ではなく「何台が本当に鳴っているか」)。位置情報は受け取らない</small></h2>
+    <div class="tiles">
+      <div class="tile ok"><small>playing</small><b id="dPlaying">0</b><div class="sub">音が出ている</div></div>
+      <div class="tile"><small>preloaded</small><b id="dPre">0</b><div class="sub">DL済・待機</div></div>
+      <div class="tile"><small>idle</small><b id="dIdle">0</b><div class="sub">接続のみ</div></div>
+      <div class="tile bad"><small>failed</small><b id="dFail">0</b><div class="sub">DL/デコード失敗</div></div>
+      <div class="tile warn"><small>ctx suspended</small><b id="dSusp">0</b><div class="sub">無音の可能性(ロック/サイレント)</div></div>
+      <div class="tile warn"><small>battery &lt;20%</small><b id="dBat">0</b><div class="sub">充電案内</div></div>
+      <div class="tile"><small>nodes</small><b id="dNodes">0</b><div class="sub">Piスピーカー</div></div>
+      <div class="tile"><small>unknown</small><b id="dUnk">0</b><div class="sub">旧client/未報告</div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>ZONES <small>ステージからの実測距離[m]を入れて APPLY — delay = d/343 + 15ms・gain=ゾーン別音量補正(dB)</small></h2>
     <table id="ztab">
-      <thead><tr><th>zone</th><th>distance m</th><th>delay ms</th><th>devices</th><th></th></tr></thead>
+      <thead><tr><th>zone</th><th>distance m</th><th>delay ms</th><th>gain dB</th><th>devices</th><th>playing</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
     <div class="row mt">
@@ -199,6 +221,16 @@
   </section>
 
   <section>
+    <h2>STATE <small>ホットスタンバイ — 控えを取って予備FOHへ。主機が死んだら予備で IMPORT → 端末は曲中復帰</small></h2>
+    <div class="row">
+      <button id="stExport">⬇ EXPORT state.json</button>
+      <label class="ghost" style="cursor:pointer;padding:9px 14px;border-radius:9px;border:1px solid rgba(255,255,255,.12);font-size:.8rem">⬆ IMPORT <input type="file" id="stImport" accept="application/json" style="display:none"></label>
+      <button class="ghost" id="chDelete" title="このチャンネルの保存状態を削除(接続中は不可)">✕ このチャンネルを削除</button>
+    </div>
+    <div class="cuenow" id="healthnow"></div>
+  </section>
+
+  <section>
     <h2>LOG</h2>
     <pre id="log">—</pre>
   </section>
@@ -206,13 +238,23 @@
 <script>
 const $=id=>document.getElementById(id);
 const HAAS=15, C=343;
-$('tok').value = localStorage.getItem('soluna_admin')||'';
+// トークン: 既定はタブを閉じると消える(sessionStorage)。「この端末に記憶」時だけlocalStorage
+$('tok').value = sessionStorage.getItem('soluna_admin') || localStorage.getItem('soluna_admin') || '';
+$('remember').checked = !!localStorage.getItem('soluna_admin');
+function saveTok(){
+  sessionStorage.setItem('soluna_admin', $('tok').value);
+  if ($('remember').checked) localStorage.setItem('soluna_admin', $('tok').value);
+  else localStorage.removeItem('soluna_admin');
+}
+$('remember').onchange = saveTok;
+$('logout').onclick = ()=>{ $('tok').value=''; sessionStorage.removeItem('soluna_admin'); localStorage.removeItem('soluna_admin'); $('remember').checked=false; log('token cleared'); };
 let zonesM = JSON.parse(localStorage.getItem('soluna_zones_m')||'{"A":0,"B":15,"C":30,"D":45,"E":60,"F":80}');
-let baseMs = 0, byZone = {}, selUrl = null, assetsLoaded = false;
+let zonesG = JSON.parse(localStorage.getItem('soluna_zones_g')||'{}');   // ゾーン別音量補正dB
+let baseMs = 0, byZone = {}, byZonePlaying = {}, selUrl = null, assetsLoaded = false;
 
 function log(s){ $('log').textContent = `${new Date().toTimeString().slice(0,8)}  ${s}\n` + $('log').textContent.slice(0,4000); }
 async function call(path, body, method='POST'){
-  localStorage.setItem('soluna_admin', $('tok').value);
+  saveTok();
   try{
     const r = await fetch(`${path}?ch=${encodeURIComponent($('ch').value)}`, {
       method, headers:{'content-type':'application/json','x-soluna-admin':$('tok').value},
@@ -229,15 +271,20 @@ function renderZones(){
   for (const [z,d] of Object.entries(zonesM)){
     const tr = document.createElement('tr');
     const n = byZone[z]||0;
+    const pn = byZonePlaying[z]||0;
     tr.innerHTML = `<td class="zname">${z}</td>
       <td><input class="mono" type="number" value="${d}" data-z="${z}" min="0" step="1"></td>
       <td class="mono" data-ms="${z}">${(d/C*1000+HAAS).toFixed(1)}</td>
+      <td><input class="mono" type="number" value="${zonesG[z]||0}" data-g="${z}" min="-12" max="12" step="1" style="width:58px"></td>
       <td class="mono devn ${n?'':'zero'}" data-dev="${z}">${n}</td>
+      <td class="mono devn ${pn?'':'zero'}" data-play="${z}">${pn}</td>
       <td style="white-space:nowrap"><button class="ghost" data-walk="${z}" title="このゾーンだけ試聴(ウォークテスト)">🔊</button>
       <button class="ghost" data-del="${z}">✕</button></td>`;
     tb.appendChild(tr);
   }
   tb.oninput = e=>{
+    const g = e.target.dataset.g;
+    if (g){ zonesG[g] = Math.max(-12, Math.min(12, parseFloat(e.target.value)||0)); return; }
     const z = e.target.dataset.z; if(!z) return;
     zonesM[z] = parseFloat(e.target.value)||0;
     tb.querySelector(`[data-ms="${z}"]`).textContent = (zonesM[z]/C*1000+HAAS).toFixed(1);
@@ -250,12 +297,13 @@ function renderZones(){
       return;
     }
     const z = e.target.dataset.del; if(!z) return;
-    delete zonesM[z]; renderZones();
+    delete zonesM[z]; delete zonesG[z]; renderZones();
   };
 }
 $('zapply').onclick = async ()=>{
   localStorage.setItem('soluna_zones_m', JSON.stringify(zonesM));
-  await call('/api/zones', {zones_m: zonesM});
+  localStorage.setItem('soluna_zones_g', JSON.stringify(zonesG));
+  await call('/api/zones', {zones_m: zonesM, gains_db: zonesG});
 };
 $('zadd').onclick = ()=>{
   const used = Object.keys(zonesM);
@@ -386,6 +434,20 @@ setInterval(async ()=>{
       const n = byZone[el.dataset.dev]||0;
       el.textContent = n; el.classList.toggle('zero', !n);
     });
+    const dv = c.devices || {};
+    byZonePlaying = dv.by_zone_playing || {};
+    document.querySelectorAll('[data-play]').forEach(el=>{
+      const n = byZonePlaying[el.dataset.play]||0;
+      el.textContent = n; el.classList.toggle('zero', !n);
+    });
+    $('dPlaying').textContent = dv.playing||0; $('dPre').textContent = dv.preloaded||0;
+    $('dIdle').textContent = dv.idle||0; $('dFail').textContent = dv.failed||0;
+    $('dSusp').textContent = dv.ctx_suspended||0; $('dBat').textContent = dv.low_battery||0;
+    $('dNodes').textContent = dv.nodes||0; $('dUnk').textContent = dv.unknown||0;
+    if (c.zone_gain_db && !document.activeElement?.dataset?.g){
+      for (const [z,g] of Object.entries(c.zone_gain_db)) if (zonesG[z]===undefined) zonesG[z]=g;
+    }
+    $('healthnow').textContent = `server ${s.version||''} · epoch ${new Date(s.server_epoch_ms).toTimeString().slice(0,8)}` + (s.asset_base ? ` · assets via ${s.asset_base}` : ' · assets: server-direct');
     $('cuenow').textContent = c.cue ? `● ACTIVE: ${c.cue.id} ${c.cue.url} gain=${c.cue.gain}${c.cue.loop?' loop':''}` : '';
     $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}` : '';
     $('geonow').textContent = c.geo ? `● STAGE: ${c.geo.lat.toFixed(5)}, ${c.geo.lng.toFixed(5)} — 来場者は📍で自動ゾーン` : '';
@@ -394,6 +456,29 @@ setInterval(async ()=>{
     if (!assetsLoaded) loadAssets();
   }catch(e){}
 }, 2000);
+// ---- state: export / import / channel delete ----
+$('stExport').onclick = async ()=>{
+  const st = await call('/api/state', null, 'GET');
+  if (!st) return;
+  const blob = new Blob([JSON.stringify(st, null, 1)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `soluna-state-${new Date().toISOString().replace(/[:.]/g,'-')}.json`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 5000);
+};
+$('stImport').onchange = async e=>{
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    if (!data.channels){ log('import: channels missing'); return; }
+    if (!confirm(`state を読み込んで全端末へ再配信します(${Object.keys(data.channels).join(', ')})。OK?`)) return;
+    await call('/api/state', {channels: data.channels});
+  }catch(err){ log('import error: '+err); }
+  e.target.value = '';
+};
+$('chDelete').onclick = ()=>{
+  if (confirm(`チャンネル「${$('ch').value}」の保存状態を削除します(接続中の端末があれば拒否されます)。OK?`))
+    call('/api/channel', null, 'DELETE');
+};
 renderZones();
 </script>
 </body>

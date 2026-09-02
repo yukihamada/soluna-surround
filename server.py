@@ -51,8 +51,26 @@ LEAD = float(os.environ.get("SOLUNA_LEAD", "0.6"))
 CUE_LEAD = 3.0                  # cue mode: default lead so every device can arm
 HEADER = struct.Struct("<3sBBBIId")
 HERE = os.path.dirname(os.path.abspath(__file__))
-ASSETS = os.path.join(HERE, "assets")
-STATE_FILE = os.path.join(HERE, "state.json")   # クラッシュセーフ: ショー状態の正本
+# SOLUNA_DATA_DIR: 音源とstate.jsonを置く永続ディレクトリ(fly volume=/data 等)。
+# 未設定ならリポジトリ直下(自宅/デモ)。再デプロイで曲が消える構造をここで潰す。
+DATA_DIR = os.environ.get("SOLUNA_DATA_DIR") or HERE
+ASSETS = os.path.join(DATA_DIR, "assets")
+STATE_FILE = os.path.join(DATA_DIR, "state.json")   # クラッシュセーフ: ショー状態の正本
+# 音源のCDN/R2前置き: 設定すると端末は /assets/x を <ASSET_BASE>/x から取る
+# (5000台のPRELOADバーストを単一VMに当てない)。サーバ自身の /assets/ も残る。
+ASSET_BASE = (os.environ.get("SOLUNA_ASSET_BASE") or "").rstrip("/")
+STARTED_AT = time.time()
+VERSION = "v6"
+
+# ---- クロック源: wall clockではなく monotonic ----------------------------------
+# time.time() はホストのNTPステップで飛ぶ(=全端末が一斉に再同期して音がジャンプ)。
+# 起動時に一度だけ epoch を取り、以後は monotonic で進める。ドリフトは数ppm(/hで数十ms)
+# で、5000台の相対同期には影響しない(全員が同じ時計を見るため)。
+_EPOCH0 = time.time() - time.monotonic()
+
+
+def now() -> float:
+    return _EPOCH0 + time.monotonic()
 
 # 既定ゾーン: ステージからの距離[m] → delay_ms = d/343*1000 + 15ms (Haas)。
 # 実会場では /api/zones で実測距離に合わせて上書きする。
@@ -74,6 +92,7 @@ def _chan(name):
         "seq": 0,
         "listeners": {},          # ws -> {"pos":..., "zone":..., "d":...}
         "zones": default_zones(),
+        "zone_gain_db": {},       # ゾーン別音量補正[dB](FOHが遠いゾーンを持ち上げる等)
         "base_ms": 0.0,           # 全ゾーン一括トリム(既存ハウスPAとの位相合わせ)
         "lead": LEAD,
         "cue": None,              # active cue dict (途中参加者へ再送する)
@@ -86,7 +105,7 @@ def _chan(name):
 
 
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
-_PERSIST = ("map", "sr", "zones", "base_ms", "lead", "cue", "light",
+_PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
             "geo", "preload", "show", "show_i")
 
 
@@ -133,7 +152,9 @@ def _pos_index(state, pos):
 def _config_msg(state):
     return json.dumps({"t": "config", "zones": state["zones"], "sr": state["sr"],
                        "base_ms": state["base_ms"], "geo": state["geo"],
-                       "server_ms": time.time() * 1000.0})
+                       "zone_gain_db": state.get("zone_gain_db") or {},
+                       "asset_base": ASSET_BASE or None, "ver": VERSION,
+                       "server_ms": now() * 1000.0})
 
 
 async def _broadcast_text(state, text):
@@ -221,12 +242,25 @@ async def audio_ws(request):
                     continue
                 if m.get("t") == "ping":
                     await ws.send_str(json.dumps({
-                        "t": "pong", "c": m.get("c"), "s": time.time() * 1000.0
+                        "t": "pong", "c": m.get("c"), "s": now() * 1000.0
                     }))
                 elif m.get("t") == "pos":
                     meta["pos"] = m.get("pos", meta["pos"])
                 elif m.get("t") == "zone":
                     meta["zone"] = (m.get("zone") or "").upper() or None
+                elif m.get("t") == "report":
+                    # 端末の実状態(FOHの観測性): preloaded/playing/idle/failed、
+                    # AudioContext状態、電池、同期精度。位置情報は受け取らない。
+                    meta["rep"] = {
+                        "st": str(m.get("st") or "idle")[:12],
+                        "ctx": str(m.get("ctx") or "")[:12],
+                        "bat": (None if m.get("bat") is None
+                                else max(0.0, min(1.0, float(m["bat"])))),
+                        "acc": (None if m.get("acc") is None else float(m["acc"])),
+                        "cue": str(m.get("cue") or "")[:40],
+                        "kind": str(m.get("kind") or "phone")[:8],
+                        "t": now(),
+                    }
             elif msg.type == WSMsgType.ERROR:
                 break
     finally:
@@ -250,9 +284,9 @@ async def _fanout(name, state, data: bytes):
     if len(pcm) < total:
         return
 
-    now = time.time()
+    t_now = now()
     if state["epoch"] is None:
-        state["epoch"] = now + state["lead"]
+        state["epoch"] = t_now + state["lead"]
         state["played"] = 0
     play_at = state["epoch"] + state["played"] / float(state["sr"])
     state["played"] += nsamp
@@ -314,7 +348,7 @@ async def api_cue(request):
     if body.get("at"):                       # サーバepoch秒を直接指定
         at = float(body["at"])
     else:                                    # lead秒後(サーバ時計基準・推奨)
-        at = time.time() + float(body.get("lead") or CUE_LEAD)
+        at = now() + float(body.get("lead") or CUE_LEAD)
     cue = {
         "id": body.get("id") or f"cue-{int(at * 1000)}",
         "at": at,                                # server-epoch seconds (sample 0)
@@ -360,13 +394,13 @@ async def api_light(request):
         raise web.HTTPBadRequest(text="pattern must be one of "
                                       "solid|pulse|beat|wave|plasma|strobe|audio")
     light = {
-        "id": body.get("id") or f"light-{int(time.time() * 1000)}",
+        "id": body.get("id") or f"light-{int(now() * 1000)}",
         "pattern": pattern,
         "colors": body.get("colors") or ["#d4af37", "#7fc9a2"],
         "bpm": float(body.get("bpm", 120)),
         "speed": float(body.get("speed", 1.0)),
         "brightness": float(body.get("brightness", 1.0)),
-        "at": float(body.get("at") or time.time()),   # パターン位相の基準時刻
+        "at": float(body.get("at") or now()),   # パターン位相の基準時刻
     }
     state["light"] = light
     _save_state()
@@ -426,7 +460,7 @@ async def api_show(request):
         state["show_i"] = i
         fired = {"i": i + 1, "total": len(show), "label": step["label"]}
         if step.get("url") or step.get("video"):
-            at = time.time() + float(step.get("lead") or CUE_LEAD)
+            at = now() + float(step.get("lead") or CUE_LEAD)
             cue = {"id": f"show{i+1}-{step['label']}", "at": at,
                    "gain": float(step.get("gain", 1.0)),
                    "loop": bool(step.get("loop", False))}
@@ -445,7 +479,7 @@ async def api_show(request):
                      "bpm": float(lr.get("bpm", 120)),
                      "speed": float(lr.get("speed", 1.0)),
                      "brightness": float(lr.get("brightness", 1.0)),
-                     "at": time.time()}
+                     "at": now()}
             state["light"] = light
             await _broadcast_text(state, json.dumps({"t": "light", **light}))
             fired["light"] = light["pattern"]
@@ -553,13 +587,20 @@ async def api_zones(request):
     zones_m = body.get("zones_m")            # 距離[m]指定 → delay自動計算
     if isinstance(zones_m, dict) and zones_m:
         zones = {k: float(v) / 343.0 * 1000.0 + 15.0 for k, v in zones_m.items()}
+    if (not isinstance(zones, dict) or not zones) and isinstance(body.get("gains_db"), dict):
+        zones = state["zones"]                # 音量補正だけ更新
     if not isinstance(zones, dict) or not zones:
         raise web.HTTPBadRequest(
             text='{"zones":{"A":15.0,...}} (delay_ms) or {"zones_m":{"A":15,...}} (距離m)')
     state["zones"] = {str(k).upper(): round(float(v), 1) for k, v in zones.items()}
+    gains = body.get("gains_db")             # ゾーン別音量補正[dB] (±12にクリップ)
+    if isinstance(gains, dict):
+        state["zone_gain_db"] = {str(k).upper(): round(max(-12.0, min(12.0, float(v))), 1)
+                                 for k, v in gains.items()}
     _save_state()
     await _broadcast_text(state, _config_msg(state))
-    return web.json_response({"ok": True, "zones": state["zones"]})
+    return web.json_response({"ok": True, "zones": state["zones"],
+                              "zone_gain_db": state["zone_gain_db"]})
 
 
 async def api_upload(request):
@@ -593,6 +634,90 @@ async def api_assets(request):
     return web.json_response({"ok": True, "assets": files})
 
 
+def _devices_summary(st):
+    """端末レポートの集計: FOHが「何台が実際に鳴っているか」を見るため。
+    レポート無し(旧client/play.py)は unknown に数える。"""
+    agg = {"preloaded": 0, "playing": 0, "idle": 0, "failed": 0, "unknown": 0,
+           "low_battery": 0, "ctx_suspended": 0, "stale": 0, "nodes": 0}
+    by_zone_playing = {}
+    t = now()
+    for meta in st["listeners"].values():
+        rep = meta.get("rep")
+        if not rep:
+            agg["unknown"] += 1
+            continue
+        if rep.get("kind") == "node":
+            agg["nodes"] += 1
+        stt = rep.get("st") or "idle"
+        agg[stt if stt in agg else "unknown"] += 1
+        if stt == "playing":
+            z = meta.get("zone") or "?"
+            by_zone_playing[z] = by_zone_playing.get(z, 0) + 1
+        if rep.get("bat") is not None and rep["bat"] < 0.2:
+            agg["low_battery"] += 1
+        if rep.get("ctx") and rep["ctx"] != "running":
+            agg["ctx_suspended"] += 1
+        if t - rep.get("t", t) > 60:
+            agg["stale"] += 1
+    agg["by_zone_playing"] = by_zone_playing
+    return agg
+
+
+async def health(request):
+    n = sum(len(st["listeners"]) for st in channels.values())
+    return web.json_response({"ok": True, "version": VERSION,
+                              "uptime_s": round(time.time() - STARTED_AT, 1),
+                              "listeners": n, "channels": len(channels),
+                              "data_dir": DATA_DIR, "asset_base": ASSET_BASE or None,
+                              "server_epoch_ms": now() * 1000.0})
+
+
+async def api_state(request):
+    """ショー状態の丸ごと書き出し/読み込み(ホットスタンバイ切替用)。
+    GET → 永続分(zones/align/geo/cue/light/show…)を JSON で返す。
+    POST {channels:{...}} → 上書きして全端末へ config を再配信。
+    運用: 予備FOH Macに定期 GET で控えを取り、主機が死んだら予備で POST → 端末は
+    再接続先(同ホスト名/IP引継ぎ)で同じキューを受け取り曲中復帰する。
+    2台のMacがNTPで揃っていれば cue.at(epoch秒)はそのまま有効。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    if request.method == "GET":
+        out = {name: {k: st.get(k) for k in _PERSIST} for name, st in channels.items()}
+        return web.json_response({"ok": True, "version": VERSION,
+                                  "exported_at": now(), "channels": out})
+    body = await request.json()
+    chans = body.get("channels")
+    if not isinstance(chans, dict):
+        raise web.HTTPBadRequest(text='{"channels":{"festival":{...}}} required')
+    for name, vals in chans.items():
+        st = _chan(str(name))
+        for k in _PERSIST:
+            if k in vals:
+                st[k] = vals[k]
+        await _broadcast_text(st, _config_msg(st))
+        if st.get("cue"):
+            await _broadcast_text(st, json.dumps({"t": "cue", **st["cue"]}))
+        if st.get("light"):
+            await _broadcast_text(st, json.dumps({"t": "light", **st["light"]}))
+    _save_state()
+    return web.json_response({"ok": True, "imported": list(chans.keys())})
+
+
+async def api_channel_delete(request):
+    """テスト用チャンネル等をstateから消す(本番の /status を汚さない)。
+    接続中のリスナーがいるチャンネルは拒否。"""
+    if not _admin_ok(request):
+        raise web.HTTPForbidden(text="x-soluna-admin required (set SOLUNA_ADMIN)")
+    name = request.query.get("ch")
+    if not name or name not in channels:
+        raise web.HTTPNotFound(text="unknown channel")
+    if channels[name]["listeners"] or channels[name]["source"]:
+        raise web.HTTPConflict(text="channel has live connections")
+    del channels[name]
+    _save_state()
+    return web.json_response({"ok": True, "deleted": name})
+
+
 async def status(request):
     out = {}
     for name, st in channels.items():
@@ -601,6 +726,8 @@ async def status(request):
             key = meta.get("zone") or meta.get("pos") or "?"
             zones_n[key] = zones_n.get(key, 0) + 1
         out[name] = {
+            "devices": _devices_summary(st),
+            "zone_gain_db": st.get("zone_gain_db") or {},
             "source": st["source"] is not None,
             "map": st["map"],
             "sr": st["sr"],
@@ -621,7 +748,8 @@ async def status(request):
                               if st.get("show") and st.get("show_i", -1) + 1 < len(st["show"])
                               else None)},
         }
-    return web.json_response({"server_epoch_ms": time.time() * 1000.0,
+    return web.json_response({"server_epoch_ms": now() * 1000.0, "version": VERSION,
+                              "asset_base": ASSET_BASE or None,
                               "lead": LEAD, "cue_lead": CUE_LEAD, "channels": out})
 
 
@@ -654,12 +782,31 @@ async def mic(request):
     return web.FileResponse(os.path.join(HERE, "mic.html"))
 
 
+@web.middleware
+async def cache_headers(request, handler):
+    """/assets/ は CDN/ブラウザに長く持たせる(PRELOADの再取得ゼロ・R2/CDN前置き時に
+    エッジがヒットする)。HTML/JS は常に最新(デプロイ直後に古いclientを掴まない)。"""
+    resp = await handler(request)
+    p = request.path
+    if p.startswith("/assets/"):
+        resp.headers.setdefault("Cache-Control", "public, max-age=86400")
+        resp.headers.setdefault("Access-Control-Allow-Origin", "*")
+    elif p in ("/", "/screen", "/admin", "/dj", "/sw.js", "/mic", "/flags"):
+        resp.headers.setdefault("Cache-Control", "no-cache")
+    return resp
+
+
 def main():
     port = int(os.environ.get("PORT", "8900"))
     os.makedirs(ASSETS, exist_ok=True)
     _load_state()   # クラッシュ/再起動からショー状態を復元
-    app = web.Application(client_max_size=256 * 1024 * 1024)   # 映像アップロード対応
+    app = web.Application(client_max_size=256 * 1024 * 1024,   # 映像アップロード対応
+                          middlewares=[cache_headers])
     app.add_routes([
+        web.get("/health", health),
+        web.get("/api/state", api_state),
+        web.post("/api/state", api_state),
+        web.delete("/api/channel", api_channel_delete),
         web.get("/", index),
         web.get("/screen", index),   # プロジェクター/LEDウォール用(同じclient・screenモード)
         web.get("/admin", admin_page),
@@ -683,9 +830,10 @@ def main():
         web.static("/icons", os.path.join(HERE, "icons")),
     ])
     ip = os.environ.get("LAN_IP", "127.0.0.1")
-    print(f"\n🔊 SOLUNA Surround v3  http://{ip}:{port}/")
+    print(f"\n🔊 SOLUNA Sound {VERSION}  http://{ip}:{port}/")
     print(f"   client http://{ip}:{port}/?zone=A   admin http://{ip}:{port}/admin")
-    print(f"   assets: {ASSETS}\n")
+    print(f"   data: {DATA_DIR}  assets: {ASSETS}"
+          + (f"  asset_base: {ASSET_BASE}" if ASSET_BASE else "") + "\n")
     web.run_app(app, host="0.0.0.0", port=port, print=None)
 
 
