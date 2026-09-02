@@ -108,6 +108,10 @@ def _chan(name):
         "net": None,              # 回線案内 {"ssid","wifi_zones":[..]} 前方=会場Wi-Fi/後方=LTE
         "node_cfg": {},           # Piノードの割当 host -> {"zone","pos","gain_db"}(/adminから・接続時に再送)
         "tc": None,               # タイムコード基準 {"epoch","frames","fps","drop","tc"}(cue を tc で指定)
+        "mute": False,            # FOHキルスイッチ(全端末・全ノード・CUE/LIVE両方)
+        "level": None,            # LIVE入力メータ {"peak_dbfs","rms_dbfs","clip","t"}(FOHが「来てる」を目で見る)
+        "stats": {"peak_listeners": 0, "peak_playing": 0, "peak_playing_zone": {}, "cues": 0,
+                  "lights": 0, "first_cue": None, "last_cue": None, "started": None},   # 事後レポート用
     })
 
 
@@ -120,7 +124,7 @@ NODE_STALE_S = float(os.environ.get("SOLUNA_NODE_STALE_S", "15"))
 
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
-            "geo", "preload", "show", "show_i", "net", "node_cfg", "tc")
+            "geo", "preload", "show", "show_i", "net", "node_cfg", "tc", "mute", "stats")
 
 
 def _save_state():
@@ -250,6 +254,9 @@ async def audio_ws(request):
             await ws.send_str(json.dumps({"t": "cue", **state["cue"]}))
         if state["light"]:                    # 途中参加 → 進行中ライトも渡す
             await ws.send_str(json.dumps({"t": "light", **state["light"]}))
+        if state.get("mute"):                 # ミュート中に入場 → 黙って入る
+            await ws.send_str(json.dumps({"t": "mute", "on": True}))
+        _track_peaks(state)
         if meta["host"] and (state.get("node_cfg") or {}).get(meta["host"]):
             cfg = state["node_cfg"][meta["host"]]   # /admin で割り当てたゾーンを再送(node.json消失でも復元)
             await ws.send_str(json.dumps({"t": "assign", **cfg}))
@@ -310,6 +317,15 @@ async def _fanout(name, state, data: bytes):
         return
 
     t_now = now()
+    # LIVE入力メータ(FOH向け): 8サンプルおきの間引きで安価に peak/RMS。clip=フルスケール到達
+    if seq % 5 == 0:                          # 100ms に1回
+        import math
+        sub = pcm[::8]
+        peak = max(abs(v) for v in sub) if len(sub) else 0
+        rms = math.sqrt(sum(v * v for v in sub) / len(sub)) if len(sub) else 0.0
+        state["level"] = {"peak_dbfs": round(20 * math.log10(max(peak, 1) / 32768.0), 1),
+                          "rms_dbfs": round(20 * math.log10(max(rms, 1.0) / 32768.0), 1),
+                          "clip": peak >= 32767, "t": t_now}
     if state["epoch"] is None:
         state["epoch"] = t_now + state["lead"]
         state["played"] = 0
@@ -395,7 +411,14 @@ async def do_cue(state, body: dict) -> dict:
         cue["video"] = video
     if body.get("zones"):                    # ウォークテスト: 指定ゾーンのみ再生
         cue["zones"] = [str(z).upper() for z in body["zones"]]
+    for k in ("title", "artist", "image"):   # NOW PLAYING 表示 / スポンサー静止画(端末+/screen)
+        if body.get(k):
+            cue[k] = str(body[k])[:200]
     state["cue"] = cue
+    st = state["stats"]
+    st["cues"] += 1
+    st["first_cue"] = st["first_cue"] or at
+    st["last_cue"] = at
     _save_state()
     await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
     return {"ok": True, "cue": cue, "listeners": len(state["listeners"])}
@@ -443,6 +466,7 @@ async def do_light(state, body: dict) -> dict:
         return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
     light = _light_from(body)
     state["light"] = light
+    state["stats"]["lights"] += 1
     _save_state()
     await _broadcast_text(state, json.dumps({"t": "light", **light}))
     return {"ok": True, "light": light, "listeners": len(state["listeners"])}
@@ -667,6 +691,53 @@ async def api_timecode(request):
                                              body.get("drop"), body.get("epoch")))
     except (ValueError, TypeError) as e:
         raise web.HTTPBadRequest(text=f'{{"tc":"HH:MM:SS:FF","fps":30}} — {e}')
+
+
+def _track_peaks(state):
+    """事後レポート用のピーク更新(接続時・レポート受信時・statusで呼ぶ。安価)。"""
+    st = state["stats"]
+    st["started"] = st["started"] or now()
+    n = len(state["listeners"])
+    if n > st["peak_listeners"]:
+        st["peak_listeners"] = n
+    playing = 0
+    by_zone = {}
+    for meta in state["listeners"].values():
+        rep_ = meta.get("rep") or {}
+        if rep_.get("st") == "playing":
+            playing += 1
+            z = meta.get("zone") or "?"
+            by_zone[z] = by_zone.get(z, 0) + 1
+    if playing > st["peak_playing"]:
+        st["peak_playing"] = playing
+    for z, c in by_zone.items():
+        if c > st["peak_playing_zone"].get(z, 0):
+            st["peak_playing_zone"][z] = c
+
+
+async def api_mute(request):
+    """FOHキルスイッチ: {"on":true|false}。CUEもLIVEも即時無音(端末は再生を止めずゲインを0に=解除で位相ズレなし)。"""
+    state = _admin_state(request)
+    body = await request.json()
+    state["mute"] = bool(body.get("on", True))
+    _save_state()
+    await _broadcast_text(state, json.dumps({"t": "mute", "on": state["mute"]}))
+    return web.json_response({"ok": True, "mute": state["mute"], "listeners": len(state["listeners"])})
+
+
+async def api_stats(request):
+    """事後レポート(admin): ピーク接続/再生数・ゾーン別ピーク・cue数・稼働時間。reset=1 で新しい公演へ。"""
+    state = _admin_state(request)
+    _track_peaks(state)
+    if request.query.get("reset") == "1":
+        state["stats"] = {"peak_listeners": 0, "peak_playing": 0, "peak_playing_zone": {}, "cues": 0,
+                          "lights": 0, "first_cue": None, "last_cue": None, "started": now()}
+        _save_state()
+    st = dict(state["stats"])
+    st["uptime_s"] = round(now() - (st["started"] or now()), 1)
+    st["now_listeners"] = len(state["listeners"])
+    st["nodes"] = sum(1 for m in state["listeners"].values() if (m.get("rep") or {}).get("kind") == "node")
+    return web.json_response(st)
 
 
 async def api_preload(request):
@@ -964,6 +1035,8 @@ async def status(request):
             "devices": _devices_summary(st),
             "zone_gain_db": st.get("zone_gain_db") or {},
             "source": st["source"] is not None,
+            "level": (st.get("level") if st.get("level") and now() - st["level"]["t"] < 2.0 else None),
+            "mute": bool(st.get("mute")),
             "map": st["map"],
             "sr": st["sr"],
             "seq": st["seq"],
@@ -1130,6 +1203,8 @@ def main():
         web.post("/api/zones", api_zones),
         web.get("/api/preload", api_preload),
         web.post("/api/net", api_net),
+        web.post("/api/mute", api_mute),
+        web.get("/api/stats", api_stats),
         web.post("/api/nodes/report", api_nodes_report),
         web.get("/api/nodes", api_nodes),
         web.post("/api/nodes/assign", api_nodes_assign),

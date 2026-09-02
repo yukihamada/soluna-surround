@@ -210,6 +210,9 @@ payload: interleaved int16 PCM
 | `GET /api/nodes` | admin | boxes with `stale` flag, their assignments, the server box's AP SSID/password |
 | `POST /api/nodes/assign` | admin | `{"host":"soluna-box-2","zone":"C","pos":"L","gain_db":-3}` → saved + pushed live to that box; `{"host":…,"clear":true}` |
 | `GET /api/preload` | public, tiny | `{url, video, asset_base}` — what a phone should prefetch; used by the gate QR (`/flags?gate=1`) before any WebSocket is opened |
+| `POST /api/mute` | admin | `{"on":true}` — kill switch: every phone and node goes silent at once (CUE and LIVE), phase preserved; `false` restores |
+| `GET /api/stats` | admin | post-show report: peak devices, peak playing (per zone), cues fired, uptime; `?reset=1` starts a new show |
+| cue extras | | `title`, `artist` → NOW PLAYING on phones/screen; `image` → full-screen still (sponsor / announcement); `/status.level` shows LIVE peak/RMS dBFS + clip |
 | `POST /api/timecode` | admin | `{"tc":"01:00:00:00","fps":30}` — "right now the show timecode is X" (also OSC `/soluna/tc`, or `ltc.py` from LTC audio); then `/api/cue` and setlist steps accept `"tc":"01:00:10:00"` instead of `lead`. 24/25/30/29.97DF. `GET` returns the anchor + estimated current tc |
 | OSC `udp/$SOLUNA_OSC_PORT` | LAN, no auth | `/soluna/cue url [lead] [gain]` · `/soluna/preload` · `/soluna/stop` · `/soluna/go` · `/soluna/show/goto i` · `/soluna/light pattern [c1] [c2] [bpm]` · `/soluna/light/stop` · `/soluna/align ms` · `/soluna/zone name ms` · `/soluna/tc "HH:MM:SS:FF" [fps]` — trailing `"ch=<name>"` selects a channel; bundle timetag → `at`. See `docs/show-control.md` |
 | DMX out `SOLUNA_ARTNET` / `SOLUNA_SACN` | env | `ip[:universe]` — active light pattern → Art-Net ArtDMX / sACN E1.31 at 40 Hz, `SOLUNA_DMX_FIXTURES` RGB fixtures from `SOLUNA_DMX_START`; blackout once on stop |

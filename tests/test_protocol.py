@@ -303,6 +303,61 @@ async def main():
         r = await s.post(f"{BASE}/api/net?ch=gatech", json={"clear": True}, headers={"x-soluna-admin": ADMIN})
         check("api/net: clear → null", (await r.json())["net"] is None)
 
+        # 10m) cue に title/artist/image が乗る(NOW PLAYING / 静止画)+ stats のcue数
+        ws_m = await s.ws_connect(f"{BASE}/audio?role=listen&ch=metach&zone=A")
+        await asyncio.wait_for(ws_m.receive(), 3)          # config
+        r = await s.post(f"{BASE}/api/cue?ch=metach", json={"url": "/assets/x.mp3", "lead": 5,
+                         "title": "Opening", "artist": "SOLUNA", "image": "/assets/s.png"},
+                         headers={"x-soluna-admin": ADMIN})
+        b = await r.json()
+        check("cue: title/artist/image 透過", b["cue"].get("title") == "Opening" and b["cue"].get("artist") == "SOLUNA"
+              and b["cue"].get("image") == "/assets/s.png", str(b))
+        got_m = json.loads((await asyncio.wait_for(ws_m.receive(), 3)).data)
+        check("cue配信にも title が乗る", got_m.get("t") == "cue" and got_m.get("title") == "Opening", str(got_m))
+
+        # 10n) /api/mute → 全端末に {"t":"mute"}・途中参加にも再送・status.mute
+        r = await s.post(f"{BASE}/api/mute?ch=metach", json={"on": True}, headers={"x-soluna-admin": ADMIN})
+        check("mute: ok", r.status == 200 and (await r.json())["mute"] is True)
+        got_m = json.loads((await asyncio.wait_for(ws_m.receive(), 3)).data)
+        check("mute: 配信 {t:mute,on:true}", got_m.get("t") == "mute" and got_m.get("on") is True, str(got_m))
+        ws_m2 = await s.ws_connect(f"{BASE}/audio?role=listen&ch=metach&zone=B")
+        seen = []
+        for _ in range(4):
+            mm = await asyncio.wait_for(ws_m2.receive(), 3)
+            seen.append(json.loads(mm.data).get("t"))
+            if "mute" in seen: break
+        check("mute: 途中参加にも再送", "mute" in seen, str(seen))
+        st_m = (await (await s.get(f"{BASE}/status")).json())["channels"]["metach"]
+        check("status.mute=true", st_m.get("mute") is True)
+        r = await s.post(f"{BASE}/api/mute?ch=metach", json={"on": False}, headers={"x-soluna-admin": ADMIN})
+        check("unmute: ok", (await r.json())["mute"] is False)
+        r = await s.post(f"{BASE}/api/mute?ch=metach", json={"on": True})
+        check("mute: 無認証403", r.status == 403)
+
+        # 10o) /api/stats: ピーク接続数・cue数・uptime / reset
+        r = await s.get(f"{BASE}/api/stats?ch=metach", headers={"x-soluna-admin": ADMIN})
+        j = await r.json()
+        check("stats: peak_listeners>=2, cues=1", j.get("peak_listeners", 0) >= 2 and j.get("cues") == 1
+              and j.get("uptime_s") is not None, str(j))
+        r = await s.get(f"{BASE}/api/stats?ch=metach&reset=1", headers={"x-soluna-admin": ADMIN})
+        check("stats: reset → cues=0", (await r.json()).get("cues") == 0)
+        r = await s.get(f"{BASE}/api/stats?ch=metach")
+        check("stats: 無認証403", r.status == 403)
+        await ws_m.close(); await ws_m2.close()
+
+        # 10p) LIVE入力メータ: push すると status.level に peak/rms が出る
+        ws_pl = await s.ws_connect(f"{BASE}/audio?role=push&ch=levelch")
+        await ws_pl.send_str(json.dumps({"t": "hello", "map": ["L", "R", "C"], "sr": 48000}))
+        import array as _arr
+        tone = _arr.array("h", [int(16384 * (1 if (i // 24) % 2 == 0 else -1)) for i in range(960 * 3)])  # 方形波 -6dBFS
+        for sq in range(6):
+            await ws_pl.send_bytes(HEADER.pack(b"SL2", 2, 3, 0, sq, 960, 0.0) + tone.tobytes())
+            await asyncio.sleep(0.02)
+        st_l = (await (await s.get(f"{BASE}/status")).json())["channels"]["levelch"]
+        lv = st_l.get("level") or {}
+        check("level: peak≈-6dBFS", lv and -6.5 <= lv.get("peak_dbfs", -99) <= -5.5 and lv.get("clip") is False, str(lv))
+        await ws_pl.close()
+
         # 11) play.py の遅延計算(ユニット)
         sys.path.insert(0, "/Users/yuki/workspace/soluna-surround")
         try:

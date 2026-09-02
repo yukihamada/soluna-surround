@@ -94,6 +94,7 @@ class Player:
         self.zone_gain_db = {}     # サーバconfig: zone -> dB
         self.base_ms = 0.0         # ハウスPA位相合わせトリム
         self.gain_db = 0.0         # このノード固有の音量補正(--gain-db)
+        self.muted = False         # {"t":"mute","on":true} で全ノード即時無音
         self.asset_base = None
         self.gl, self.gr = PAN.get(pos.upper(), (0.7071, 0.7071))
         self.ring = np.zeros((RING, 2), dtype=np.float32)
@@ -176,6 +177,8 @@ class Player:
             cue = self.cue
         if cue is not None:
             block += self.cue_block(cue, start, nframes)
+        if self.muted:                     # FOHキルスイッチ: 位相を保ったまま無音(解除でそのまま復帰)
+            block[:] = 0.0
         outdata[:] = np.clip(block, -1.0, 1.0)
 
     def cue_block(self, cue, start, nframes):
@@ -390,6 +393,9 @@ async def session(player, server, ch, node_id):
                                 print(f"[play {player.pos}] cue failed: {e}")
                         await loop.run_in_executor(None, _cue)
                         await ws.send(json.dumps(player.report()))
+                    elif t == "mute":
+                        player.muted = bool(m.get("on"))
+                        print(f"[play {player.pos}] MUTE {'on' if player.muted else 'off'}")
                     elif t == "cue_stop":
                         player.stop_cue()
                         await ws.send(json.dumps(player.report()))

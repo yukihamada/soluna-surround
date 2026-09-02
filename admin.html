@@ -89,6 +89,8 @@
     <div class="pill">DEVICES <b class="mono" id="nDev">0</b></div>
     <div class="pill">LIVE LEAD <b class="mono" id="lead">—</b></div>
     <div class="pill">STREAM <b class="mono" id="stream">—</b></div>
+    <div class="pill">LEVEL <b class="mono" id="lvl">—</b></div>
+    <div class="pill"><a href="#" id="statsBtn" style="color:var(--gold);text-decoration:none">📊 STATS</a> <b class="mono" id="statsTxt"></b></div>
   </div>
 
   <section>
@@ -186,11 +188,17 @@
       <input id="vurl" type="text" placeholder="/assets/opening.mp4"></div>
     </div>
     <div class="row mt">
+      <div><label>TITLE(端末に NOW PLAYING 表示・任意)</label><input id="ctitle" type="text" style="width:200px" placeholder="Opening"></div>
+      <div><label>ARTIST</label><input id="cartist" type="text" style="width:160px" placeholder="SOLUNA"></div>
+      <div><label>IMAGE URL(静止画=スポンサー/告知・任意)</label><input id="cimage" type="text" style="width:200px" placeholder="/assets/sponsor.png"></div>
+    </div>
+    <div class="row mt">
       <button id="preload" style="flex:1">📥 PRELOAD — 先に全端末へ配布(再生しない)</button>
     </div>
     <div class="row mt">
       <button class="gold fire" id="fire">▶ FIRE — 全端末一斉再生</button>
       <button class="red" id="stop" style="flex:1">■ STOP</button>
+      <button class="red" id="mute" style="flex:1" title="CUEもLIVEも即時無音・解除で位相そのまま復帰">🔇 MUTE</button>
     </div>
     <div class="cuenow" id="cuenow"></div>
   </section>
@@ -426,10 +434,23 @@ $('preload').onclick = async ()=>{
   for (const u of [$('url').value, $('vurl').value])
     if (u) await call('/api/cue', {url: u, preload:true});
 };
+$('mute').onclick = async ()=>{
+  const s = await (await fetch('/status')).json(); const c = s.channels[$('ch').value]||{};
+  await call('/api/mute', {on: !c.mute});
+};
+$('statsBtn').onclick = async e=>{
+  e.preventDefault(); saveTok();
+  const r = await fetch(`/api/stats?ch=${encodeURIComponent($('ch').value)}`, {headers:{'x-soluna-admin':$('tok').value}});
+  const j = await r.json();
+  $('statsTxt').textContent = r.ok ? `peak ${j.peak_listeners} dev / ${j.peak_playing} playing · ${j.cues} cues · ${(j.uptime_s/3600).toFixed(1)}h` : 'token?';
+  if (r.ok) console.log('SOLUNA stats', j);
+};
 $('fire').onclick = ()=> call('/api/cue', {
   url: $('url').value || undefined, video: $('vurl').value || undefined,
   lead: parseFloat($('clead').value||5),
-  gain: parseFloat($('gain').value||1), loop: !!$('loop').value });
+  gain: parseFloat($('gain').value||1), loop: !!$('loop').value,
+  title: $('ctitle').value.trim()||undefined, artist: $('cartist').value.trim()||undefined, image: $('cimage').value.trim()||undefined
+});
 // 本番の音/光を落とすボタンは誤タップ1発で死なないよう確認を挟む
 $('stop').onclick = ()=>{ if (confirm('全端末のキュー再生を停止します。OK?')) call('/api/cue', {stop:true}); };
 
@@ -497,6 +518,10 @@ setInterval(async ()=>{
     $('srcSt').textContent = c.source ? 'LIVE' : 'NO SRC';
     $('lead').textContent = (c.live_lead*1000).toFixed(0)+'ms';
     $('stream').textContent = c.stream_t!=null ? c.stream_t.toFixed(1)+'s' : '—';
+    $('lvl').textContent = c.level ? `${c.level.peak_dbfs} pk / ${c.level.rms_dbfs} rms${c.level.clip?' ⚠CLIP':''}` : (c.source ? 'silent' : '—');
+    $('lvl').style.color = c.level && c.level.clip ? '#ff5a5a' : '';
+    $('mute').textContent = c.mute ? '🔊 UNMUTE (muted)' : '🔇 MUTE';
+    $('mute').classList.toggle('gold', !!c.mute);
     byZone = c.by_zone||{};
     baseMs = c.base_ms??baseMs; $('base').textContent = baseMs;
     // 入力中の距離を消さないよう、台数セルだけ差分更新
