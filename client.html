@@ -86,6 +86,16 @@
   summary::-webkit-details-marker{display:none}
   summary{letter-spacing:.14em}
   /* SOLUNAモード: 全画面カラーレイヤー(音と同じクロックで色が同期) */
+  #imageLayer{position:fixed;inset:0;z-index:98;display:none;background:#000 center/contain no-repeat}
+  #imageLayer.on{display:block}
+  #nowPlaying{position:fixed;left:0;right:0;bottom:14px;z-index:120;text-align:center;pointer-events:none;
+    font-family:"Zen Kaku Gothic New",sans-serif;text-shadow:0 1px 8px #000}
+  #nowPlaying small{display:block;font-size:.6rem;letter-spacing:.3em;color:#d4af37}
+  #nowPlaying b{display:block;font-size:1.1rem;color:#f4e8d0}
+  #nowPlaying span{font-size:.85rem;color:#c9b99a}
+  #muteBanner{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:130;background:#4a1010;color:#fff;
+    padding:6px 14px;border-radius:999px;font-size:.85rem}
+  @media (prefers-reduced-motion: reduce){ #lightLayer{transition:none} }
   #lightLayer{position:fixed;inset:0;z-index:99;display:none;background:#000;
        transition:none;touch-action:manipulation}
   #lightLayer.on{display:block}
@@ -159,6 +169,9 @@
   <video id="videoLayer" playsinline webkit-playsinline preload="auto"></video>
   <div id="vHint">🔇 タップで音を出す</div>
   <div id="lightLayer"></div>
+  <div id="imageLayer"></div>
+  <div id="nowPlaying" hidden><small data-i18n="npL">NOW PLAYING</small><b id="npTitle"></b><span id="npArtist"></span></div>
+  <div id="muteBanner" hidden>🔇 <span data-i18n="muted">FOHにより一時ミュート中</span></div>
   <div id="lightHud"><span class="chip">ZONE <b id="hudZone">A</b> <span id="hudPat"></span>
     <button id="lightFull" style="pointer-events:auto;border:none;background:rgba(212,175,55,.2);color:#d4af37;border-radius:99px;padding:8px 14px;font-weight:800;font-size:.8rem">⛶</button>
     <button id="lightExit">✕ 抜ける</button></span></div>
@@ -178,7 +191,7 @@ const I18N = {
         autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離', trimL:'微調整(耳合わせ)',
         preloaded:'準備OK', hint2:'音が出ない時: iPhoneはサイレントスイッチをOFFに・音量を上げて。',
         hint3:'画面をロックすると音が止まります(ブラウザの仕様)。しばらく触らないと画面は自動で暗くなり電池を節約します。',
-        gatePrep:'🎫 音の準備中… このまま数秒お待ちください', gateOk:'🎫 準備OK。会場に入ったら ▶ を押してください(通信なしで鳴ります)',
+        npL:'NOW PLAYING', muted:'FOHにより一時ミュート中', gatePrep:'🎫 音の準備中… このまま数秒お待ちください', gateOk:'🎫 準備OK。会場に入ったら ▶ を押してください(通信なしで鳴ります)',
         gateNone:'🎫 まだ配布前です。会場で ▶ を押せば自動で受け取ります', gateFail:'🎫 準備に失敗しました。会場で ▶ を押せばその場で受け取ります',
         netWifi:'📶 このゾーンは会場Wi-Fi「{ssid}」に接続すると同期が良くなります', netLte:'📶 このゾーンはモバイル回線のままでOK(会場Wi-Fiは前方ゾーン専用)',
         privacy:'位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。',
@@ -192,7 +205,7 @@ const I18N = {
         autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST', trimL:'FINE TRIM',
         preloaded:'ready', hint2:'No sound? On iPhone, flip the silent switch off and turn the volume up.',
         hint3:'Locking the screen stops the sound (browser limitation). The screen dims by itself when idle to save battery.',
-        gatePrep:'🎫 Getting the sound ready… a few seconds', gateOk:'🎫 Ready. Once inside, tap ▶ (plays without downloading)',
+        npL:'NOW PLAYING', muted:'Muted by FOH for a moment', gatePrep:'🎫 Getting the sound ready… a few seconds', gateOk:'🎫 Ready. Once inside, tap ▶ (plays without downloading)',
         gateNone:'🎫 Nothing to prepare yet — tap ▶ inside and it arrives by itself', gateFail:'🎫 Preparation failed — tap ▶ inside and it downloads there',
         netWifi:'📶 In this zone, join venue Wi-Fi "{ssid}" for tighter sync', netLte:'📶 In this zone, stay on mobile data (venue Wi-Fi is for the front zones)',
         privacy:'Your location is used only on this device to compute the distance to the stage. Only the nearest zone letter is sent — never coordinates.',
@@ -268,7 +281,8 @@ function armDim(){
 function undim(){ $('dim').classList.remove('on'); armDim(); }
 $('dim').addEventListener('click', undim);
 ['touchstart','pointerdown','keydown'].forEach(ev => document.addEventListener(ev, ()=>{ if (active) armDim(); }, {passive:true}));
-let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null;
+let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null, muted=false, liveGain=null;
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;   // アクセシビリティ: 点滅/うねりを穏やかに
 
 // ---- clock sync: 直近windowの最小RTTサンプルのoffsetを採用 ------------------
 const syncWin = [];                       // {rtt, off}
@@ -539,9 +553,20 @@ async function onPreload(m){                    // 開演前DL: 再生はしな�
     $('cue').textContent = T.preloaded; sendReport('preloaded');
   }catch(e){ $('cue').textContent = T.fail; sendReport('failed'); }
 }
+function showNowPlaying(m){
+  const np = $('nowPlaying');
+  if (m && (m.title || m.artist)){ $('npTitle').textContent = m.title||''; $('npArtist').textContent = m.artist||''; np.hidden=false; }
+  else np.hidden = true;
+}
+function showImage(url){                       // 静止画cue(スポンサー/告知/セット間の1枚)
+  const el = $('imageLayer');
+  if (!url){ el.classList.remove('on'); el.style.backgroundImage=''; return; }
+  fetchAsset(url).then(r=>r.blob()).then(b=>{ el.style.backgroundImage=`url(${URL.createObjectURL(b)})`; el.classList.add('on'); }).catch(()=>{});
+}
 async function onCue(m){
   if (m.zones && !m.zones.includes(ZONE)) return;   // 他ゾーン宛(ウォークテスト)は無視
   $('cue').textContent = T.ready;
+  showNowPlaying(m); showImage(m.image||null);
   pendingCue = m;
   lastCueId = m.id;
   if (m.video){ await loadVideo(m.video); armVideo(m); }
@@ -557,7 +582,7 @@ function armCue(){
   const src = ctx.createBufferSource();
   src.buffer = cueBuf; src.loop = !!m.loop;
   const g = ctx.createGain();
-  g.gain.value = (m.gain ?? 1) * ($('vol').value/100) * levelGain();
+  g.gain.value = muted ? 0 : (m.gain ?? 1) * ($('vol').value/100) * levelGain();
   src.connect(g); g.connect(ctx.destination);
   cueGainNode = g;
 
@@ -585,6 +610,7 @@ function armCue(){
   src.onended = ()=>{ if (cueSrc===src && !m.loop) sendReport('idle'); };
 }
 function onCueStop(){
+  showNowPlaying(null); showImage(null);
   pendingCue=null; lastCueId=null;
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
   stopVideo();
@@ -679,6 +705,9 @@ function lightLoop(){
   lightRAF = requestAnimationFrame(lightLoop);
 }
 function onLight(m){
+  if (REDUCED_MOTION && m && m.pattern){                // 端末のOS設定「視差効果を減らす」を尊重
+    m = {...m, pattern: ({strobe:'pulse', plasma:'solid', beat:'pulse'})[m.pattern] || m.pattern};
+  }
   light = m;
   $('dim').classList.remove('on');            // ライト中は暗転しない(光が演出)
   $('lightLayer').classList.add('on');
@@ -723,7 +752,10 @@ function onFrame(buf){
   const ab = ctx.createBuffer(1, nsamp, srvSr);
   ab.copyToChannel(f32, 0);
   const src = ctx.createBufferSource();
-  src.buffer = ab; src.connect(ctx.destination);
+  src.buffer = ab;
+  if (!liveGain || liveGain.context !== ctx){ liveGain = ctx.createGain(); liveGain.connect(ctx.destination); }
+  liveGain.gain.value = muted ? 0 : 1;              // FOHミュートはLIVEにも効く
+  src.connect(liveGain);
   const playAtPerfMs = (playAt + delayMs()/1000)*1000 - offsetMs;
   const deltaSec = (playAtPerfMs - performance.now())/1000 - outLatSec();
   const startAt = ctx.currentTime + deltaSec;
@@ -755,6 +787,8 @@ function connect(){
       else if (m.t==='cue'){ tightenSync(); onCue(m).catch(err=>{ $('cue').textContent=T.fail; sendReport('failed'); console.error(err); }); }
       else if (m.t==='preload'){ tightenSync(); onPreload(m); }
       else if (m.t==='cue_stop') onCueStop();
+      else if (m.t==='mute'){ muted = !!m.on; $('muteBanner').hidden = !muted; if (liveGain) liveGain.gain.value = muted ? 0 : 1;
+        if (cueGainNode && pendingCue) cueGainNode.gain.value = muted ? 0 : (pendingCue.gain??1) * ($('vol').value/100) * levelGain(); }
       else if (m.t==='light') onLight(m);
       else if (m.t==='light_stop') onLightStop();
     } else onFrame(e.data);
