@@ -309,8 +309,9 @@ def action(name: str, ctx):
                "| SUDO_USER=%s bash > /var/log/soluna-update.log 2>&1" % (os.environ.get("USER") or "pi"))
         run(["bash", "-c", "nohup bash -c '%s' >/dev/null 2>&1 &" % cmd.replace("'", "'\\''")], privileged=True)
     elif name == "regen-token":
-        import base64
-        tok = base64.b64encode(os.urandom(24)).decode().translate(str.maketrans("", "", "+/=")).rstrip()[:32]
+        import secrets, string
+        alphabet = string.ascii_letters + string.digits
+        tok = "".join(secrets.choice(alphabet) for _ in range(32))      # 常に32字(base64は+/除去で縮むことがある)
         write_file(TOKEN_FILE, tok, 0o600)
         write_env(SERVER_ENV, {"SOLUNA_ADMIN": tok}, 0o600)
         run(["systemctl", "restart", "--no-block", "soluna-server"], privileged=True)
