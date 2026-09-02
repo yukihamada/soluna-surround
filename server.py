@@ -1247,6 +1247,7 @@ def main():
         web.post("/api/upload", api_upload),
         web.static("/assets", ASSETS),
         web.static("/icons", os.path.join(HERE, "icons")),
+        web.static("/ui", os.path.join(HERE, "ui")),          # 共有デザインシステム(soluna.css)
     ])
     ip = os.environ.get("LAN_IP", "127.0.0.1")
     _mdns_publish(port)

@@ -17,5 +17,6 @@ for mod in sorted(imported & local_py):
 for page in ("client.html", "admin.html", "dj.html", "mic.html", "sw.js", "manifest.webmanifest"):
     check(f"Dockerfile COPY {page}", page in copied)
 check("Dockerfile pip has aiohttp+qrcode", "aiohttp" in docker and "qrcode" in docker)
+check("Dockerfile COPY ui (shared css)", "ui" in copied)
 print(f"\n== PASS {ok} / FAIL {fail} ==")
 sys.exit(1 if fail else 0)
