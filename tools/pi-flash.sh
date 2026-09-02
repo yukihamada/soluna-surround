@@ -41,7 +41,10 @@ import hashlib, sys
 print(hashlib.pbkdf2_hmac('sha1', sys.argv[2].encode(), sys.argv[1].encode(), 4096, 32).hex())
 PY
 )
-USER_HASH=$(python3 -c "import crypt,sys; print(crypt.crypt(sys.argv[1], crypt.mksalt(crypt.METHOD_SHA512)))" "$PI_PASS" 2>/dev/null || openssl passwd -6 "$PI_PASS")
+# NB: macOS libc crypt() has no SHA-512 → python's crypt returns a 13-char DES junk hash that Linux
+# rejects. Use openssl (OpenSSL 3 supports -6) and validate the shape.
+USER_HASH=$(openssl passwd -6 "$PI_PASS" 2>/dev/null || true)
+case "$USER_HASH" in \$6\$*) ;; *) echo "✘ could not build a SHA-512 password hash (need OpenSSL 3: brew install openssl)"; exit 1;; esac
 # Bookworm headless config (same file Imager writes): hostname / user / wlan / ssh
 cat > "$BOOT/custom.toml" <<TOML
 config_version = 1
@@ -82,6 +85,13 @@ users:
   lock_passwd: false
   passwd: "$USER_HASH"
   sudo: ALL=(ALL) NOPASSWD:ALL
+# belt and braces: also set the password via chpasswd (works for an already-existing user on re-run)
+chpasswd:
+  expire: false
+  users:
+  - name: pi
+    password: "$USER_HASH"
+    type: hash
 write_files:
 - path: /usr/local/bin/soluna-diag
   permissions: "0755"
