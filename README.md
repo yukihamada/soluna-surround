@@ -143,7 +143,8 @@ themselves from `/flags` — A4, big letter, QR straight into the zone.
   CDN/R2 **first**, falling back to the sync server if the object isn't there yet
   (PRELOAD burst leaves the VM entirely; an unsynced upload still plays).
   `tools/r2-sync.sh` pushes the assets folder to the bucket (R2: create bucket →
-  `wrangler r2 bucket cors set` with GET/HEAD from `*` → custom domain → sync).
+  `wrangler r2 bucket cors set --file tools/r2-cors.json` → custom domain → sync;
+  note wrangler v4 needs `--remote` on object puts, the script passes it).
 - **Persistent data** — `SOLUNA_DATA_DIR` (a Fly volume at `/data` in the shipped
   config) holds tracks and `state.json` across redeploys.
 - **Privacy** — coordinates never leave the phone; only the nearest zone letter is
