@@ -40,6 +40,7 @@ FORCE_SERVER = os.path.join(ETC, "force-server")
 AP_PSK = os.path.join(ETC, "ap.psk")
 STANDBY = os.path.join(DATA, "standby-state.json")
 PORT = int(os.environ.get("PORT", "8900"))
+SERVER_GRACE_S = float(os.environ.get("SOLUNA_SERVER_GRACE_S", "20"))   # サーバ再起動後、健康判定を保留する秒数
 DISCOVER_S = float(os.environ.get("SOLUNA_DISCOVER_S", "6"))
 CANDIDATE_S = float(os.environ.get("SOLUNA_CANDIDATE_S", "3"))
 STANDBY_MAX_AGE = 600.0
@@ -267,7 +268,7 @@ class Agent:
         self.role, self.server, self.fail = "server", None, 0
         self.server_url = f"ws://127.0.0.1:{PORT}"
         if not unit_active("soluna-server"):
-            systemctl("start", "soluna-server")
+            self.last_restart = time.time(); systemctl("start", "soluna-server")
         # wait for /health
         for _ in range(30):
             if discover.health("127.0.0.1", PORT):
@@ -357,11 +358,14 @@ class Agent:
         if self.role == "server":
             if discover.health("127.0.0.1", PORT):
                 self.fail = 0
+            elif time.time() - getattr(self, "last_restart", 0.0) < SERVER_GRACE_S:
+                pass                                   # 起動中(Pi 4で数秒〜10秒)は数えない
             else:
                 self.fail += 1
                 log(f"own server unhealthy ({self.fail})")
-                if self.fail >= 3:
-                    systemctl("restart", "soluna-server")
+                if self.fail >= 5:                     # 2秒間隔×5=10秒連続で落ちていたら上げ直す
+                    self.last_restart = time.time()
+                    systemctl("restart", "--no-block", "soluna-server")
                     self.fail = 0
             if self.mdns_proc is not None and self.mdns_proc.poll() is not None:
                 self.mdns_proc = discover.mdns_publish(self.host, PORT)

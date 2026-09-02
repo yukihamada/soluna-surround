@@ -64,7 +64,7 @@ STATE_FILE = os.path.join(DATA_DIR, "state.json")   # クラッシュセーフ: 
 # (5000台のPRELOADバーストを単一VMに当てない)。サーバ自身の /assets/ も残る。
 ASSET_BASE = (os.environ.get("SOLUNA_ASSET_BASE") or "").rstrip("/")
 STARTED_AT = time.time()
-VERSION = "v6"
+VERSION = "v7"
 
 # ---- クロック源: wall clockではなく monotonic ----------------------------------
 # time.time() はホストのNTPステップで飛ぶ(=全端末が一斉に再同期して音がジャンプ)。
@@ -281,6 +281,9 @@ async def audio_ws(request):
                 elif m.get("t") == "report":
                     # 端末の実状態(FOHの観測性): preloaded/playing/idle/failed、
                     # AudioContext状態、電池、同期精度。位置情報は受け取らない。
+                    if now() - state.get("_peak_t", 0) > 5.0:   # 事後レポート用ピーク(5秒に1回・安価)
+                        state["_peak_t"] = now()
+                        _track_peaks(state)
                     meta["rep"] = {
                         "st": str(m.get("st") or "idle")[:12],
                         "ctx": str(m.get("ctx") or "")[:12],

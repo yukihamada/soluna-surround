@@ -234,13 +234,15 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 
 | Test | Result |
 |---|---|
-| Protocol suite (`tests/`, runs in CI before every deploy) | 72 protocol + 20 node + 9 auth/load checks PASS (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
+| Test suites (`tests/`, run in CI before every deploy) | **261 checks PASS**: 84 protocol + 20 node + 9 auth/load + 44 AES67 ingest + 61 show-control (OSC/timecode/LTC/Art-Net/sACN) + 43 Pi mesh (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
 | **10,000 concurrent devices — one process, LAN** | 9,999/10,000 connected in 17 s, **cue reached 100%**, identical epochs, 791 ms delivery spread vs 8 s lead, median RTT under load 29 ms |
 | Video sync | 23 ms drift; 2 ms mid-track loop join |
+| FOH kill switch + NOW PLAYING (headless browser) | `/api/mute` drops the phone's gain to 0 within a second and restores the exact value; cue `title`/`artist`/`image` render and clear on stop |
 | Gate prefetch (headless browser) | `/?gate=1` reports *Ready* before any tap; the track sits in Cache Storage; the later fetch made **0 network requests**; per-zone network hint renders for Wi-Fi and LTE zones |
 | Production E2E | join → sync → light → GPS auto-delay, headless browser vs the live deploy |
 | **Real devices** | two iPhones, ears-on: music, light show and timecode video locked — then a real track with onset-flash lighting |
 | **Physical Pi node** | Raspberry Pi 4 + GPIO I2S DAC (PCM5102A) joined the cloud deploy (`nodes=1`), took a zone walk-test cue, played in sync (±60 ms vs cloud clock, **±0.5 ms** when the server runs on the same Pi) |
+| **Zero-config Pi box** (`agent.py`) | Real Pi 4: fresh install → elected itself server in 12 s, node auto-pointed to localhost; `/api/nodes/assign` applied on the node in 3 s and persisted; `kill -9` of the server → healed in 6 s with the show state intact; FOH mute reached the node. Two-box takeover and the Wi-Fi AP path are unit-tested only (need a 2nd Pi / a Pi without uplink) |
 | **Pi 4 as the server** (`tools/pi-server-setup.sh`) | **5,000 WebSocket clients** on one Pi 4: all connected in 12 s, cue reached 5,000/5,000 with 3.3 s spread (→ use `lead ≥ 5` at that size; default 3 s is fine to ~2,000); 2,000 clients → 0.9 s spread. LIVE PCM from `source.py` on the same Pi to its own node: 0 late frames. Node sync stayed ±0.5 ms under the 5k load |
 
 Honest limits: the 10k figure is a local (LAN) measurement of the server process; a

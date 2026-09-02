@@ -180,6 +180,8 @@ $SUDO systemctl enable soluna-node soluna-agent >/dev/null 2>&1
 $SUDO systemctl disable soluna-server >/dev/null 2>&1 || true      # the agent starts it when elected
 [ -f "$ETC/force-server" ] && $SUDO systemctl enable soluna-server >/dev/null 2>&1 || true
 $SUDO systemctl restart soluna-node soluna-agent
+# サーバが既に動いている箱(再インストール/更新)は新コードで上げ直す(agentは健康なサーバを触らない)
+systemctl is-active --quiet soluna-server && $SUDO systemctl restart soluna-server || true
 sleep 4
 echo "   node:  $(systemctl is-active soluna-node)   agent: $(systemctl is-active soluna-agent)   server: $(systemctl is-active soluna-server)"
 echo "✅ SOLUNA box ready. It will find a server on this network or become one (then /admin at http://$(hostname -I | awk '{print $1}'):$PORT/admin)."

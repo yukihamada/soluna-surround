@@ -3,7 +3,8 @@
 Seven people have to love this for a festival to adopt it. Each gets seven criteria,
 each scored 0–100 with the evidence that earns the score. "100" means *done and
 verified*; anything only verified in software says so. Re-scored on every release.
-Scores below are for **v7** (2026-09-02 night). Owner of each gap in brackets.
+Scores below are for **v7** (2026-09-02 night, 261 automated checks green; Pi 4 field run
+for election / assign / self-heal / mute done on one box). Owner of each gap in brackets.
 
 Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in software, field-pending
 
@@ -26,8 +27,8 @@ Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in sof
 | 1 | to feed it from my desk in the format I already run | ✅ | Dante (DVS / AVIO / AES67 mode), AES67/Ravenna (`--aes67`, `--sap` discovery), MADI/AVB/analog via interface (`--input`) — docs/integration.md |
 | 2 | a known latency budget | ✅ | 80 ms fusion path measured; d/343+15 ms zones; README table |
 | 3 | alignment tools I trust | ✅ | ALIGN stepper (`/api/align`), zones by metres (`zones_m`), per-device FINE TRIM |
-| 4 | to see level and know the feed is alive | ✅ | LIVE level meter (peak/RMS dBFS + clip) in `/status` and `/admin` |
-| 5 | a kill switch | ✅ | `/api/mute` (instant, all phones/nodes, LIVE and CUE) + cue stop |
+| 4 | to see level and know the feed is alive | ✅ | LIVE level meter (peak/RMS dBFS + clip) in `/status` and `/admin`; −6 dBFS square wave measured −6.0 in test |
+| 5 | a kill switch | ✅ | `/api/mute`: real Pi node logs `MUTE on/off` and keeps phase; headless phone gain 0.8 → 0 → 0.8 within a second |
 | 6 | redundancy that doesn't need me | ✅ | Pi mesh election + warm-standby state snapshot → automatic takeover ≈15–20 s; manual `/api/state` still there |
 | 7 | to know how many are actually sounding | ✅ | DEVICES panel: playing/preloaded/failed/ctx-suspended per zone, node table |
 
@@ -71,11 +72,11 @@ Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in sof
 
 | # | I want… | Score | Evidence / gap |
 |---|---|---|---|
-| 1 | flash, power on, done | 🧪 | Zero-config agent: discovery → election → node; verified on 1 Pi + unit tests; multi-Pi election field-pending |
-| 2 | no laptop needed | 🧪 | A lone Pi becomes server + Wi-Fi AP (SSID SOLUNA) |
-| 3 | it to heal itself | 🧪 | systemd Restart, hardware watchdog, agent restarts node/server, audio-device hot-plug (udev) |
-| 4 | it to survive the server box dying | 🧪 | Standby snapshot every 10 s → takeover re-broadcasts state |
-| 5 | to assign zones without SSH | ✅ | `/admin` NODES: inline zone/pos/gain → pushed live, persisted on the Pi |
+| 1 | flash, power on, done | 🧪 95 | Zero-config agent on the real Pi 4: booted → elected itself server in 12 s → node repointed to localhost (±0.5 ms). Two-box election/yield only unit-tested [field: 2nd Pi] |
+| 2 | no laptop needed | 🧪 90 | Lone Pi = server + node verified; Wi-Fi AP (SSID SOLUNA, nmcli hotspot) code path not exercised because the test Pi was itself on a phone hotspot [field: Pi with no uplink] |
+| 3 | it to heal itself | ✅ | Real Pi: `kill -9` of the server → back in 6 s (systemd + agent), assigned zone survives, node keeps sync; 20 s start grace so a cold start is never mistaken for a crash; udev DAC hot-plug; hardware watchdog armed (reboot path itself not provoked) |
+| 4 | it to survive the server box dying | 🧪 85 | Standby snapshot + takeover implemented and unit-tested; real two-Pi takeover timing pending [field: 2nd Pi] |
+| 5 | to assign zones without SSH | ✅ | Real Pi: `/api/nodes/assign` zone C → node log `ASSIGN zone=C` within 3 s, `node.json` written, walk-test cue on C played |
 | 6 | to see which box is unhappy | ✅ | NODES: temp, load, disk, audio device, last seen, stale flag |
 | 7 | any DAC to just work | ✅ | Auto-pick USB > I2S (HiFiBerry/PCM5102A) > built-in; verified on Pi 4 + PCM5102A |
 
@@ -92,4 +93,8 @@ Legend: ✅ 100 · 🟡 partial (score shown) · 🔴 missing · 🧪 100 in sof
 | 7 | to run it anywhere | ✅ | Mac laptop, Pi, cloud — same process |
 
 ### Open gaps (what keeps a row under 100)
-- Artist #7 per-artist upload tokens · Audience #2 more locales · Audience #5 needs the native app (human gate) · Stage crew rows 1–4 need a multi-Pi field run (human gate).
+- Artist #7 per-artist upload tokens [roadmap] · Audience #2 more locales [roadmap] · Audience #5 needs the native app [human gate: TestFlight]
+- Stage crew #1/#2/#4 need a second Pi and a Pi with no uplink [human gate: hardware]
+- Everything in "Lighting" and "FOH #1" is verified against synthetic packets/audio only — a real console, Dante device or LTC source is the last mile [human gate: venue tech]
+
+Total: 49 rows · 42 at 100 · 7 held below 100 only by hardware or a human decision.
