@@ -1109,6 +1109,10 @@ async def about_page(request):
     return web.FileResponse(os.path.join(HERE, "about.html"))
 
 
+async def connect_page(request):
+    return web.FileResponse(os.path.join(HERE, "connect.html"))
+
+
 async def admin_page(request):
     return web.FileResponse(os.path.join(HERE, "admin.html"))
 
@@ -1261,6 +1265,7 @@ def main():
         web.get("/screen", index),   # プロジェクター/LEDウォール用(同じclient・screenモード)
         web.get("/admin", admin_page),
         web.get("/about", about_page),      # 製品サイト(何か・画面・つなぎ方・箱・数字)
+        web.get("/connect", connect_page),  # 既存システムの繋げ方(卓/Dante/AES67/OSC/TC/Art-Net/Pi)
         web.get("/dj", dj_page),
         web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),
