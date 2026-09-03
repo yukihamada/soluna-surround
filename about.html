@@ -3,7 +3,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SOLUNA Sound — 会場ごと、ひとつの時計で鳴る</title>
 <meta name="description" content="スマホ・Raspberry Piスピーカー・プロジェクター・会場の灯体を1本の時計で同期させる、オープンソースのフェス音響システム。Dante/AES67/OSC/タイムコード対応。Piは電源を入れるだけ。">
-<meta property="og:title" content="SOLUNA Sound"><meta property="og:description" content="会場ごと、ひとつの時計で鳴る。観客のスマホは繋いで▶だけ。"><meta property="og:image" content="/site/client-playing.png">
+<meta property="og:title" content="SOLUNA Sound"><meta property="og:description" content="The venue is the speaker. The crowd is the light show. One link, one tap."><meta property="og:image" content="/site/client-playing.png">
 <link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
@@ -11,14 +11,16 @@
 <style>
   .hero{padding:56px 0 30px;text-align:center}
   .hero h1{font-family:var(--serif);font-size:clamp(2rem,6vw,3.2rem);line-height:1.2;margin:18px 0 12px;text-wrap:balance}
+  html[lang=en] .hero h1{font-size:clamp(2rem,5.4vw,3rem);letter-spacing:-.01em}
   .hero p{color:var(--dim);font-size:1.05rem;max-width:34em;margin:0 auto 26px;text-wrap:balance}
   .hero .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-  .hero .cta .s-btn{min-width:200px}
+  .hero .cta .s-btn{min-width:220px}
   .en{display:block;font-size:.82rem;color:var(--dim);font-weight:400;letter-spacing:0;font-family:var(--sans)}
   section.blk{margin-top:64px}
   section.blk>h2{font-family:var(--mono);font-size:.72rem;letter-spacing:.3em;color:var(--gold);margin:0 0 18px;display:flex;align-items:center;gap:12px}
   section.blk>h2::after{content:"";flex:1;height:1px;background:var(--line)}
   .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+  .steps.four{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
   .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px}
   .step b.k{display:block;font-family:var(--serif);font-size:1.8rem;color:var(--gold);line-height:1;margin-bottom:10px}
   .step h3{margin:0 0 6px;font-size:1.05rem}
@@ -35,86 +37,179 @@
   .list div{display:grid;grid-template-columns:1.4em 1fr;gap:8px;color:var(--txt)}
   .list div span{color:var(--gold)}
   footer{margin-top:70px;padding-top:18px;border-top:1px solid var(--line);font-size:.8rem;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between}
-  .fest{background:linear-gradient(180deg,rgba(212,175,55,.08),transparent);border:1px solid rgba(212,175,55,.3)}
+  .lang{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;font-family:var(--mono);font-size:.7rem}
+  .lang button{background:transparent;border:0;color:var(--dim);padding:5px 10px;cursor:pointer;font:inherit}
+  .lang button[aria-pressed=true]{background:var(--gold);color:#1a1206;font-weight:700}
 </style></head><body>
 <div class="s-wrap">
   <nav class="s-bar"><span class="s-brand"><span class="mark"></span>SOLUNA · SOUND</span>
-    <span style="margin-left:auto;display:flex;gap:14px;font-size:.82rem"><a href="/">🎧 参加</a><a href="/admin">🎚 FOH</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a></span></nav>
+    <span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.82rem">
+      <a href="/" data-i18n="nav_join">🎧 参加</a><a href="/admin" data-i18n="nav_foh">🎚 FOH</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a>
+      <span class="lang" role="group" aria-label="language"><button id="langJa" aria-pressed="true">日本語</button><button id="langEn" aria-pressed="false">EN</button></span>
+    </span></nav>
 
   <header class="hero">
     <div class="s-brand" style="justify-content:center"><span class="mark"></span>OPEN SOURCE · MIT</div>
-    <h1>会場ごと、<br>ひとつの時計で鳴る。</h1>
-    <p>観客のスマホ、Raspberry Piのスピーカー、プロジェクター、会場の灯体。全部が同じ瞬間に鳴り、光る。アプリなし、一本のリンクとタップひとつ。<br><span class="en">The venue is the speaker. The crowd is the light show. No app — one link, one tap.</span></p>
-    <div class="cta"><a class="s-btn primary" href="/?zone=A">▶ いま2台のスマホで試す<small>open this on two phones</small></a><a class="s-btn ghost" href="https://github.com/yukihamada/soluna-surround#readme">仕組みを読む<small>README · 日本語/English</small></a></div>
+    <h1 data-i18n="h1">会場ごと、<br>ひとつの時計で鳴る。</h1>
+    <p data-i18n="lead">観客のスマホ、Raspberry Piのスピーカー、プロジェクター、会場の灯体。全部が同じ瞬間に鳴り、光る。アプリなし、一本のリンクとタップひとつ。</p>
+    <div class="cta"><a class="s-btn primary" href="/?zone=A" data-i18n="cta1">▶ いま2台のスマホで試す<small>open this on two phones</small></a><a class="s-btn ghost" href="https://github.com/yukihamada/soluna-surround#readme" data-i18n="cta2">仕組みを読む<small>README · 日本語 / English</small></a></div>
   </header>
 
-  <section class="blk"><h2>どう動くか <span class="en">how it works</span></h2>
+  <section class="blk"><h2 data-i18n="h_how">どう動くか <span class="en">how it works</span></h2>
     <div class="steps">
-      <div class="step"><b class="k">1</b><h3>時計をそろえる</h3><p>サーバが唯一の時計。各端末は自分のズレを測って合わせる。LANで±1〜3ms、LTEで±10〜20ms、Piの箱の中なら±0.5ms。</p></div>
-      <div class="step"><b class="k">2</b><h3>音は先に配る</h3><p>入口のQRで曲は先に届いている。本番の「鳴らせ」は「いつ」だけを配るので、5,000台でも帯域は増えない。</p></div>
-      <div class="step"><b class="k">3</b><h3>距離のぶん遅らせる</h3><p>ステージから遠い端末ほど遅らせて、音の波面に乗せる。ゾーンの旗かGPSで自動。だから会場全体で位相がそろう。</p></div>
+      <div class="step"><b class="k">1</b><h3 data-i18n="s1h">時計をそろえる</h3><p data-i18n="s1p">サーバが唯一の時計。各端末は自分のズレを測って合わせる。LANで±1〜3ms、LTEで±10〜20ms、Piの箱の中なら±0.5ms。</p></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="s2h">音は先に配る</h3><p data-i18n="s2p">入口のQRで曲は先に届いている。本番の「鳴らせ」は「いつ」だけを配るので、5,000台でも帯域は増えない。</p></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="s3h">距離のぶん遅らせる</h3><p data-i18n="s3p">ステージから遠い端末ほど遅らせて、音の波面に乗せる。ゾーンの旗かGPSで自動。だから会場全体で位相がそろう。</p></div>
     </div>
   </section>
 
-  <section class="blk"><h2>画面 <span class="en">screens</span></h2>
+  <section class="blk"><h2 data-i18n="h_screens">画面 <span class="en">screens</span></h2>
     <div class="shots">
-      <figure><img src="/site/client-idle.png" alt="観客ページ: ゾーンを選んで▶"><figcaption><b>観客</b>: ゾーンを選んで ▶ だけ。細かいことは畳んである。</figcaption></figure>
-      <figure><img src="/site/client-playing.png" alt="再生中: NOW PLAYING"><figcaption><b>再生中</b>: 曲名とアーティストが出る。光の演出はこの上に重なる。</figcaption></figure>
-      <figure><img src="/site/client-gate.png" alt="入場QRモード"><figcaption><b>入場QR</b>: 並んでいる間に曲を受け取り、中では通信なしで鳴る。</figcaption></figure>
-      <figure><img src="/site/welcome.png" alt="ウェルカム画面"><figcaption><b>箱のWi-Fi</b>に繋ぐと、この画面が勝手に開く。</figcaption></figure>
+      <figure><img src="/site/client-idle.png" data-src-ja="/site/client-idle.png" data-src-en="/site/client-idle-en.png" alt=""><figcaption data-i18n="f1"><b>観客</b>: ゾーンを選んで ▶ だけ。細かいことは畳んである。</figcaption></figure>
+      <figure><img src="/site/client-playing.png" data-src-ja="/site/client-playing.png" data-src-en="/site/client-playing-en.png" alt=""><figcaption data-i18n="f2"><b>再生中</b>: 曲名とアーティストが出る。光の演出はこの上に重なる。</figcaption></figure>
+      <figure><img src="/site/client-gate.png" data-src-ja="/site/client-gate.png" data-src-en="/site/client-gate-en.png" alt=""><figcaption data-i18n="f3"><b>入場QR</b>: 並んでいる間に曲を受け取り、中では通信なしで鳴る。</figcaption></figure>
+      <figure><img src="/site/welcome.png" alt=""><figcaption data-i18n="f4"><b>箱のWi-Fi</b>に繋ぐと、この画面が勝手に開く。</figcaption></figure>
     </div>
-    <div class="wide"><img src="/site/admin-desktop-top.png" alt="FOHコンソール"></div>
-    <p class="s-hint" style="margin-top:8px">FOHコンソール。上に「接続・鳴っている・準備OK・失敗」の一文。ショーの順番どおりに、進める → 鳴らす → 光らせる → ゾーン → 端末 → Pi箱 → 記録 → 設定。</p>
+    <div class="wide"><img src="/site/admin-desktop-top.png" alt=""></div>
+    <p class="s-hint" style="margin-top:8px" data-i18n="foh_cap">FOHコンソール。上に「接続・鳴っている・準備OK・失敗」の一文。ショーの順番どおりに、進める → 鳴らす → 光らせる → ゾーン → 端末 → Pi箱 → 記録 → 設定。</p>
   </section>
 
-  <section class="blk"><h2>既存のフェスにそのまま刺さる <span class="en">plugs into what you already run</span></h2>
-    <p class="lead">卓の <b>aux を1本</b>入れるか、<b>Dante/AES67</b> のストリームを受ける。照明卓から <b>OSC</b> で cue を打ち、<b>タイムコード</b>に乗せ、<b>Art-Net/sACN</b> で会場の灯体をスマホと同じ時計に乗せる。</p>
+  <section class="blk"><h2 data-i18n="h_plug">既存のフェスにそのまま刺さる <span class="en">plugs into what you already run</span></h2>
+    <p class="lead" data-i18n="plug_lead">卓の <b>aux を1本</b>入れるか、<b>Dante/AES67</b> のストリームを受ける。照明卓から <b>OSC</b> で cue を打ち、<b>タイムコード</b>に乗せ、<b>Art-Net/sACN</b> で会場の灯体をスマホと同じ時計に乗せる。</p>
     <div style="overflow-x:auto"><table class="s-table">
-      <tr><th>持っているもの</th><th>つなぎ方</th></tr>
-      <tr><td>Dante</td><td>Dante Virtual Soundcard か AVIO USB で入力、または機器のAES67モードでマルチキャスト受信(<code>--aes67</code>・<code>--sap</code>で自動発見)</td></tr>
-      <tr><td>AES67 / Ravenna</td><td>そのまま受信。チャンネル割当は <code>--map</code></td></tr>
-      <tr><td>MADI / AVB / アナログ / USB</td><td>オーディオインターフェース経由で <code>--input</code>。PA融合は80ms</td></tr>
-      <tr><td>QLab / grandMA / Eos / Ableton</td><td>OSC で <code>/soluna/cue</code> <code>/soluna/go</code> <code>/soluna/light</code>。タイムコードは <code>/soluna/tc</code> か LTC 音声</td></tr>
-      <tr><td>会場の灯体</td><td>Art-Net / sACN 出力。スマホと同じパターン・同じ時計で</td></tr>
-      <tr><td>プロジェクター / LEDウォール</td><td><code>/screen</code> を開いた MacBook + HDMI</td></tr>
+      <tr><th data-i18n="t_h1">持っているもの</th><th data-i18n="t_h2">つなぎ方</th></tr>
+      <tr><td>Dante</td><td data-i18n="t1">Dante Virtual Soundcard か AVIO USB で入力、または機器のAES67モードでマルチキャスト受信(<code>--aes67</code>・<code>--sap</code>で自動発見)</td></tr>
+      <tr><td>AES67 / Ravenna</td><td data-i18n="t2">そのまま受信。チャンネル割当は <code>--map</code></td></tr>
+      <tr><td data-i18n="t3k">MADI / AVB / アナログ / USB</td><td data-i18n="t3">オーディオインターフェース経由で <code>--input</code>。PA融合は80ms</td></tr>
+      <tr><td>QLab / grandMA / Eos / Ableton</td><td data-i18n="t4">OSC で <code>/soluna/cue</code> <code>/soluna/go</code> <code>/soluna/light</code>。タイムコードは <code>/soluna/tc</code> か LTC 音声</td></tr>
+      <tr><td data-i18n="t5k">会場の灯体</td><td data-i18n="t5">Art-Net / sACN 出力。スマホと同じパターン・同じ時計で</td></tr>
+      <tr><td data-i18n="t6k">プロジェクター / LEDウォール</td><td data-i18n="t6"><code>/screen</code> を開いた MacBook + HDMI</td></tr>
     </table></div>
   </section>
 
-  <section class="blk"><h2>Piは、電源を入れるだけ <span class="en">the SOLUNA box</span></h2>
-    <div class="steps" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr))">
-      <div class="step"><h3>勝手に集まる</h3><p>箱同士が見つけ合い、1台がサーバ(時計の親)に。残りはスピーカー。設定はゼロ。</p></div>
-      <div class="step"><h3>1台死んでも続く</h3><p>10秒ごとにショーの控えを持ち合い、サーバが消えたら15〜20秒で別の箱が引き継ぐ。プロセスが落ちれば6秒で自己復旧。</p></div>
-      <div class="step"><h3>繋ぐと画面が開く</h3><p>箱のWi-Fi「SOLUNA」に入ると設定画面が自動で開く。パスワード無しでも、箱のWeb以外は遮断された閉じた網。</p></div>
-      <div class="step"><h3>どのDACでも</h3><p>USB、GPIOのI2S DAC、内蔵。刺せば自動で切り替わる。ゾーンの割当はFOH画面から。</p></div>
+  <section class="blk"><h2 data-i18n="h_box">Piは、電源を入れるだけ <span class="en">the SOLUNA box</span></h2>
+    <div class="steps four">
+      <div class="step"><h3 data-i18n="b1h">勝手に集まる</h3><p data-i18n="b1p">箱同士が見つけ合い、1台がサーバ(時計の親)に。残りはスピーカー。設定はゼロ。</p></div>
+      <div class="step"><h3 data-i18n="b2h">1台死んでも続く</h3><p data-i18n="b2p">10秒ごとにショーの控えを持ち合い、サーバが消えたら15〜20秒で別の箱が引き継ぐ。プロセスが落ちれば6秒で自己復旧。</p></div>
+      <div class="step"><h3 data-i18n="b3h">繋ぐと画面が開く</h3><p data-i18n="b3p">箱のWi-Fi「SOLUNA」に入ると設定画面が自動で開く。パスワード無しでも、箱のWeb以外は遮断された閉じた網。</p></div>
+      <div class="step"><h3 data-i18n="b4h">どのDACでも</h3><p data-i18n="b4p">USB、GPIOのI2S DAC、内蔵。刺せば自動で切り替わる。ゾーンの割当はFOH画面から。</p></div>
     </div>
-    <div class="shots" style="margin-top:14px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-      <figure><img src="/site/setup-top.png" alt="箱の設定画面"><figcaption><b>箱の設定</b>(実機で撮影): 役割・スピーカー・Wi-Fi・自前AP。SSHは要らない。</figcaption></figure>
-      <figure><img src="/site/flags-gate.png" alt="入場QRの印刷"><figcaption><b>印刷物もサーバから</b>: ゾーンの旗と入場QR、A4で。</figcaption></figure>
+    <div class="shots" style="margin-top:14px">
+      <figure><img src="/site/setup-top.png" alt=""><figcaption data-i18n="f5"><b>箱の設定</b>(実機で撮影): 役割・スピーカー・Wi-Fi・自前AP。SSHは要らない。</figcaption></figure>
+      <figure><img src="/site/flags-gate.png" alt=""><figcaption data-i18n="f6"><b>印刷物もサーバから</b>: ゾーンの旗と入場QR、A4で。</figcaption></figure>
     </div>
   </section>
 
-  <section class="blk"><h2>数字 <span class="en">measured, not promised</span></h2>
+  <section class="blk"><h2 data-i18n="h_nums">数字 <span class="en">measured, not promised</span></h2>
     <div class="nums">
-      <div class="s-tile"><small>on one Pi 4</small><b>5,000</b><div class="sub">同時接続・CUE到達100%</div></div>
-      <div class="s-tile"><small>node sync</small><b>±0.5<span style="font-size:.9rem">ms</span></b><div class="sub">箱の中のスピーカー</div></div>
-      <div class="s-tile"><small>phones on lan</small><b>±1–3<span style="font-size:.9rem">ms</span></b><div class="sub">LTEは±10–20ms</div></div>
-      <div class="s-tile"><small>self-heal</small><b>6<span style="font-size:.9rem">s</span></b><div class="sub">サーバ強制終了から復旧</div></div>
-      <div class="s-tile"><small>automated checks</small><b>321</b><div class="sub">デプロイ前に毎回</div></div>
-      <div class="s-tile"><small>light show bandwidth</small><b>0</b><div class="sub">色は端末が時計から計算</div></div>
+      <div class="s-tile"><small>on one Pi 4</small><b>5,000</b><div class="sub" data-i18n="n1">同時接続・CUE到達100%</div></div>
+      <div class="s-tile"><small>node sync</small><b>±0.5<span style="font-size:.9rem">ms</span></b><div class="sub" data-i18n="n2">箱の中のスピーカー</div></div>
+      <div class="s-tile"><small>phones on lan</small><b>±1–3<span style="font-size:.9rem">ms</span></b><div class="sub" data-i18n="n3">LTEは±10–20ms</div></div>
+      <div class="s-tile"><small>self-heal</small><b>6<span style="font-size:.9rem">s</span></b><div class="sub" data-i18n="n4">サーバ強制終了から復旧</div></div>
+      <div class="s-tile"><small>automated checks</small><b>321</b><div class="sub" data-i18n="n5">デプロイ前に毎回</div></div>
+      <div class="s-tile"><small>light show bandwidth</small><b>0</b><div class="sub" data-i18n="n6">色は端末が時計から計算</div></div>
     </div>
-    <p class="s-hint" style="margin-top:10px">未実施のもの: 屋外GPSの実精度、実iPhone多台数の一晩、実Dante機器・LTC・照明卓・灯体との接続(合成信号でのみ検証)。正直に <a href="https://github.com/yukihamada/soluna-surround#verified">README の Verified</a> に。</p>
+    <p class="s-hint" style="margin-top:10px" data-i18n="nums_note">未実施のもの: 屋外GPSの実精度、実iPhone多台数の一晩、実Dante機器・LTC・照明卓・灯体との接続(合成信号でのみ検証)。正直に <a href="https://github.com/yukihamada/soluna-surround#verified">README の Verified</a> に。</p>
   </section>
 
-  <section class="blk"><h2>使いどころ <span class="en">where it fits</span></h2>
+  <section class="blk"><h2 data-i18n="h_fit">使いどころ <span class="en">where it fits</span></h2>
     <div class="list">
-      <div><span>●</span>フェスの中後方の明瞭度。ディレイタワーの代わりに、客席15m格子のPiスピーカー+観客のスマホ</div>
-      <div><span>●</span>サイレント/分散型のパーティー、屋外映画、光の演出をスマホの群れで</div>
-      <div><span>●</span>企業イベント・展示。プロジェクターと来場者の端末を同じ時計に乗せる</div>
-      <div><span>●</span>リビングで2台のスマホからでも、同じコードが動く</div>
+      <div><span>●</span><span data-i18n="u1">フェスの中後方の明瞭度。ディレイタワーの代わりに、客席15m格子のPiスピーカー+観客のスマホ</span></div>
+      <div><span>●</span><span data-i18n="u2">サイレント/分散型のパーティー、屋外映画、光の演出をスマホの群れで</span></div>
+      <div><span>●</span><span data-i18n="u3">企業イベント・展示。プロジェクターと来場者の端末を同じ時計に乗せる</span></div>
+      <div><span>●</span><span data-i18n="u4">リビングで2台のスマホからでも、同じコードが動く</span></div>
     </div>
   </section>
 
-  <footer><span>SOLUNA Sound · MIT · <a href="https://github.com/yukihamada/soluna-surround">github.com/yukihamada/soluna-surround</a></span><span>位置情報は端末の中だけで使い、送信しません。</span></footer>
+  <footer><span>SOLUNA Sound · MIT · <a href="https://github.com/yukihamada/soluna-surround">github.com/yukihamada/soluna-surround</a></span><span data-i18n="foot">位置情報は端末の中だけで使い、送信しません。</span></footer>
 </div>
+<script>
+const I18N = {
+  ja: {
+    title: 'SOLUNA Sound — 会場ごと、ひとつの時計で鳴る',
+    nav_join: '🎧 参加', nav_foh: '🎚 FOH',
+    h1: '会場ごと、<br>ひとつの時計で鳴る。',
+    lead: '観客のスマホ、Raspberry Piのスピーカー、プロジェクター、会場の灯体。全部が同じ瞬間に鳴り、光る。アプリなし、一本のリンクとタップひとつ。',
+    cta1: '▶ いま2台のスマホで試す<small>open this on two phones</small>', cta2: '仕組みを読む<small>README · 日本語 / English</small>',
+    h_how: 'どう動くか <span class="en">how it works</span>',
+    s1h: '時計をそろえる', s1p: 'サーバが唯一の時計。各端末は自分のズレを測って合わせる。LANで±1〜3ms、LTEで±10〜20ms、Piの箱の中なら±0.5ms。',
+    s2h: '音は先に配る', s2p: '入口のQRで曲は先に届いている。本番の「鳴らせ」は「いつ」だけを配るので、5,000台でも帯域は増えない。',
+    s3h: '距離のぶん遅らせる', s3p: 'ステージから遠い端末ほど遅らせて、音の波面に乗せる。ゾーンの旗かGPSで自動。だから会場全体で位相がそろう。',
+    h_screens: '画面 <span class="en">screens</span>',
+    f1: '<b>観客</b>: ゾーンを選んで ▶ だけ。細かいことは畳んである。', f2: '<b>再生中</b>: 曲名とアーティストが出る。光の演出はこの上に重なる。',
+    f3: '<b>入場QR</b>: 並んでいる間に曲を受け取り、中では通信なしで鳴る。', f4: '<b>箱のWi-Fi</b>に繋ぐと、この画面が勝手に開く。',
+    foh_cap: 'FOHコンソール。上に「接続・鳴っている・準備OK・失敗」の一文。ショーの順番どおりに、進める → 鳴らす → 光らせる → ゾーン → 端末 → Pi箱 → 記録 → 設定。',
+    h_plug: '既存のフェスにそのまま刺さる <span class="en">plugs into what you already run</span>',
+    plug_lead: '卓の <b>aux を1本</b>入れるか、<b>Dante/AES67</b> のストリームを受ける。照明卓から <b>OSC</b> で cue を打ち、<b>タイムコード</b>に乗せ、<b>Art-Net/sACN</b> で会場の灯体をスマホと同じ時計に乗せる。',
+    t_h1: '持っているもの', t_h2: 'つなぎ方',
+    t1: 'Dante Virtual Soundcard か AVIO USB で入力、または機器のAES67モードでマルチキャスト受信(<code>--aes67</code>・<code>--sap</code>で自動発見)',
+    t2: 'そのまま受信。チャンネル割当は <code>--map</code>', t3k: 'MADI / AVB / アナログ / USB', t3: 'オーディオインターフェース経由で <code>--input</code>。PA融合は80ms',
+    t4: 'OSC で <code>/soluna/cue</code> <code>/soluna/go</code> <code>/soluna/light</code>。タイムコードは <code>/soluna/tc</code> か LTC 音声',
+    t5k: '会場の灯体', t5: 'Art-Net / sACN 出力。スマホと同じパターン・同じ時計で', t6k: 'プロジェクター / LEDウォール', t6: '<code>/screen</code> を開いた MacBook + HDMI',
+    h_box: 'Piは、電源を入れるだけ <span class="en">the SOLUNA box</span>',
+    b1h: '勝手に集まる', b1p: '箱同士が見つけ合い、1台がサーバ(時計の親)に。残りはスピーカー。設定はゼロ。',
+    b2h: '1台死んでも続く', b2p: '10秒ごとにショーの控えを持ち合い、サーバが消えたら15〜20秒で別の箱が引き継ぐ。プロセスが落ちれば6秒で自己復旧。',
+    b3h: '繋ぐと画面が開く', b3p: '箱のWi-Fi「SOLUNA」に入ると設定画面が自動で開く。パスワード無しでも、箱のWeb以外は遮断された閉じた網。',
+    b4h: 'どのDACでも', b4p: 'USB、GPIOのI2S DAC、内蔵。刺せば自動で切り替わる。ゾーンの割当はFOH画面から。',
+    f5: '<b>箱の設定</b>(実機で撮影): 役割・スピーカー・Wi-Fi・自前AP。SSHは要らない。', f6: '<b>印刷物もサーバから</b>: ゾーンの旗と入場QR、A4で。',
+    h_nums: '数字 <span class="en">measured, not promised</span>',
+    n1: '同時接続・CUE到達100%', n2: '箱の中のスピーカー', n3: 'LTEは±10–20ms', n4: 'サーバ強制終了から復旧', n5: 'デプロイ前に毎回', n6: '色は端末が時計から計算',
+    nums_note: '未実施のもの: 屋外GPSの実精度、実iPhone多台数の一晩、実Dante機器・LTC・照明卓・灯体との接続(合成信号でのみ検証)。正直に <a href="https://github.com/yukihamada/soluna-surround#verified">README の Verified</a> に。',
+    h_fit: '使いどころ <span class="en">where it fits</span>',
+    u1: 'フェスの中後方の明瞭度。ディレイタワーの代わりに、客席15m格子のPiスピーカー+観客のスマホ', u2: 'サイレント/分散型のパーティー、屋外映画、光の演出をスマホの群れで',
+    u3: '企業イベント・展示。プロジェクターと来場者の端末を同じ時計に乗せる', u4: 'リビングで2台のスマホからでも、同じコードが動く',
+    foot: '位置情報は端末の中だけで使い、送信しません。'
+  },
+  en: {
+    title: 'SOLUNA Sound — the whole venue on one clock',
+    nav_join: '🎧 Join', nav_foh: '🎚 FOH console',
+    h1: 'The whole venue,<br>on one clock.',
+    lead: 'Every phone in the crowd, every Raspberry Pi speaker, the projector and the venue’s lights fire at the same instant. No app to install — one link, one tap.',
+    cta1: '▶ Try it on two phones now<small>open this page on both</small>', cta2: 'Read how it works<small>README · English / 日本語</small>',
+    h_how: 'How it works <span class="en">どう動くか</span>',
+    s1h: 'Agree on the time', s1p: 'One server is the only clock. Each device measures its own offset and corrects for it: ±1–3 ms on a LAN, ±10–20 ms over LTE, ±0.5 ms for a speaker inside a Pi box.',
+    s2h: 'Hand out the sound first', s2p: 'The track arrives while people are still at the gate (entrance QR). Showtime broadcasts only “when” — so 5,000 phones cost no more bandwidth than five.',
+    s3h: 'Delay by distance', s3p: 'The farther a device is from the stage, the later it plays — riding the acoustic wavefront. Zone flags or GPS set it automatically. That is why the whole field stays in phase.',
+    h_screens: 'Screens <span class="en">画面</span>',
+    f1: '<b>Audience</b>: pick your zone, tap ▶. Everything technical is folded away.', f2: '<b>Playing</b>: title and artist appear. The light show layers on top.',
+    f3: '<b>Entrance QR</b>: the track downloads in the queue; inside, it plays with zero traffic.', f4: 'Join a box’s Wi-Fi and <b>this page opens by itself</b>.',
+    foh_cap: 'The FOH console. One status sentence on top — connected · sounding · ready · failed. Then the show in order: advance → play → light → zones → devices → Pi boxes → records → setup.',
+    h_plug: 'Plugs into what you already run <span class="en">既存の卓・制御系に</span>',
+    plug_lead: 'Feed it <b>one aux from the desk</b>, or receive the <b>Dante/AES67</b> stream. Fire cues from the lighting desk over <b>OSC</b>, lock to <b>timecode</b>, and drive the venue’s fixtures over <b>Art-Net/sACN</b> on the same clock as the phones.',
+    t_h1: 'You have', t_h2: 'How it connects',
+    t1: 'Dante Virtual Soundcard or an AVIO USB adapter as an input, or the device’s AES67 mode as a multicast flow (<code>--aes67</code>, discovered with <code>--sap</code>)',
+    t2: 'Received natively. Channel mapping with <code>--map</code>', t3k: 'MADI / AVB / analog / USB', t3: 'Through any audio interface with <code>--input</code>. PA-fusion path is 80 ms',
+    t4: 'OSC: <code>/soluna/cue</code> <code>/soluna/go</code> <code>/soluna/light</code>. Timecode via <code>/soluna/tc</code> or LTC audio',
+    t5k: 'Venue fixtures', t5: 'Art-Net / sACN out — same patterns, same clock as the phones', t6k: 'Projector / LED wall', t6: 'A MacBook + HDMI with <code>/screen</code> open',
+    h_box: 'A Pi you only power on <span class="en">the SOLUNA box</span>',
+    b1h: 'They find each other', b1p: 'Boxes discover one another; one is elected server (the clock), the rest are speakers. Zero configuration.',
+    b2h: 'One can die', b2p: 'Every 10 s the boxes keep a copy of the show. If the server vanishes, another box takes over in 15–20 s. A crashed process is back in 6 s.',
+    b3h: 'Plug in, a page opens', b3p: 'Join the box’s Wi-Fi “SOLUNA” and the setup page opens by itself. No password — and still safe: nothing but the box’s own pages is reachable.',
+    b4h: 'Any DAC', b4p: 'USB, a GPIO I2S DAC, or the built-in jack — plug it in and the box switches. Zones are assigned from the FOH console.',
+    f5: '<b>Box setup</b> (shot on the real box): role, speaker, Wi-Fi, its own AP. No SSH.', f6: '<b>Print collateral from the server</b>: zone flags and the entrance QR, A4.',
+    h_nums: 'Numbers <span class="en">measured, not promised</span>',
+    n1: 'concurrent devices, cue reached 100%', n2: 'speaker inside the box', n3: 'LTE: ±10–20 ms', n4: 'back after a server kill', n5: 'before every deploy', n6: 'colors computed on-device from the clock',
+    nums_note: 'Not yet done in the field: outdoor GPS accuracy, dozens of real iPhones for a night, real Dante gear / LTC / lighting desks / fixtures (verified against synthetic signals only). Stated honestly in the <a href="https://github.com/yukihamada/soluna-surround#verified">README’s Verified table</a>.',
+    h_fit: 'Where it fits <span class="en">使いどころ</span>',
+    u1: 'Intelligibility at the middle and back of a festival field — a 15 m grid of Pi speakers plus the crowd’s phones instead of delay towers', u2: 'Silent or distributed parties, outdoor cinema, light shows carried by a crowd of screens',
+    u3: 'Corporate events and exhibitions — the projector and every visitor’s device on one clock', u4: 'Two phones in a living room run the exact same code',
+    foot: 'Location is used only on your device and never sent.'
+  }
+};
+const qs = new URLSearchParams(location.search);
+let LANG = qs.get('lang') || localStorage.getItem('soluna_lang') || ((navigator.language||'ja').startsWith('ja') ? 'ja' : 'en');
+function apply(lang){
+  LANG = I18N[lang] ? lang : 'ja'; const T = I18N[LANG];
+  document.documentElement.lang = LANG; document.title = T.title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (T[k] != null) el.innerHTML = T[k]; });
+  document.querySelectorAll('img[data-src-en]').forEach(img => { img.src = LANG==='en' ? img.dataset.srcEn : img.dataset.srcJa; });
+  document.getElementById('langJa').setAttribute('aria-pressed', LANG==='ja'); document.getElementById('langEn').setAttribute('aria-pressed', LANG==='en');
+  try { localStorage.setItem('soluna_lang', LANG); } catch(e) {}
+  const u = new URL(location); u.searchParams.set('lang', LANG); history.replaceState(null, '', u);
+}
+document.getElementById('langJa').onclick = () => apply('ja');
+document.getElementById('langEn').onclick = () => apply('en');
+apply(LANG);
+</script>
 <script defer src="https://enabler-analytics.fly.dev/t.js"></script>
 </body></html>
