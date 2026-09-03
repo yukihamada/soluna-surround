@@ -336,6 +336,14 @@ seconds when a cue lands). So:
 5. **Measure before deciding**: `docs/field-test.md` — 3 phones, 3 carriers, front / middle
    / back, pass criteria included.
 
+### A festival with SOLUNA alone
+
+No PA company, no lighting desk, no laptop: Pi boxes are the speakers, the DJ plugs a USB
+interface into any box (`/setup` → live input ON), the setlist runs itself (SHOW → AUTO), the
+crowd's phones are the light layer. Kit list, day-of order and honest limits: `docs/standalone.md`.
+How to plug into what you already run (desk aux, Dante/AES67, OSC desks, timecode, Art-Net,
+projector): the live guide at `/connect`, or `docs/integration.md` + `docs/show-control.md`.
+
 ### Pi as the server — the "SOLUNA box"
 
 One Raspberry Pi can be the whole venue system: clock authority + speaker node, no

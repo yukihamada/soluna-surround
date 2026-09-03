@@ -93,6 +93,19 @@ async def main():
             r = await s.post(f"{BASE}/api/box", json={"ap": {"psk": "short"}})
             check("短いAPパスワード → 400", r.status == 400)
 
+            # ---- live input (standalone DJ入口): source.env + soluna-source enable/start, off → disable/stop
+            r = await s.post(f"{BASE}/api/box", json={"source": {"on": True, "device": "hw:2,0", "lead": 0.08, "ch": "festival"}})
+            j = await r.json()
+            s_env = open(os.path.join(ETC, "source.env")).read()
+            cmds = (await (await s.get(f"{BASE}/api/box/cmds")).json())["cmds"]
+            check("source on → source.env + enable/restart soluna-source", r.status == 200 and "source:on" in j["applied"]
+                  and "INPUT_DEVICE=hw:2,0\n" in s_env and "LEAD=0.08\n" in s_env
+                  and ["systemctl", "enable", "soluna-source"] in cmds and ["systemctl", "restart", "soluna-source"] in cmds, s_env)
+            check("status.source 反映 + inputs 一覧あり", j["status"]["source"]["device"] == "hw:2,0" and "inputs" in j["status"])
+            r = await s.post(f"{BASE}/api/box", json={"source": {"on": False}})
+            cmds = (await (await s.get(f"{BASE}/api/box/cmds")).json())["cmds"]
+            check("source off → disable/stop", ["systemctl", "stop", "soluna-source"] in cmds and ["systemctl", "disable", "soluna-source"] in cmds)
+
             # ---- hostname
             r = await s.post(f"{BASE}/api/box", json={"hostname": "Stage Box #2"})
             j = await r.json()

@@ -44,7 +44,7 @@
 <div class="s-wrap">
   <nav class="s-bar"><span class="s-brand"><span class="mark"></span>SOLUNA · SOUND</span>
     <span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.82rem">
-      <a href="/" data-i18n="nav_join">🎧 参加</a><a href="/admin" data-i18n="nav_foh">🎚 FOH</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a>
+      <a href="/" data-i18n="nav_join">🎧 参加</a><a href="/connect" data-i18n="nav_connect">🔌 つなぐ</a><a href="/admin" data-i18n="nav_foh">🎚 FOH</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a>
       <span class="lang" role="group" aria-label="language"><button id="langJa" aria-pressed="true">日本語</button><button id="langEn" aria-pressed="false">EN</button></span>
     </span></nav>
 
@@ -85,6 +85,18 @@
       <tr><td data-i18n="t5k">会場の灯体</td><td data-i18n="t5">Art-Net / sACN 出力。スマホと同じパターン・同じ時計で</td></tr>
       <tr><td data-i18n="t6k">プロジェクター / LEDウォール</td><td data-i18n="t6"><code>/screen</code> を開いた MacBook + HDMI</td></tr>
     </table></div>
+    <p style="margin-top:14px"><a class="s-btn ghost" href="/connect" data-i18n="plug_more">🔌 つなぎ方を図で見る<small>/connect — 9つのケース・手順・コマンド</small></a></p>
+  </section>
+
+  <section class="blk"><h2 data-i18n="h_solo">これ単体でもフェスができる <span class="en">a festival with SOLUNA alone</span></h2>
+    <p class="lead" data-i18n="solo_lead">PA業者も照明卓もラップトップも無しで。<b>Piの箱がスピーカー</b>、<b>どれかの箱にDJの音を挿し</b>、<b>セットリストは自動で進む</b>。観客のスマホは光と演出の層。</p>
+    <div class="steps four">
+      <div class="step"><b class="k">1</b><h3 data-i18n="so1h">箱を置いて電源</h3><p data-i18n="so1p">客席に15m格子で6〜9台。1分で勝手に集まり、1台が時計の親になる。</p></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="so2h">曲を入れてAUTO</h3><p data-i18n="so2p">mp3をアップ→セットリストを組む→AUTOをON。曲が終わると次が自動で鳴る。各曲に光の見た目。</p></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="so3h">DJは箱に挿す</h3><p data-i18n="so3p">USBインターフェースをどの箱でもいいので挿し、設定画面で「ライブ入力ON」。卓の音が全箱・全端末へ。</p></div>
+      <div class="step"><b class="k">4</b><h3 data-i18n="so4h">NEXTを1回</h3><p data-i18n="so4p">あとは夜が勝手に進む。MUTEがキルスイッチ。1台死んでも15〜20秒で続く。終わったら記録を出す。</p></div>
+    </div>
+    <p class="s-hint" style="margin-top:10px" data-i18n="solo_note">正直な注記: 音の質は箱のアンプとスピーカーで決まる(15m格子の小型SP=どこでも明瞭、20kWの低音壁ではない)。箱のWi-Fiは約25台まで=スタッフとDJ用。観客のスマホはLTE+クラウドか会場Wi-Fi。手順書は <a href="https://github.com/yukihamada/soluna-surround/blob/master/docs/standalone.md">docs/standalone.md</a>。</p>
   </section>
 
   <section class="blk"><h2 data-i18n="h_box">Piは、電源を入れるだけ <span class="en">the SOLUNA box</span></h2>
@@ -127,7 +139,15 @@
 const I18N = {
   ja: {
     title: 'SOLUNA Sound — 会場ごと、ひとつの時計で鳴る',
-    nav_join: '🎧 参加', nav_foh: '🎚 FOH',
+    nav_join: '🎧 参加', nav_foh: '🎚 FOH', nav_connect: '🔌 つなぐ',
+    plug_more: '🔌 つなぎ方を図で見る<small>/connect — 9つのケース・手順・コマンド</small>',
+    h_solo: 'これ単体でもフェスができる <span class="en">a festival with SOLUNA alone</span>',
+    solo_lead: 'PA業者も照明卓もラップトップも無しで。<b>Piの箱がスピーカー</b>、<b>どれかの箱にDJの音を挿し</b>、<b>セットリストは自動で進む</b>。観客のスマホは光と演出の層。',
+    so1h: '箱を置いて電源', so1p: '客席に15m格子で6〜9台。1分で勝手に集まり、1台が時計の親になる。',
+    so2h: '曲を入れてAUTO', so2p: 'mp3をアップ→セットリストを組む→AUTOをON。曲が終わると次が自動で鳴る。各曲に光の見た目。',
+    so3h: 'DJは箱に挿す', so3p: 'USBインターフェースをどの箱でもいいので挿し、設定画面で「ライブ入力ON」。卓の音が全箱・全端末へ。',
+    so4h: 'NEXTを1回', so4p: 'あとは夜が勝手に進む。MUTEがキルスイッチ。1台死んでも15〜20秒で続く。終わったら記録を出す。',
+    solo_note: '正直な注記: 音の質は箱のアンプとスピーカーで決まる(15m格子の小型SP=どこでも明瞭、20kWの低音壁ではない)。箱のWi-Fiは約25台まで=スタッフとDJ用。観客のスマホはLTE+クラウドか会場Wi-Fi。手順書は <a href="https://github.com/yukihamada/soluna-surround/blob/master/docs/standalone.md">docs/standalone.md</a>。',
     h1: '会場ごと、<br>ひとつの時計で鳴る。',
     lead: '観客のスマホ、Raspberry Piのスピーカー、プロジェクター、会場の灯体。全部が同じ瞬間に鳴り、光る。アプリなし、一本のリンクとタップひとつ。',
     cta1: '▶ いま2台のスマホで試す<small>open this on two phones</small>', cta2: '仕組みを読む<small>README · 日本語 / English</small>',
@@ -162,7 +182,15 @@ const I18N = {
   },
   en: {
     title: 'SOLUNA Sound — the whole venue on one clock',
-    nav_join: '🎧 Join', nav_foh: '🎚 FOH console',
+    nav_join: '🎧 Join', nav_foh: '🎚 FOH console', nav_connect: '🔌 Connect',
+    plug_more: '🔌 See how to connect, with diagrams<small>/connect — 9 cases, steps, commands</small>',
+    h_solo: 'A festival with SOLUNA alone <span class="en">これ単体でもフェスができる</span>',
+    solo_lead: 'No PA company, no lighting desk, no laptop. <b>The Pi boxes are the speakers</b>, <b>the DJ plugs into any box</b>, and <b>the setlist runs itself</b>. The crowd’s phones are the light and effects layer.',
+    so1h: 'Place the boxes, power on', so1p: 'Six to nine boxes on a 15 m grid over the audience. In a minute they find each other and one becomes the clock.',
+    so2h: 'Load the set, turn AUTO on', so2p: 'Upload mp3s, build the setlist, switch AUTO on. When a track ends the next one fires. A light look per track.',
+    so3h: 'The DJ plugs into a box', so3p: 'A USB interface into any box, then “live input ON” in its setup page. The mixer’s sound reaches every box and every phone.',
+    so4h: 'Press NEXT once', so4p: 'The night runs itself. MUTE is the kill switch. Lose a box and the show continues in 15–20 s. Pull the report afterwards.',
+    solo_note: 'Honest note: sound quality is the boxes’ amps and speakers — a 15 m grid of small speakers is clarity everywhere, not a 20 kW sub wall. A box’s own Wi-Fi holds ~25 devices, for crew and DJ; crowd phones ride LTE + a cloud deploy or venue Wi-Fi. Runbook: <a href="https://github.com/yukihamada/soluna-surround/blob/master/docs/standalone.md">docs/standalone.md</a>.',
     h1: 'The whole venue,<br>on one clock.',
     lead: 'Every phone in the crowd, every Raspberry Pi speaker, the projector and the venue’s lights fire at the same instant. No app to install — one link, one tap.',
     cta1: '▶ Try it on two phones now<small>open this page on both</small>', cta2: 'Read how it works<small>README · English / 日本語</small>',

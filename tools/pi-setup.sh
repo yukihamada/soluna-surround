@@ -168,6 +168,31 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 WantedBy=multi-user.target
 UNIT
 
+# source.env + soluna-source: この箱の音声入力(USBインターフェース/ライン)をLIVE配信する(単体フェス: DJ卓→箱)。既定は停止・/setup でON
+[ -f "$ETC/source.env" ] || $SUDO tee "$ETC/source.env" >/dev/null <<ENV
+INPUT_DEVICE=
+LEAD=0.6
+CH=$CH
+PYTHONUNBUFFERED=1
+ENV
+$SUDO tee /etc/systemd/system/soluna-source.service >/dev/null <<UNIT
+[Unit]
+Description=SOLUNA live source — this box's audio input → the server (standalone festival DJ input)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+User=$USER_NAME
+WorkingDirectory=$APP
+EnvironmentFile=$ETC/source.env
+ExecStart=/bin/bash -c 'exec /usr/bin/python3 $APP/source.py --input \${INPUT_DEVICE} --server ws://127.0.0.1:$PORT --ch \${CH} --lead \${LEAD}'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 $SUDO tee /etc/systemd/system/soluna-agent.service >/dev/null <<UNIT
 [Unit]
 Description=SOLUNA box supervisor (discover / elect / heal / report)
@@ -189,7 +214,7 @@ UNIT
 $SUDO systemctl daemon-reload
 # /setup が使う特権コマンドだけを、この箱のユーザーに無パスワードで許可(それ以外は不可)
 $SUDO tee /etc/sudoers.d/soluna >/dev/null <<SUDOERS
-$USER_NAME ALL=(root) NOPASSWD: /usr/bin/systemctl restart soluna-node, /usr/bin/systemctl restart soluna-agent, /usr/bin/systemctl restart soluna-server, /usr/bin/systemctl restart --no-block soluna-server, /usr/bin/systemctl restart avahi-daemon, /usr/bin/systemctl reboot, /usr/bin/nmcli *, /usr/bin/hostnamectl set-hostname *, /usr/bin/tee $ETC/*, /usr/bin/chmod * $ETC/*, /usr/bin/rm -f $ETC/force-server, /usr/bin/journalctl *, /usr/bin/bash -c *
+$USER_NAME ALL=(root) NOPASSWD: /usr/bin/systemctl restart soluna-node, /usr/bin/systemctl restart soluna-agent, /usr/bin/systemctl start soluna-source, /usr/bin/systemctl stop soluna-source, /usr/bin/systemctl restart soluna-source, /usr/bin/systemctl enable soluna-source, /usr/bin/systemctl disable soluna-source, /usr/bin/systemctl restart soluna-server, /usr/bin/systemctl restart --no-block soluna-server, /usr/bin/systemctl restart avahi-daemon, /usr/bin/systemctl reboot, /usr/bin/nmcli *, /usr/bin/hostnamectl set-hostname *, /usr/bin/tee $ETC/*, /usr/bin/chmod * $ETC/*, /usr/bin/rm -f $ETC/force-server, /usr/bin/journalctl *, /usr/bin/bash -c *
 SUDOERS
 $SUDO chmod 440 /etc/sudoers.d/soluna
 $SUDO usermod -aG netdev,audio "$USER_NAME" 2>/dev/null || true

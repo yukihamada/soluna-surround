@@ -45,7 +45,7 @@ SETUP_OPEN = SETUP_OPEN_MODE in ("1", "always")
 SETUP_WINDOW_S = float(os.environ.get("SOLUNA_SETUP_WINDOW_S", "600"))
 START_T = time.time()
 OPEN_NETS = tuple(p for p in os.environ.get("SOLUNA_SETUP_OPEN_FROM", "10.42.0.,127.0.0.1,::1").split(",") if p)
-NODE_ENV, SERVER_ENV, AGENT_ENV = (os.path.join(ETC, n) for n in ("node.env", "server.env", "agent.env"))
+NODE_ENV, SERVER_ENV, AGENT_ENV, SOURCE_ENV = (os.path.join(ETC, n) for n in ("node.env", "server.env", "agent.env", "source.env"))
 FORCE_SERVER = os.path.join(ETC, "force-server")
 AP_PSK = os.path.join(ETC, "ap.psk")
 TOKEN_FILE = os.path.join(APP_DIR, "admin-token")
@@ -181,6 +181,17 @@ def audio_cards():
     return cards
 
 
+def audio_inputs():
+    """録音デバイス(arecord -l): USBオーディオIF/ライン入力 → 単体フェスのDJ入力候補"""
+    rc, out = run(["arecord", "-l"], timeout=5)
+    cards = []
+    for line in out.splitlines():
+        m = re.match(r"card (\d+): (\S+) \[(.*?)\], device (\d+): (.*?) \[", line)
+        if m:
+            cards.append({"id": int(m.group(1)), "name": m.group(2), "desc": m.group(3), "hw": f"hw:{m.group(1)},{m.group(4)}"})
+    return cards
+
+
 def unit_state(unit):
     rc, out = run(["systemctl", "is-active", unit], timeout=5)
     return out.strip() or ("active" if DRYRUN else "unknown")
@@ -223,7 +234,10 @@ def status(ctx):
         "version": ctx.get("version"), "role": ctx["role"]() if ctx.get("role") else None,
         "uptime_s": up, "temp": cpu_temp(),
         "audio": audio_cards(),
-        "services": {u: unit_state(f"soluna-{u}") for u in ("node", "server", "agent")},
+        "services": {u: unit_state(f"soluna-{u}") for u in ("node", "server", "agent", "source")},
+        "inputs": audio_inputs(),
+        "source": {"on": unit_state("soluna-source") == "active", "device": read_env(SOURCE_ENV).get("INPUT_DEVICE") or "",
+                   "lead": float(read_env(SOURCE_ENV).get("LEAD") or 0.6), "ch": read_env(SOURCE_ENV).get("CH") or "festival"},
         "node": {"zone": node.get("ZONE") or "", "pos": node.get("POS") or "C", "gain_db": float(node.get("GAIN_DB") or 0),
                  "device": node.get("DEVICE") or "auto", "ch": node.get("CH") or "festival",
                  "server": node.get("SERVER") or "auto", "pinned": node.get("PINNED") == "1"},
@@ -295,6 +309,27 @@ def apply(body: dict):
             write_file(AP_PSK, psk + "\n", 0o600)
         run(["systemctl", "restart", "soluna-agent"], privileged=True)   # agent re-raises the AP with new settings
         done.append("ap")
+    src = body.get("source") or {}
+    if src:
+        upd = {}
+        if "device" in src:
+            upd["INPUT_DEVICE"] = re.sub(r"[^\w:,.-]", "", str(src["device"] or ""))[:64]
+        if "lead" in src:
+            upd["LEAD"] = round(max(0.05, min(3.0, float(src["lead"] or 0.6))), 2)
+        if "ch" in src:
+            upd["CH"] = re.sub(r"[^A-Za-z0-9_-]", "", str(src["ch"] or "festival"))[:32] or "festival"
+        if upd:
+            write_env(SOURCE_ENV, upd)
+        if "on" in src:
+            if src["on"]:
+                run(["systemctl", "enable", "soluna-source"], privileged=True)
+                run(["systemctl", "restart", "soluna-source"], privileged=True)
+            else:
+                run(["systemctl", "disable", "soluna-source"], privileged=True)
+                run(["systemctl", "stop", "soluna-source"], privileged=True)
+        elif upd:
+            run(["systemctl", "restart", "soluna-source"], privileged=True)
+        done.append("source:" + ("on" if src.get("on") else "off" if "on" in src else "cfg"))
     if body.get("hostname"):
         hn = re.sub(r"[^a-z0-9-]", "", str(body["hostname"]).lower())[:32].strip("-")
         if not hn:

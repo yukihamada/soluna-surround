@@ -92,6 +92,22 @@
 
   <!-- Wi-Fi 上流 -->
   <section class="s-card">
+    <h2>ライブ入力 <small>live input — この箱をDJの入口にする(単体フェス)</small></h2>
+    <div class="s-hint">USBオーディオインターフェースやライン入力をこの箱に挿すと、DJ卓の音をそのまま全端末・全箱へ配信できます(単体でフェスをやるときの入口)。</div>
+    <div class="row">
+      <div><label class="s-label">入力デバイス</label><select id="sDev" class="s-input"><option value="">既定の入力</option></select></div>
+      <div><label class="s-label">リード(秒)</label><input id="sLead" class="s-input" type="number" step="0.05" min="0.05" max="3" value="0.6"></div>
+      <div><label class="s-label">チャンネル</label><input id="sCh" class="s-input" value="festival"></div>
+    </div>
+    <div class="row">
+      <button class="s-btn primary" id="sOn">🎙 ライブ入力を開始</button>
+      <button class="s-btn ghost" id="sOff">■ 停止</button>
+      <span class="s-hint" id="sSt"></span>
+    </div>
+    <div class="s-hint">目安: リード0.6秒=安定(LTE端末も乗る)・0.08秒=既存PAとの融合。入力の音量は卓側で。</div>
+  </section>
+
+  <section class="s-card">
     <h2><span class="step">3</span>Wi-Fi 上流 <small>uplink — 会場Wi-Fi / テザリングに乗る</small></h2>
     <p class="s-hint">上流に繋ぐと、この箱は自分の AP を立てず、そのネットワークで他の箱・スマホと同期します。</p>
     <div class="actions"><button class="s-btn ghost" id="wScan">📡 周りの Wi-Fi を探す<small>scan</small></button></div>
@@ -165,6 +181,7 @@ async function api(path, body, method){
 }
 const led = (on, bad) => `<span class="s-led ${on?'on':(bad?'bad':'')}"></span>`;
 function render(s){
+  try{ const dev=$('sDev'); dev.innerHTML='<option value="">既定の入力</option>'+(s.inputs||[]).map(c=>`<option value="${c.hw}">${c.name} — ${c.desc} (${c.hw})</option>`).join(''); dev.value=s.source?.device||''; if(dev.value!==(s.source?.device||'')){const o=document.createElement('option');o.value=s.source.device;o.textContent=s.source.device;dev.appendChild(o);dev.value=s.source.device;} $('sLead').value=s.source?.lead??0.6; $('sCh').value=s.source?.ch||'festival'; $('sSt').innerHTML = s.source?.on ? '<span class="s-led on"></span>配信中' : '<span class="s-led"></span>停止中'; }catch(e){}
   S = s;
   $('hHost').textContent = s.host; $('hSt').textContent = `v${(s.version||'').replace(/^v/,'')} · ${new Date(s.t*1000).toLocaleTimeString()}`;
   $('sRole').innerHTML = `${led(s.role==='server')}<b>${s.role==='server'?'サーバ(時計の親)+スピーカー':'スピーカー(ノード)'}</b> <span class="small dim">mode=${s.role_mode}${s.node.pinned?' → '+s.node.server:''}</span>`;
@@ -186,6 +203,8 @@ function render(s){
 async function load(){ try{ render(await api('/api/box')); }catch(e){ $('hSt').textContent = '⛔ ' + e.message; toast(e.message, true); } }
 $('reload').onclick = load;
 $('tone').onclick = async ()=>{ try{ const j = await api('/api/box/action', {action:'tone'}); toast(j.ok ? '🔔 鳴らしました' : (j.hint||'ノード未接続'), !j.ok); }catch(e){ toast(e.message,true); } };
+$('sOn').onclick = async ()=>{ try{ const j = await api('/api/box', {source:{on:true, device:$('sDev').value, lead:parseFloat($('sLead').value||0.6), ch:$('sCh').value}}); render(j.status); toast('🎙 ライブ入力を開始'); }catch(e){ toast(e.message,true); } };
+$('sOff').onclick = async ()=>{ try{ const j = await api('/api/box', {source:{on:false}}); render(j.status); toast('ライブ入力を停止'); }catch(e){ toast(e.message,true); } };
 $('rSave').onclick = async ()=>{ try{ const j = await api('/api/box', {role:{mode:$('rMode').value, server:$('rUrl').value}}); render(j.status); toast('役割を保存: '+j.applied.join(', ')); }catch(e){ toast(e.message,true); } };
 $('nSave').onclick = async ()=>{ try{ const j = await api('/api/box', {node:{zone:$('nZone').value, pos:$('nPos').value, gain_db:parseFloat($('nGain').value||0), device:$('nDev').value, ch:$('nCh').value}}); render(j.status); toast('スピーカー設定を保存・ノード再起動'); }catch(e){ toast(e.message,true); } };
 const bars = sig => `<span class="bars">${[25,50,75,95].map(t=>`<i class="${sig>=t?'on':''}"></i>`).join('')}</span>`;
