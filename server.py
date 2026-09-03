@@ -105,6 +105,9 @@ def _chan(name):
         "preload": None,          # 事前配布済み音源URL(FIRE前のDLバースト回避)
         "show": None,             # セットリスト [{label,url,video,light},...]
         "show_i": -1,             # 進行位置(次のNEXTで show_i+1 を発火)
+        "show_auto": False,       # 自動進行(単体フェス: 誰もNEXTを押さなくても一晩回る)
+        "show_gap": 1.0,          # 曲間の空白[s](自動進行時)
+        "show_next_at": None,     # 自動進行で次を発火する予定時刻(server epoch秒)。None=予定なし
         "net": None,              # 回線案内 {"ssid","wifi_zones":[..]} 前方=会場Wi-Fi/後方=LTE
         "node_cfg": {},           # Piノードの割当 host -> {"zone","pos","gain_db"}(/adminから・接続時に再送)
         "tc": None,               # タイムコード基準 {"epoch","frames","fps","drop","tc"}(cue を tc で指定)
@@ -124,7 +127,8 @@ NODE_STALE_S = float(os.environ.get("SOLUNA_NODE_STALE_S", "15"))
 
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
-            "geo", "preload", "show", "show_i", "net", "node_cfg", "tc", "mute", "stats")
+            "geo", "preload", "show", "show_i", "net", "node_cfg", "tc", "mute", "stats",
+            "show_auto", "show_gap", "show_next_at")
 
 
 def _save_state():
@@ -384,6 +388,7 @@ async def do_cue(state, body: dict) -> dict:
     """POST /api/cue と OSC /soluna/cue が共有する本体。"""
     if body.get("stop"):
         state["cue"] = None
+        _auto_cancel(state)                      # STOP = ショーの自動進行も止める
         _save_state()
         await _broadcast_text(state, json.dumps({"t": "cue_stop"}))
         return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
@@ -490,8 +495,90 @@ async def api_light(request):
         raise web.HTTPBadRequest(text=str(e))
 
 
+def _wav_duration(url):
+    """/assets/x.wav の長さ[s]を RIFF ヘッダから(純Python・安価)。wav 以外/失敗は None。
+    主経路は admin が decodeAudioData で測って step.dur に入れる方(mp3/aac はそちら)。"""
+    if not url or not url.lower().endswith(".wav") or not url.startswith("/assets/"):
+        return None
+    path = os.path.join(ASSETS, os.path.basename(url))
+    try:
+        with open(path, "rb") as f:
+            head = f.read(64 * 1024)
+        if head[:4] != b"RIFF" or head[8:12] != b"WAVE":
+            return None
+        i, byte_rate, data_len = 12, None, None
+        while i + 8 <= len(head):
+            cid, size = head[i:i + 4], struct.unpack("<I", head[i + 4:i + 8])[0]
+            if cid == b"fmt ":
+                byte_rate = struct.unpack("<I", head[i + 16:i + 20])[0]
+            elif cid == b"data":
+                data_len = size
+                break
+            i += 8 + size + (size & 1)
+        if byte_rate and data_len:
+            return round(data_len / byte_rate, 3)
+    except Exception:
+        pass
+    return None
+
+
+def _auto_cancel(state):
+    """自動進行の予約を取り消す(手動NEXT/goto/reset/stop/auto OFF/セットリスト差し替えで必ず呼ぶ)。"""
+    t = state.get("_auto_task")
+    if t is not None and not t.done():
+        t.cancel()
+    state["_auto_task"] = None
+    state["show_next_at"] = None
+
+
+async def _auto_fire(state, next_at):
+    try:
+        await asyncio.sleep(max(0.0, next_at - now()))
+        if state.get("show_next_at") != next_at or not state.get("show_auto"):
+            return                               # 取り消し済み/差し替え済み
+        state["_auto_task"] = None
+        await do_show(state, {"next": True, "_auto": True})
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:                       # noqa: BLE001
+        print(f"[show] auto-advance failed: {e}")
+
+
+def _auto_schedule(state, at, step, i):
+    """発火した step の終わり(at+dur)+gap に次のステップを予約。dur が無い/loop の step は予約しない
+    (終わりが定義できない=手動で NEXT)。最後の step なら予定なし。"""
+    _auto_cancel(state)
+    show = state.get("show") or []
+    dur = step.get("dur")
+    if not state.get("show_auto") or not dur or dur <= 0 or step.get("loop") or i + 1 >= len(show):
+        return None
+    next_at = at + float(dur) + float(state.get("show_gap") or 0.0)
+    state["show_next_at"] = next_at
+    state["_auto_task"] = asyncio.get_event_loop().create_task(_auto_fire(state, next_at))
+    return next_at
+
+
+def _auto_resume_all():
+    """再起動後: 予約が残っていれば復元(時刻が過ぎていれば即発火)。on_startup から呼ぶ。"""
+    for st in channels.values():
+        nxt = st.get("show_next_at")
+        if st.get("show_auto") and nxt:
+            st["_auto_task"] = asyncio.get_event_loop().create_task(_auto_fire(st, nxt))
+            print(f"[show] auto-advance resumed: next in {max(0.0, nxt - now()):.1f}s")
+
+
 async def do_show(state, body: dict) -> dict:
-    """POST /api/show と OSC /soluna/go, /soluna/show/goto が共有する本体。"""
+    """POST /api/show と OSC /soluna/go, /soluna/show/goto が共有する本体。
+    auto/gap: 自動進行(各 step の dur[s]+gap 後に次を発火。dur は admin がブラウザで測る or wav ヘッダ)。"""
+    touched = False
+    if "auto" in body:
+        state["show_auto"] = bool(body["auto"])
+        if not state["show_auto"]:
+            _auto_cancel(state)
+        touched = True
+    if body.get("gap") is not None:
+        state["show_gap"] = max(0.0, min(60.0, float(body["gap"])))
+        touched = True
     if body.get("steps") is not None:
         steps = []
         for raw in body["steps"]:
@@ -502,6 +589,14 @@ async def do_show(state, body: dict) -> dict:
             for k in ("gain", "lead"):
                 if raw.get(k) is not None:
                     step[k] = float(raw[k])
+            try:
+                d = float(raw.get("dur") or 0)
+            except (TypeError, ValueError):
+                d = 0.0
+            if d <= 0:
+                d = _wav_duration(step.get("url")) or 0.0
+            if d > 0:
+                step["dur"] = round(d, 3)
             if raw.get("loop"):
                 step["loop"] = True
             if isinstance(raw.get("light"), dict):
@@ -509,16 +604,19 @@ async def do_show(state, body: dict) -> dict:
             steps.append(step)
         state["show"] = steps
         state["show_i"] = -1
+        _auto_cancel(state)
         _save_state()
-        return {"ok": True, "steps": len(steps)}
+        return {"ok": True, "steps": len(steps), "auto": state["show_auto"], "gap": state["show_gap"]}
 
     if body.get("reset"):
         state["show_i"] = -1
+        _auto_cancel(state)
         _save_state()
         return {"ok": True, "i": 0}
 
     if body.get("goto") is not None:
         state["show_i"] = int(body["goto"]) - 2   # 次のNEXTで goto 番を発火
+        _auto_cancel(state)
         _save_state()
         return {"ok": True, "next": int(body["goto"])}
 
@@ -526,6 +624,8 @@ async def do_show(state, body: dict) -> dict:
         show = state.get("show") or []
         i = state.get("show_i", -1) + 1
         if i >= len(show):
+            _auto_cancel(state)
+            _save_state()
             return {"ok": False, "done": True, "total": len(show)}
         step = show[i]
         state["show_i"] = i
@@ -548,10 +648,23 @@ async def do_show(state, body: dict) -> dict:
             state["light"] = light
             await _broadcast_text(state, json.dumps({"t": "light", **light}))
             fired["light"] = light["pattern"]
+        # 自動進行: この step の終わり + gap に次を予約(音/映像を出した step のみ)
+        if step.get("url") or step.get("video"):
+            nxt = _auto_schedule(state, at, step, i)
+        else:
+            _auto_cancel(state)
+            nxt = None
+        fired["next_at"] = nxt
+        fired["auto"] = bool(state.get("show_auto"))
         _save_state()
         return {"ok": True, **fired}
 
-    raise BadRequest('{"steps":[...]} | {"next":true} | {"goto":n} | {"reset":true}')
+    if touched:
+        _save_state()
+        return {"ok": True, "auto": state["show_auto"], "gap": state["show_gap"],
+                "next_at": state.get("show_next_at")}
+
+    raise BadRequest('{"steps":[...]} | {"next":true} | {"goto":n} | {"reset":true} | {"auto":bool,"gap":s}')
 
 
 async def api_show(request):
@@ -1092,6 +1205,10 @@ async def status(request):
             "tc": st.get("tc"),
             "show": {"i": st.get("show_i", -1) + 1,
                      "total": len(st.get("show") or []),
+                     "auto": bool(st.get("show_auto")),
+                     "gap": st.get("show_gap", 1.0),
+                     "next_at": st.get("show_next_at"),
+                     "durs": [x.get("dur") for x in (st.get("show") or [])],
                      "next": ((st.get("show") or [])[st.get("show_i", -1) + 1]["label"]
                               if st.get("show") and st.get("show_i", -1) + 1 < len(st["show"])
                               else None)},
@@ -1252,6 +1369,10 @@ def main():
         boxctl.register(app, {"version": VERSION, "role": lambda: "server",
                               "send_to_host": _send_to_host, "admin_ok": _admin_ok})
     app.on_startup.append(_start_showctl)
+
+    async def _resume_auto(app):
+        _auto_resume_all()
+    app.on_startup.append(_resume_auto)
     app.add_routes([
         web.get("/health", health),
         web.get("/api/state", api_state),

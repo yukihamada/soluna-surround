@@ -365,6 +365,80 @@ async def main():
         check("level: peak≈-6dBFS", lv and -6.5 <= lv.get("peak_dbfs", -99) <= -5.5 and lv.get("clip") is False, str(lv))
         await ws_pl.close()
 
+        # 10q) show 自動進行(単体フェス): dur+gap 後に次のステップが自動で発火する
+        ws_a = await s.ws_connect(f"{BASE}/audio?role=listen&ch=autoch&zone=A")
+        await asyncio.wait_for(ws_a.receive(), 3)                      # config
+        async def next_cue(ws, timeout):
+            t_end = time.time() + timeout
+            while time.time() < t_end:
+                try:
+                    m = await asyncio.wait_for(ws.receive(), max(0.05, t_end - time.time()))
+                except asyncio.TimeoutError:
+                    return None
+                if m.type == aiohttp.WSMsgType.TEXT:
+                    d = json.loads(m.data)
+                    if d.get("t") == "cue":
+                        return d
+            return None
+        # wav の長さはサーバがヘッダから自動で読む(admin が測れない場合の保険)
+        import wave as _wave
+        os.makedirs(os.path.join(DATA_DIR, "assets"), exist_ok=True)
+        with _wave.open(os.path.join(DATA_DIR, "assets", "half.wav"), "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(48000); w.writeframes(b"\0\0" * 24000)   # 0.5s
+        r = await s.post(f"{BASE}/api/show?ch=autoch", headers={"x-soluna-admin": ADMIN},
+                         json={"auto": True, "gap": 0.3, "steps": [
+                             {"label": "a", "url": "/assets/a.mp3", "dur": 1.0, "lead": 0.2},
+                             {"label": "b", "url": "/assets/b.mp3", "dur": 1.0, "lead": 0.2},
+                             {"label": "w", "url": "/assets/half.wav", "lead": 0.2}]})
+        jb = await r.json()
+        check("show set: auto/gap を受理", r.status == 200 and jb.get("auto") is True and jb.get("gap") == 0.3, str(jb))
+        st_a = (await (await s.get(f"{BASE}/status")).json())["channels"]["autoch"]["show"]
+        check("wav の dur をヘッダから自動取得(0.5s)", st_a.get("durs") == [1.0, 1.0, 0.5], str(st_a.get("durs")))
+        r = await s.post(f"{BASE}/api/show?ch=autoch", json={"next": True}, headers={"x-soluna-admin": ADMIN})
+        j1 = await r.json()
+        c1 = await next_cue(ws_a, 3)
+        check("NEXT(1) → cue配信 + next_at=at+dur+gap", c1 is not None and j1.get("next_at") is not None
+              and abs(j1["next_at"] - (c1["at"] + 1.3)) < 0.01, str(j1))
+        c2 = await next_cue(ws_a, 4)
+        t_arr2 = time.time()
+        # 発火予定 = step1.at + dur + gap(サーバ時計=同一マシンなので wall clock と比較できる)
+        dt = t_arr2 - (c1["at"] + 1.3) if c1 else 99
+        check("自動で step2 が発火(step1.at+1.3s の直後に配信)", c2 is not None and str(c2.get("id", "")).startswith("show2")
+              and -0.1 <= dt <= 0.5, f"dt={dt:.2f} c2={c2 and c2.get('id')}")
+        check("step2.at ≈ step1.at + 1.3 (±0.4)", c2 is not None and abs((c2["at"] - c1["at"]) - 1.3) < 0.4,
+              str(c2 and c2["at"] - c1["at"]))
+        st_a = (await (await s.get(f"{BASE}/status")).json())["channels"]["autoch"]["show"]
+        check("status.show: auto=true・next_at 予約中(step3へ)", st_a.get("auto") is True and st_a.get("next_at") is not None
+              and st_a.get("i") == 2, str(st_a))
+        c3 = await next_cue(ws_a, 4)
+        check("自動で step3(最後)が発火", c3 is not None and str(c3.get("id", "")).startswith("show3"))
+        await asyncio.sleep(0.3)
+        st_a = (await (await s.get(f"{BASE}/status")).json())["channels"]["autoch"]["show"]
+        check("最後の step 後は next_at=null", st_a.get("i") == 3 and st_a.get("next_at") is None, str(st_a))
+        # auto OFF で予約が消える(その後 1.6s 何も来ない)
+        await s.post(f"{BASE}/api/show?ch=autoch", json={"reset": True}, headers={"x-soluna-admin": ADMIN})
+        await s.post(f"{BASE}/api/show?ch=autoch", json={"next": True}, headers={"x-soluna-admin": ADMIN})
+        await next_cue(ws_a, 2)
+        r = await s.post(f"{BASE}/api/show?ch=autoch", json={"auto": False}, headers={"x-soluna-admin": ADMIN})
+        jo = await r.json()
+        st_a = (await (await s.get(f"{BASE}/status")).json())["channels"]["autoch"]["show"]
+        none_after = await next_cue(ws_a, 1.7)
+        check("auto:false → 予約取消・次は来ない", jo.get("auto") is False and st_a.get("next_at") is None and none_after is None,
+              str((jo, st_a.get("next_at"), none_after and none_after.get("id"))))
+        # STOP(cue stop) も予約を取り消す
+        await s.post(f"{BASE}/api/show?ch=autoch", json={"auto": True, "reset": True}, headers={"x-soluna-admin": ADMIN})
+        await s.post(f"{BASE}/api/show?ch=autoch", json={"next": True}, headers={"x-soluna-admin": ADMIN})
+        await next_cue(ws_a, 2)
+        await s.post(f"{BASE}/api/cue?ch=autoch", json={"stop": True}, headers={"x-soluna-admin": ADMIN})
+        st_a = (await (await s.get(f"{BASE}/status")).json())["channels"]["autoch"]["show"]
+        check("STOP → 自動進行の予約も取消", st_a.get("next_at") is None)
+        # 永続化: auto/gap/dur が /api/state に出る(再起動後の復元の土台)
+        r = await s.get(f"{BASE}/api/state?ch=autoch", headers={"x-soluna-admin": ADMIN})
+        st_txt = await r.text()
+        check("api/state に show_auto/show_gap/dur", r.status == 200 and '"show_auto"' in st_txt and '"show_gap"' in st_txt and '"dur"' in st_txt,
+              st_txt[:200])
+        await ws_a.close()
+
         # 11) play.py の遅延計算(ユニット)
         sys.path.insert(0, "/Users/yuki/workspace/soluna-surround")
         try:

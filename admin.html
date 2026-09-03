@@ -155,9 +155,15 @@
       <summary>セットリストを編集 <span class="dim">(setlist editor)</span></summary>
       <div class="inner">
         <div class="tscroll"><table id="showTab">
-          <thead><tr><th>#</th><th>label</th><th>audio</th><th>video</th><th>light</th><th>bpm</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>label</th><th>audio</th><th>長さ</th><th>video</th><th>light</th><th>bpm</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
+        <div class="row mt" style="align-items:center;gap:14px">
+          <label style="display:inline-flex;align-items:center;gap:8px;font-size:.85rem;margin:0"><input type="checkbox" id="showAuto"> 自動で次へ <span class="dim">(auto-advance — 曲が終わったら次のステップを自動発火)</span></label>
+          <div><label>GAP 曲間 s</label><input id="showGap" type="number" value="1.0" min="0" max="60" step="0.5" style="width:74px"></div>
+          <div class="dim" style="font-size:.8rem">合計 <b class="mono" id="showTotal">—</b></div>
+        </div>
+        <div class="s-hint" style="margin-top:6px">曲の長さは追加時にブラウザで測って保存(<span class="mono">dur</span>)。長さが取れない/ループの曲では自動進行しない=手動NEXT。</div>
         <div class="row mt">
           <button id="stepAdd">+ ステップ追加</button>
           <button id="showApply">APPLY — サーバへ保存</button>
@@ -559,6 +565,7 @@ function renderShow(){
     tr.innerHTML = `<td class="mono">${i+1}</td>
       <td><input data-f="label" data-i="${i}" value="${st.label||''}" style="width:90px"></td>
       <td><input data-f="url" data-i="${i}" value="${st.url||''}" placeholder="/assets/…mp3" style="width:150px"></td>
+      <td class="mono dim" data-dur="${i}" style="white-space:nowrap">${st.dur ? mmss(st.dur) : (st.url ? '…' : '—')}</td>
       <td><input data-f="video" data-i="${i}" value="${st.video||''}" placeholder="…mp4" style="width:120px"></td>
       <td><select data-f="pat" data-i="${i}">${PATS.map(p=>`<option${p===st.pat?' selected':''}>${p}</option>`).join('')}</select></td>
       <td><input data-f="bpm" data-i="${i}" type="number" value="${st.bpm||120}" style="width:64px"></td>
@@ -567,18 +574,55 @@ function renderShow(){
   });
   tb.oninput = e=>{
     const f = e.target.dataset.f; if (!f) return;
-    showSteps[+e.target.dataset.i][f] = f==='bpm' ? parseFloat(e.target.value) : e.target.value;
+    const i = +e.target.dataset.i;
+    showSteps[i][f] = f==='bpm' ? parseFloat(e.target.value) : e.target.value;
+    if (f==='url'){ showSteps[i].dur = undefined; measureDur(i); }
     localStorage.setItem('soluna_show', JSON.stringify(showSteps));
   };
+  showSteps.forEach((st,i)=>{ if (st.url && !st.dur) measureDur(i); });
+  renderShowTotal();
   tb.onclick = e=>{
     const i = e.target.dataset.sdel; if (i===undefined) return;
     showSteps.splice(+i,1); renderShow();
     localStorage.setItem('soluna_show', JSON.stringify(showSteps));
   };
 }
+// 曲の長さ: ブラウザで一度デコードして測る(サーバは mp3 を読めないので、ここで dur を付けて送る)
+const mmss = s => { s = Math.round(s); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+let _durCtx = null;
+const _durBusy = new Set();
+async function measureDur(i){
+  const st = showSteps[i]; if (!st || !st.url || _durBusy.has(i)) return;
+  _durBusy.add(i);
+  try{
+    _durCtx = _durCtx || new (window.AudioContext||window.webkitAudioContext)();
+    const r = await fetch(st.url); if (!r.ok) throw new Error(r.status);
+    const buf = await _durCtx.decodeAudioData(await r.arrayBuffer());
+    if (showSteps[i] && showSteps[i].url === st.url){
+      showSteps[i].dur = Math.round(buf.duration*1000)/1000;
+      localStorage.setItem('soluna_show', JSON.stringify(showSteps));
+      const cell = $('showTab').querySelector(`[data-dur="${i}"]`); if (cell) cell.textContent = mmss(showSteps[i].dur);
+      renderShowTotal();
+    }
+  }catch(e){
+    const cell = $('showTab').querySelector(`[data-dur="${i}"]`); if (cell) cell.textContent = '?';
+  }finally{ _durBusy.delete(i); }
+}
+function renderShowTotal(){
+  const gap = parseFloat($('showGap').value||0) || 0;
+  const durs = showSteps.map(s=>s.dur||0);
+  const tot = durs.reduce((a,b)=>a+b,0) + Math.max(0, showSteps.length-1)*gap;
+  const unknown = showSteps.filter(s=>s.url && !s.dur).length;
+  $('showTotal').textContent = tot ? `${Math.floor(tot/3600)?Math.floor(tot/3600)+'h ':''}${mmss(tot%3600)}${unknown?` (+${unknown}曲 未計測)`:''}` : '—';
+}
+$('showAuto').checked = localStorage.getItem('soluna_show_auto')==='1';
+$('showGap').value = localStorage.getItem('soluna_show_gap') || '1.0';
+$('showAuto').onchange = ()=>{ localStorage.setItem('soluna_show_auto', $('showAuto').checked?'1':'0'); call('/api/show', {auto: $('showAuto').checked, gap: parseFloat($('showGap').value||1)}); };
+$('showGap').onchange = ()=>{ localStorage.setItem('soluna_show_gap', $('showGap').value); renderShowTotal(); call('/api/show', {auto: $('showAuto').checked, gap: parseFloat($('showGap').value||1)}); };
 $('stepAdd').onclick = ()=>{ showSteps.push({label:`step${showSteps.length+1}`,url:'',video:'',pat:'—',bpm:120}); renderShow(); };
-$('showApply').onclick = ()=> call('/api/show', { steps: showSteps.map(st=>({
-    label: st.label, url: st.url||undefined, video: st.video||undefined,
+$('showApply').onclick = ()=> call('/api/show', { auto: $('showAuto').checked, gap: parseFloat($('showGap').value||1),
+  steps: showSteps.map(st=>({
+    label: st.label, url: st.url||undefined, video: st.video||undefined, dur: st.dur||undefined,
     light: st.pat && st.pat!=='—' ? {pattern:st.pat, colors:[$('col1').value,$('col2').value],
                                      bpm: st.bpm||120} : undefined }))});
 $('showNext').onclick = ()=> call('/api/show', {next:true});
@@ -642,8 +686,11 @@ setInterval(async ()=>{
     $('cuenow').textContent = c.cue ? `● ACTIVE: ${c.cue.id} ${c.cue.url} gain=${c.cue.gain}${c.cue.loop?' loop':''}` : '';
     $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}` : '';
     $('geonow').textContent = c.geo ? `● STAGE: ${c.geo.lat.toFixed(5)}, ${c.geo.lng.toFixed(5)} — 来場者は📍で自動ゾーン` : '';
-    if (c.show && c.show.total)
-      $('shownow').textContent = `● STEP ${c.show.i}/${c.show.total}` + (c.show.next ? ` — 次: ${c.show.next}` : ' — 最後まで発火済み');
+    if (c.show && c.show.total){
+      const nxt = c.show.next_at ? ` · 自動で次 → ${new Date(c.show.next_at*1000).toTimeString().slice(0,8)}` : (c.show.auto ? ' · AUTO' : '');
+      $('shownow').textContent = `● STEP ${c.show.i}/${c.show.total}` + (c.show.next ? ` — 次: ${c.show.next}` : ' — 最後まで発火済み') + nxt;
+      if (document.activeElement !== $('showAuto')) $('showAuto').checked = !!c.show.auto;
+    }
     if (!assetsLoaded) loadAssets();
   }catch(e){}
 }, 2000);
