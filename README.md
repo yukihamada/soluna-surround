@@ -226,6 +226,11 @@ One design system for every surface — night sky, gold sun / pale moon, one obv
 </p>
 <p align="center"><sub>Print collateral straight from the server: zone flags (one A4 per zone) and the entrance QR</sub></p>
 
+<p align="center">
+  <img src="docs/screens/connect-en.png" width="720" alt="/connect — how to plug SOLUNA into what you already run: chooser + 9 scenario cards with signal-flow diagrams, steps and commands">
+</p>
+<p align="center"><sub><a href="https://soluna-sound.fly.dev/connect">/connect</a> — pick your desk, cue source and fixtures; get the diagram, the steps and the exact commands (ja/en)</sub></p>
+
 ## The three faces
 
 | Surface | Who | What |
@@ -249,6 +254,7 @@ One design system for every surface — night sky, gold sun / pale moon, one obv
 | `GET /api/nodes` | admin | boxes with `stale` flag, their assignments, the server box's AP (SSID, security, PSK if `wpa`) |
 | `POST /api/nodes/assign` | admin | `{"host":"soluna-box-2","zone":"C","pos":"L","gain_db":-3}` → saved + pushed live to that box; `{"host":…,"clear":true}` |
 | `GET /api/preload` | public, tiny | `{url, video, asset_base}` — what a phone should prefetch; used by the gate QR (`/flags?gate=1`) before any WebSocket is opened |
+| `POST /api/show` | admin | setlist `steps[{label,url,video,light,dur}]`, `next` / `goto` / `reset`; **`auto` + `gap`**: when a step with `dur` ends, the next fires by itself (standalone night) — `/status.show.next_at` |
 | `POST /api/mute` | admin | `{"on":true}` — kill switch: every phone and node goes silent at once (CUE and LIVE), phase preserved; `false` restores |
 | `GET /api/stats` | admin | post-show report: peak devices, peak playing (per zone), cues fired, uptime; `?reset=1` starts a new show |
 | `GET/POST /api/box` · `/api/box/wifi` · `/api/box/action` · `/api/box/logs` | box only (token, or on the box's own AP within 10 min of power-on) | status + settings of a Pi box: node zone/pos/gain/device, role, own AP, hostname; Wi-Fi scan/join; tone / restart / update / reboot / regen-token; journal |
@@ -274,7 +280,7 @@ parallel with per-socket timeouts — one dying phone can't stall the crowd.
 
 | Test | Result |
 |---|---|
-| Test suites (`tests/`, run in CI before every deploy) | **321 checks PASS**: 84 protocol + 20 node + 9 auth/load + 44 AES67 ingest + 61 show-control (OSC/timecode/LTC/Art-Net/sACN) + 56 Pi mesh/AP policy + 38 box setup/captive + 9 image manifest (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
+| Test suites (`tests/`, run in CI before every deploy) | **343 checks PASS**: 98 protocol (incl. show auto-advance, /about, /connect) + 20 node + 9 auth/load + 44 AES67 ingest + 61 show-control (OSC/timecode/LTC/Art-Net/sACN) + 56 Pi mesh/AP policy + 41 box setup/captive/live-input + 14 image manifest (clock, identical cue epochs, mid-join, live re-broadcast, device reports, state export/import, cache headers) |
 | **10,000 concurrent devices — one process, LAN** | 9,999/10,000 connected in 17 s, **cue reached 100%**, identical epochs, 791 ms delivery spread vs 8 s lead, median RTT under load 29 ms |
 | Video sync | 23 ms drift; 2 ms mid-track loop join |
 | FOH kill switch + NOW PLAYING (headless browser) | `/api/mute` drops the phone's gain to 0 within a second and restores the exact value; cue `title`/`artist`/`image` render and clear on stop |
