@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SOLUNA Sound — 既存のシステムの繋げ方</title>
+<meta name="description" content="Dante / AES67 / MADI / アナログの卓、QLab・grandMA・Eos の OSC、タイムコード、Art-Net/sACN の灯体、Piスピーカー。今あるものに SOLUNA Sound を繋ぐ手順。">
+<link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  .hero{padding:44px 0 10px}
+  .hero h1{font-family:var(--serif);font-size:clamp(1.7rem,4.6vw,2.6rem);line-height:1.25;margin:14px 0 10px;text-wrap:balance}
+  .hero p{color:var(--dim);font-size:1rem;max-width:40em;margin:0 0 6px}
+  .en{display:block;font-size:.8rem;color:var(--dim);font-weight:400;letter-spacing:0;font-family:var(--sans)}
+  /* chooser */
+  .chooser{margin-top:22px}
+  .q{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:start;padding:10px 0;border-top:1px solid var(--line)}
+  .q:last-of-type{border-bottom:1px solid var(--line)}
+  .q .ql{font-size:.82rem;color:var(--dim);padding-top:8px}
+  .q .opts{display:flex;flex-wrap:wrap;gap:8px}
+  .q button{background:var(--panel2);border:1px solid var(--line2);color:var(--txt);border-radius:999px;padding:8px 14px;font:inherit;font-size:.85rem;cursor:pointer;min-height:40px}
+  .q button:hover{border-color:var(--gold)} .q button[aria-pressed=true]{background:var(--gold);color:#1a1206;border-color:var(--gold);font-weight:700}
+  .result{margin-top:12px;font-size:.9rem;color:var(--txt);min-height:1.6em}
+  .result a{margin-right:12px}
+  /* scenario cards */
+  section.blk{margin-top:54px}
+  section.blk>h2{font-family:var(--mono);font-size:.72rem;letter-spacing:.3em;color:var(--gold);margin:0 0 16px;display:flex;align-items:center;gap:12px}
+  section.blk>h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;margin-top:14px;scroll-margin-top:90px}
+  .card.hit{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,175,55,.18)}
+  .card h3{font-size:1.15rem;margin:0 0 4px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .card h3 .k{font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;color:var(--gold)}
+  .card .sub{color:var(--dim);font-size:.9rem;margin:0 0 14px}
+  .flow{display:flex;align-items:stretch;gap:6px;flex-wrap:wrap;margin:10px 0 16px}
+  .flow .n{background:#0e0709;border:1px solid var(--line2);border-radius:10px;padding:8px 12px;font-size:.8rem;min-width:110px;flex:1 1 120px;display:flex;flex-direction:column;justify-content:center}
+  .flow .n b{display:block;font-family:var(--mono);font-size:.62rem;letter-spacing:.14em;color:var(--gold);text-transform:uppercase;margin-bottom:2px}
+  .flow .n.s{border-color:rgba(212,175,55,.55);background:linear-gradient(180deg,rgba(212,175,55,.10),transparent)}
+  .flow .n.out{border-color:rgba(200,211,230,.35)}
+  .flow .a{align-self:center;color:var(--dim);font-family:var(--mono);flex:0 0 auto}
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+  .cols h4{font-family:var(--mono);font-size:.62rem;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);margin:0 0 6px}
+  .cols ul,.cols ol{margin:0;padding-left:1.2em;font-size:.9rem} .cols li{margin:4px 0}
+  pre{background:#000;color:#e8dcc4;font-family:var(--mono);font-size:.76rem;line-height:1.55;padding:12px 14px;border-radius:10px;overflow-x:auto;margin:12px 0 0;border:1px solid var(--line)}
+  pre .c{color:#8a7d6a}
+  .got{margin-top:12px;font-size:.85rem;color:var(--dim);border-left:2px solid var(--gold);padding-left:10px}
+  .got b{color:var(--txt);font-weight:600}
+  table.s-table td:first-child{font-family:var(--mono);white-space:nowrap;color:var(--gold2)}
+  .lang{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;font-family:var(--mono);font-size:.7rem}
+  .lang button{background:transparent;border:0;color:var(--dim);padding:5px 10px;cursor:pointer;font:inherit}
+  .lang button[aria-pressed=true]{background:var(--gold);color:#1a1206;font-weight:700}
+  footer{margin-top:60px;padding-top:18px;border-top:1px solid var(--line);font-size:.8rem;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between}
+  @media (max-width:560px){ .q{grid-template-columns:1fr} .q .ql{padding-top:0} .flow .n{flex-basis:100%} .flow .a{transform:rotate(90deg);align-self:center;margin:-2px auto} }
+</style></head><body>
+<div class="s-wrap">
+  <nav class="s-bar"><span class="s-brand"><span class="mark"></span>SOLUNA · SOUND</span>
+    <span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.82rem">
+      <a href="/about" data-i18n="nav_about">サイト</a><a href="/" data-i18n="nav_join">🎧 参加</a><a href="/admin" data-i18n="nav_foh">🎚 FOH</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a>
+      <span class="lang" role="group" aria-label="language"><button id="langJa" aria-pressed="true">日本語</button><button id="langEn" aria-pressed="false">EN</button></span>
+    </span></nav>
+
+  <header class="hero">
+    <div class="s-brand"><span class="mark"></span><span data-i18n="eyebrow">CONNECT · 既存のシステムに繋ぐ</span></div>
+    <h1 data-i18n="h1">今あるものを、そのまま使う。</h1>
+    <p data-i18n="lead">SOLUNA Sound は会場の音響を置き換えない。卓から1本もらい、制御卓の cue を聞き、灯体に同じ時計を渡す。ディレイタワーを1台足すのと同じ感覚で。</p>
+    <p class="s-hint" data-i18n="lead2">下の3問に答えると、あなたの現場に当たるカードだけが光る。</p>
+  </header>
+
+  <div class="chooser" id="chooser">
+    <div class="q"><div class="ql" data-i18n="q1">音源はどこから?</div><div class="opts" data-q="src">
+      <button data-v="pa" data-i18n="q1a">卓の aux / matrix</button><button data-v="dante" data-i18n="q1b">Dante</button><button data-v="aes67" data-i18n="q1c">AES67 / Ravenna</button><button data-v="madi" data-i18n="q1d">MADI / AVB / アナログ</button><button data-v="file" data-i18n="q1e">ファイル再生だけ</button></div></div>
+    <div class="q"><div class="ql" data-i18n="q2">cue は何から打つ?</div><div class="opts" data-q="ctl">
+      <button data-v="admin" data-i18n="q2a">SOLUNA の画面で</button><button data-v="osc" data-i18n="q2b">QLab / grandMA / Eos / Ableton</button><button data-v="tc" data-i18n="q2c">タイムコード</button></div></div>
+    <div class="q"><div class="ql" data-i18n="q3">灯体・スクリーンは?</div><div class="opts" data-q="out">
+      <button data-v="none" data-i18n="q3a">スマホと Pi だけ</button><button data-v="dmx" data-i18n="q3b">会場の灯体も</button><button data-v="screen" data-i18n="q3c">プロジェクター / LED も</button><button data-v="pi" data-i18n="q3d">Pi スピーカーを会場LANに</button></div></div>
+    <div class="result" id="result"></div>
+  </div>
+
+  <section class="blk"><h2 data-i18n="h_audio">音を入れる <span class="en">audio in</span></h2>
+
+    <div class="card" id="c-pa"><h3><span class="k">01</span><span data-i18n="c1h">既存PAに足す — 卓の aux を1本</span></h3><p class="sub" data-i18n="c1s">いちばん普通の現場。ディレイタワーに送るのと同じ matrix/aux を、スマホと Pi スピーカーに送る。</p>
+      <div class="flow"><div class="n"><b data-i18n="fl_desk">卓</b><span data-i18n="c1f1">matrix / aux out</span></div><span class="a">→</span><div class="n"><b>USB I/F</b><span data-i18n="c1f2">オーディオインターフェース</span></div><span class="a">→</span><div class="n s"><b data-i18n="fl_laptop">FOH ノートPC</b><span><code>source.py --input</code> + <code>server.py</code></span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="c1f4">スマホ / Pi スピーカー(位相そろい)</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c1n1">卓の空き aux か matrix 1系統(モノで十分)</li><li data-i18n="c1n2">USB オーディオインターフェース(入力1ch)</li><li data-i18n="c1n3">FOH の Mac/Linux ノート(サーバ兼)と会場LAN</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c1p1">ノートでサーバを起動、<code>/admin</code> を開く</li><li data-i18n="c1p2">入力デバイス名を確認して <code>source.py --input</code> を起動(<code>--lead 0.08</code>)</li><li data-i18n="c1p3">ステージからの距離で <code>ゾーン</code> を作る(m を入れれば遅延は自動)</li><li data-i18n="c1p4">クリックを流し、<code>ALIGN</code> の ±ms でフラム(二重打ち)が消えるまで追い込む</li><li data-i18n="c1p5">Pi スピーカーを置き、スマホは旗の QR から参加</li></ol></div></div>
+<pre><span class="c"># FOH laptop</span>
+SOLUNA_ADMIN=&lt;secret&gt; PORT=8900 python3 server.py
+python3 -c "import sounddevice;print(sounddevice.query_devices())"   <span class="c"># find the interface</span>
+python3 source.py --input "Scarlett 2i2" --lead 0.08 --server ws://127.0.0.1:8900 --ch festival</pre>
+      <div class="got" data-i18n="c1g"><b>遅延の中身:</b> 取り込み+送出 ≈10ms、ネットワーク+lead 80ms、端末の出力遅延 10〜30ms(端末が自己申告して差し引く)。そこにゾーンごとの「距離÷343 + 15ms」が乗る。<b>同期精度</b>は LAN で ±1〜3ms、LTE で ±10〜20ms。</div>
+    </div>
+
+    <div class="card" id="c-dante"><h3><span class="k">02</span><span data-i18n="c2h">Dante</span></h3><p class="sub" data-i18n="c2s">Dante の独自プロトコルは受けない(ライセンス品)。代わりに3つの入口がある。多くの Dante 機器(2016年以降)は AES67 モードを持つ。</p>
+      <div class="flow"><div class="n"><b>Dante</b><span data-i18n="c2f1">卓 / ステージボックス</span></div><span class="a">→</span><div class="n"><b data-i18n="c2f2b">3つの入口</b><span data-i18n="c2f2">(a) DVS (b) AVIO USB (c) AES67 モード</span></div><span class="a">→</span><div class="n s"><b data-i18n="fl_laptop">FOH ノートPC</b><span><code>--input</code> / <code>--aes67</code></span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="fl_out_txt">スマホ / Pi スピーカー</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c2n1">(a) FOH の Mac に Dante Virtual Soundcard</li><li data-i18n="c2n2">(b) または Dante AVIO USB アダプタ</li><li data-i18n="c2n3">(c) または Dante Controller で送信側の AES67 を有効化できる権限</li></ul></div>
+      <div><h4 data-i18n="steps">手順 (c) AES67 モード</h4><ol><li data-i18n="c2p1">Dante Controller: 送信機器で AES67 を ON、送りたい ch(例: Matrix 7/8)の AES67 マルチキャストフローを作る</li><li data-i18n="c2p2">同じ LAN のノートで <code>--sap</code>: 流れているストリームが名前付きで一覧に出る</li><li data-i18n="c2p3"><code>--aes67 auto</code>(1本なら)か名前の一部で選ぶ</li><li data-i18n="c2p4">以降は 01 と同じ: ゾーン → ALIGN</li></ol></div></div>
+<pre><span class="c"># (a) DVS / (b) AVIO — just an input device</span>
+python3 source.py --input "Dante Virtual Soundcard" --lead 0.08
+<span class="c"># (c) AES67 mode — no Dante license, no Dante software</span>
+python3 source.py --sap                          <span class="c"># list announced streams</span>
+python3 source.py --aes67 auto --lead 0.08       <span class="c"># or --aes67 "Stagebox" / --aes67 239.69.x.x:5004</span></pre>
+      <div class="got" data-i18n="c2g"><b>注意:</b> AES67 は 48kHz のみ(96kHz フローは拒否)。受信専用(SOLUNA から Dante へは送らない)。PTP は不要(SOLUNA の時計はサーバ自身)。<b>実機の Dante 機器では未検証</b> — 合成 AES67 送信機で end-to-end 検証済み。</div>
+    </div>
+
+    <div class="card" id="c-aes67"><h3><span class="k">03</span><span data-i18n="c3h">AES67 / Ravenna</span></h3><p class="sub" data-i18n="c3s">Lawo・Merging・Genelec・Neumann など放送系。SAP で告知されているマルチキャストにそのまま乗る。</p>
+      <div class="flow"><div class="n"><b>AES67</b><span data-i18n="c3f1">RTP マルチキャスト L24/L16 48kHz</span></div><span class="a">→</span><div class="n"><b>SAP</b><span>239.255.255.255:9875</span></div><span class="a">→</span><div class="n s"><b data-i18n="fl_laptop">FOH ノートPC</b><span><code>--aes67</code> <code>--map</code></span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="fl_out_txt">スマホ / Pi スピーカー</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c3n1">ノートが AES67 の VLAN にいること(IGMP が通るスイッチ)</li><li data-i18n="c3n2">複数 NIC なら受信する NIC の IP(<code>--iface</code>)</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c3p1"><code>--sap</code> で一覧(名前・アドレス・ch数・形式)</li><li data-i18n="c3p2">アドレス直指定か名前の一部で受信開始</li><li data-i18n="c3p3">8ch ストリームなら <code>--map</code> で L/R/C を選ぶ(<code>+</code> は平均=モノ)</li><li data-i18n="c3p4">01 と同じくゾーン → ALIGN</li></ol></div></div>
+<pre>python3 source.py --sap --sap-seconds 6
+python3 source.py --aes67 239.69.10.2:5004 --map "L=3,R=4,C=3+4" --iface 192.168.10.5 --lead 0.08
+<span class="c"># --aes67-fmt L16 / --aes67-ch 8  when the sender has no SAP</span></pre>
+      <div class="got" data-i18n="c3g"><b>パケット落ち:</b> RTP タイムスタンプで数えるので、抜けた分は正確に無音で埋め、遅着・重複は捨てる。位相は滑らない(10%ロスで検証)。0.5秒超の穴はストリーム再開扱い。</div>
+    </div>
+
+    <div class="card" id="c-madi"><h3><span class="k">04</span><span data-i18n="c4h">MADI / AVB / アナログ / AES3 / USB</span></h3><p class="sub" data-i18n="c4s">OS が入力デバイスとして見えるものは全部そのまま。Mac は AVB エンティティを標準で持つ(Thunderbolt/USB-C Ethernet)。</p>
+      <div class="flow"><div class="n"><b data-i18n="c4f1b">何でも</b><span data-i18n="c4f1">MADI / AVB / アナログ / AES3</span></div><span class="a">→</span><div class="n"><b>I/F</b><span data-i18n="c4f2">OS に入力として見える機器</span></div><span class="a">→</span><div class="n s"><b data-i18n="fl_laptop">FOH ノートPC</b><span><code>source.py --input</code></span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="fl_out_txt">スマホ / Pi スピーカー</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c4n1">その規格を受けるインターフェース(MADI カード、AVB 対応 Mac、アナログ I/F…)</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c4p1">デバイス一覧で名前を確認</li><li data-i18n="c4p2"><code>--input "名前"</code> で起動、8ch 以上なら <code>--map</code></li><li data-i18n="c4p3">ゾーン → ALIGN</li></ol></div></div>
+<pre>python3 -c "import sounddevice;print(sounddevice.query_devices())"
+python3 source.py --input "RME MADIface" --map "L=1,R=2,C=1+2" --lead 0.08
+<span class="c"># playback-only stage? no live feed needed:</span>
+python3 source.py --file show.wav          <span class="c"># or pre-distribute as a CUE (no streaming at all)</span></pre>
+      <div class="got" data-i18n="c4g"><b>ファイル再生だけの現場</b>は LIVE を使わず CUE で配る方が強い(帯域ゼロ・途中参加も位相そろい)。<code>/admin</code> でアップロード → PRELOAD → FIRE。</div>
+    </div>
+  </section>
+
+  <section class="blk"><h2 data-i18n="h_ctl">制御をもらう <span class="en">show control in</span></h2>
+
+    <div class="card" id="c-osc"><h3><span class="k">05</span><span data-i18n="c5h">照明卓・再生卓から cue を打つ — OSC</span></h3><p class="sub" data-i18n="c5s">QLab / Ableton / grandMA / Eos が UDP で送る OSC を、SOLUNA が聞く。HTTP API と同じ内部処理なので、<code>/admin</code> の FIRE と挙動は同一。</p>
+      <div class="flow"><div class="n"><b data-i18n="c5f1b">制御卓</b><span>QLab · grandMA · Eos · Ableton</span></div><span class="a">→</span><div class="n"><b>OSC / UDP</b><span><code>SOLUNA_OSC_PORT=9000</code></span></div><span class="a">→</span><div class="n s"><b data-i18n="fl_server">SOLUNA サーバ</b><span><code>/soluna/cue</code> <code>/soluna/go</code> …</span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="fl_out_txt">スマホ / Pi スピーカー</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c5n1">卓とサーバが同じ制御系 LAN(VLAN)にいること</li><li data-i18n="c5n2">サーバ起動時に <code>SOLUNA_OSC_PORT</code>(既定 OFF)</li><li data-i18n="c5n3">バンドルの timetag で打つなら卓とサーバの NTP</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c5p1">サーバを <code>SOLUNA_OSC_PORT=9000</code> で起動</li><li data-i18n="c5p2">卓の OSC 出力先にサーバ IP:9000 を登録</li><li data-i18n="c5p3">開演前ブロックに <code>/soluna/preload</code>、GO に <code>/soluna/cue</code> か <code>/soluna/go</code></li><li data-i18n="c5p4">Wi-Fi のスマホがいるなら lead は 2秒以上(有線 Pi だけなら 0.5秒で足りる)</li></ol></div></div>
+      <div style="overflow-x:auto;margin-top:12px"><table class="s-table">
+        <tr><th data-i18n="t_addr">アドレス</th><th data-i18n="t_args">引数</th><th data-i18n="t_same">同じ意味の HTTP</th></tr>
+        <tr><td>/soluna/cue</td><td>url:s [lead:f] [gain:f]</td><td>POST /api/cue</td></tr>
+        <tr><td>/soluna/preload</td><td>url:s</td><td>POST /api/cue {preload}</td></tr>
+        <tr><td>/soluna/stop</td><td>—</td><td>POST /api/cue {stop}</td></tr>
+        <tr><td>/soluna/go</td><td>—</td><td>POST /api/show {next} <span data-i18n="t_go">(セットリスト次へ)</span></td></tr>
+        <tr><td>/soluna/show/goto</td><td>i:i</td><td>POST /api/show {goto}</td></tr>
+        <tr><td>/soluna/light</td><td>pattern:s [c1:s] [c2:s] [bpm:f]</td><td>POST /api/light</td></tr>
+        <tr><td>/soluna/light/stop</td><td>—</td><td>POST /api/light {stop}</td></tr>
+        <tr><td>/soluna/align</td><td>ms:f</td><td>POST /api/align</td></tr>
+        <tr><td>/soluna/zone</td><td>name:s delay_ms:f</td><td>POST /api/zones</td></tr>
+        <tr><td>/soluna/tc</td><td>"HH:MM:SS:FF":s [fps:f]</td><td>POST /api/timecode</td></tr>
+      </table></div>
+<pre><span class="c"># QLab 5: Network cue → OSC, destination &lt;server ip&gt;:9000</span>
+/soluna/preload "/assets/open.mp3"
+/soluna/cue "/assets/open.mp3" 3.0 1.0
+/soluna/light "wave" "#d4af37" "#7fc9a2" 96.0
+<span class="c"># grandMA3 macro</span>
+SendOSC "/soluna/light" "pulse" "#ff2a00" "#0a0a40" 128
+<span class="c"># ETC Eos: Show Control → OSC TX → cue External Links</span>
+/soluna/cue "/assets/drop.mp3" 2.0
+<span class="c"># another channel: append "ch=stage2"</span></pre>
+      <div class="got" data-i18n="c5g"><b>おすすめの分担:</b> 光は卓が主(SOLUNA は Art-Net で追従、または卓が OSC でスマホ演出を叩く)。OSC に認証は無い=制御系 VLAN 専用。クラウド版では無効。</div>
+    </div>
+
+    <div class="card" id="c-tc"><h3><span class="k">06</span><span data-i18n="c6h">タイムコードに乗せる</span></h3><p class="sub" data-i18n="c6s">「今この瞬間の番組 TC は X」を一度教えると、以降の cue とセットリストは <code>tc</code> で発火時刻を書ける。再生卓の空き出力の LTC からでも。</p>
+      <div class="flow"><div class="n"><b data-i18n="c6f1b">再生卓</b><span data-i18n="c6f1">LTC 出力 / OSC / HTTP</span></div><span class="a">→</span><div class="n"><b data-i18n="c6f2b">アンカー</b><span><code>ltc.py</code> · <code>/soluna/tc</code> · <code>/api/timecode</code></span></div><span class="a">→</span><div class="n s"><b data-i18n="fl_server">SOLUNA サーバ</b><span data-i18n="c6f3">cue {tc:"01:00:10:00"}</span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="fl_out_txt">スマホ / Pi スピーカー</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c6n1">LTC なら: 再生卓の LTC 出力 → FOH Mac/Pi の空き音声入力</li><li data-i18n="c6n2">OSC なら: 卓から毎秒 <code>/soluna/tc</code></li><li data-i18n="c6n3">対応レート 24 / 25 / 30 / 29.97DF / 59.94DF / 23.976</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c6p1"><code>ltc.py --list</code> で入力を探し、<code>--device N</code> で起動(毎秒アンカーを POST)</li><li data-i18n="c6p2"><code>GET /api/timecode</code> の推定 TC と卓の表示を目で合わせる</li><li data-i18n="c6p3">cue / セットリストの各ステップに <code>tc</code> を書く</li><li data-i18n="c6p4">入力バッファ分(10〜20ms 一定)を <code>/api/align</code> で一度だけ追い込む</li></ol></div></div>
+<pre>python3 ltc.py --list
+python3 ltc.py --device 3 --channel 0 --server http://192.168.1.10:8900 --token "$SOLUNA_ADMIN" --ch festival
+<span class="c"># or anchor by hand / from the console</span>
+curl -X POST http://192.168.1.10:8900/api/timecode -H "x-soluna-admin: $SOLUNA_ADMIN" -d '{"tc":"01:00:00:00","fps":30}'
+curl -X POST http://192.168.1.10:8900/api/cue -H "x-soluna-admin: $SOLUNA_ADMIN" -d '{"url":"/assets/a.mp3","tc":"01:00:10:00"}'</pre>
+      <div class="got" data-i18n="c6g"><b>ドロップフレーム</b>は SMPTE 12M どおり(毎分2フレーム落とし、10分毎は落とさない)。<code>ltc.py</code> はレベル変化・DC・ノイズに耐え、24/25/30/29.97DF でラウンドトリップ検証済み。<b>実機の LTC 源では未検証。</b></div>
+    </div>
+  </section>
+
+  <section class="blk"><h2 data-i18n="h_out">出口を増やす <span class="en">more outputs</span></h2>
+
+    <div class="card" id="c-dmx"><h3><span class="k">07</span><span data-i18n="c7h">会場の灯体を同期 — Art-Net / sACN</span></h3><p class="sub" data-i18n="c7s">進行中のライトパターンを 40Hz で DMX に落として灯体へ。灯体 i の位置は会場横断 0..1 — スマホの海と同じ向き・同じ速さで wave が渡る。</p>
+      <div class="flow"><div class="n s"><b data-i18n="fl_server">SOLUNA サーバ</b><span data-i18n="c7f1">パターン + 時計</span></div><span class="a">→</span><div class="n"><b>Art-Net / sACN</b><span>UDP 6454 / 5568</span></div><span class="a">→</span><div class="n"><b data-i18n="c7f3b">ノード</b><span data-i18n="c7f3">DMX ノード / 卓のマージ</span></div><span class="a">→</span><div class="n out"><b data-i18n="c7f4b">灯体</b><span data-i18n="c7f4">RGB 連番パッチ</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c7n1">Art-Net か sACN の DMX ノード(または対応卓)と同じ LAN</li><li data-i18n="c7n2">RGB 灯体 N 台を連番でパッチ(開始 ch は変更可)</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c7p1">サーバを <code>SOLUNA_ARTNET=&lt;ip&gt;[:universe]</code> か <code>SOLUNA_SACN=</code> 付きで起動</li><li data-i18n="c7p2"><code>SOLUNA_DMX_FIXTURES</code>(既定 8)と <code>SOLUNA_DMX_START</code>(既定 1)を合わせる</li><li data-i18n="c7p3"><code>/admin</code> でライトを走らせる → 灯体が追従。停止で消灯1回送って沈黙</li></ol></div></div>
+<pre>SOLUNA_ARTNET=192.168.1.255:0 SOLUNA_DMX_FIXTURES=12 python3 server.py    <span class="c"># broadcast, universe 0</span>
+SOLUNA_SACN=239.255.0.1:1 python3 server.py                               <span class="c"># E1.31 multicast, universe 1</span></pre>
+      <div class="got" data-i18n="c7g"><b>卓と同じユニバースを共有するなら:</b> sACN は優先度(SOLUNA は 100)で卓が勝つように、Art-Net はノードの HTP/LTP マージか別ユニバース。<code>audio</code> パターンは端末側解析が要るので DMX では <code>pulse</code> に落ちる。strobe は 3Hz 上限のまま。</div>
+    </div>
+
+    <div class="card" id="c-screen"><h3><span class="k">08</span><span data-i18n="c8h">プロジェクター / LED ウォール</span></h3><p class="sub" data-i18n="c8s">MacBook + HDMI が、同じ時計に乗ったステージスクリーンになる。</p>
+      <div class="flow"><div class="n s"><b data-i18n="fl_server">SOLUNA サーバ</b><span data-i18n="c8f1">映像 cue(url + at)</span></div><span class="a">→</span><div class="n"><b>MacBook</b><span><code>/screen</code></span></div><span class="a">→</span><div class="n out"><b>HDMI</b><span data-i18n="c8f3">プロジェクター / LED プロセッサ</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c8n1">HDMI 出力のあるノート1台、会場 LAN</li><li data-i18n="c8n2">映像は mp4、音は別に mp3(完璧な同期が要る本編は「音=mp3 / 映像=mp4 ミュート」の2ファイル構成)</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c8p1">ノートで <code>http://&lt;server&gt;:8900/screen</code> を開いて1クリック(UI が消え、全画面)</li><li data-i18n="c8p2"><code>/admin</code> の VIDEO URL に mp4、AUDIO URL に mp3 → PRELOAD → FIRE</li><li data-i18n="c8p3">ドリフトは時計に対して自動補正(>0.5s はシーク、それ以下は ±6% の再生速度)</li></ol></div></div>
+      <div class="got" data-i18n="c8g"><b>実測:</b> 再生ズレ 23ms、ループ途中参加 2ms。音声 cue 併用時は映像側が自動でミュート(音は WebAudio が正)。</div>
+    </div>
+
+    <div class="card" id="c-pi"><h3><span class="k">09</span><span data-i18n="c9h">Pi スピーカーを会場 LAN に</span></h3><p class="sub" data-i18n="c9s">FOH のノートがサーバなら、Pi の箱は「見つけたサーバに従う」だけ。有線が最良。</p>
+      <div class="flow"><div class="n s"><b data-i18n="fl_server">サーバ</b><span data-i18n="c9f1">FOH ノート or Pi box</span></div><span class="a">→</span><div class="n"><b>LAN</b><span data-i18n="c9f2">PoE スイッチ(有線推奨)</span></div><span class="a">→</span><div class="n"><b>Pi box ×N</b><span><code>SERVER=auto</code> / <code>SERVER=ws://…</code></span></div><span class="a">→</span><div class="n out"><b data-i18n="fl_out">出口</b><span data-i18n="c9f4">DAC → アンプ → スピーカー(±0.5〜3ms)</span></div></div>
+      <div class="cols"><div><h4 data-i18n="need">必要なもの</h4><ul><li data-i18n="c9n1">Raspberry Pi 4 + USB か I2S の DAC + アンプ/スピーカー</li><li data-i18n="c9n2">小さな PoE スイッチと LAN ケーブル(Wi-Fi でも動くが有線が ±1〜3ms)</li></ul></div>
+      <div><h4 data-i18n="steps">手順</h4><ol><li data-i18n="c9p1"><code>tools/pi-flash.sh</code> で SD を焼く(設定不要)、電源を入れる</li><li data-i18n="c9p2">自動: サーバを見つけて従う。FOH ノートが必ず親なら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定(PINNED)</li><li data-i18n="c9p3"><code>/admin</code> → NODES で箱にゾーン・L/C/R・ゲインを ASSIGN(箱に保存、再接続で再送)</li><li data-i18n="c9p4">箱の細かい設定は <code>http://&lt;箱名&gt;.local:8900/setup</code></li></ol></div></div>
+<pre><span class="c"># flash (zero-config; joins whatever server it finds)</span>
+tools/pi-flash.sh raspios.img /dev/disk4 HOSTNAME=soluna-box-1
+<span class="c"># or install on a running Pi and pin it to the FOH laptop</span>
+curl -fsSL https://raw.githubusercontent.com/yukihamada/soluna-surround/master/tools/pi-setup.sh | SERVER=ws://192.168.1.10:8900 ZONE=B bash</pre>
+      <div class="got" data-i18n="c9g"><b>サーバの箱が死んだら:</b> 残りの箱が 15〜20秒で引き継ぐ(ゾーン・cue・ライト・セットリスト位置を再配信)。LIVE の PCM だけは送出側(<code>source.py</code>)の再接続が要る(<code>.local</code> 名で起動していれば自動)。</div>
+    </div>
+  </section>
+
+  <section class="blk"><h2 data-i18n="h_honest">正直な注記 <span class="en">honest note</span></h2>
+    <p class="s-hint note" data-i18n="honest">ここに書いた接続は、コード・テスト・合成信号(AES67 送信機、OSC、LTC 生成、Art-Net 受信ソケット)で end-to-end に検証している。<b>実機の Dante 機器、LTC 源、照明卓、DMX ノード・灯体にはまだ繋いでいない。</b>最初の実機は必ずクリックで ALIGN を追い込み、余裕のある lead で始めること。</p>
+    <p class="s-hint" style="margin-top:10px"><span data-i18n="docs">詳細:</span> <a href="https://github.com/yukihamada/soluna-surround/blob/master/docs/integration.md">docs/integration.md</a> · <a href="https://github.com/yukihamada/soluna-surround/blob/master/docs/show-control.md">docs/show-control.md</a> · <a href="https://github.com/yukihamada/soluna-surround/blob/master/docs/pi-box.md">docs/pi-box.md</a> · <a href="https://github.com/yukihamada/soluna-surround#readme">README</a></p>
+  </section>
+
+  <footer><span>SOLUNA Sound · MIT · <a href="https://github.com/yukihamada/soluna-surround">github.com/yukihamada/soluna-surround</a></span><span><a href="/about" data-i18n="foot_about">サイトへ戻る</a></span></footer>
+</div>
+<script>
+const I18N = {
+  ja: {
+    title: 'SOLUNA Sound — 既存のシステムの繋げ方',
+    nav_about: 'サイト', nav_join: '🎧 参加', nav_foh: '🎚 FOH',
+    eyebrow: 'CONNECT · 既存のシステムに繋ぐ', h1: '今あるものを、そのまま使う。',
+    lead: 'SOLUNA Sound は会場の音響を置き換えない。卓から1本もらい、制御卓の cue を聞き、灯体に同じ時計を渡す。ディレイタワーを1台足すのと同じ感覚で。',
+    lead2: '下の3問に答えると、あなたの現場に当たるカードだけが光る。',
+    q1: '音源はどこから?', q1a: '卓の aux / matrix', q1b: 'Dante', q1c: 'AES67 / Ravenna', q1d: 'MADI / AVB / アナログ', q1e: 'ファイル再生だけ',
+    q2: 'cue は何から打つ?', q2a: 'SOLUNA の画面で', q2b: 'QLab / grandMA / Eos / Ableton', q2c: 'タイムコード',
+    q3: '灯体・スクリーンは?', q3a: 'スマホと Pi だけ', q3b: '会場の灯体も', q3c: 'プロジェクター / LED も', q3d: 'Pi スピーカーを会場LANに',
+    res_pre: 'あなたのカード:', res_none: '3問に答えてください。', res_admin: '制御は /admin だけで完結(カード不要)。', res_none_out: '出口はスマホと Pi のみ(追加カード不要)。',
+    h_audio: '音を入れる <span class="en">audio in</span>', h_ctl: '制御をもらう <span class="en">show control in</span>', h_out: '出口を増やす <span class="en">more outputs</span>', h_honest: '正直な注記 <span class="en">honest note</span>',
+    need: '必要なもの', steps: '手順', fl_desk: '卓', fl_laptop: 'FOH ノートPC', fl_server: 'SOLUNA サーバ', fl_out: '出口', fl_out_txt: 'スマホ / Pi スピーカー',
+    c1h: '既存PAに足す — 卓の aux を1本', c1s: 'いちばん普通の現場。ディレイタワーに送るのと同じ matrix/aux を、スマホと Pi スピーカーに送る。',
+    c1f1: 'matrix / aux out', c1f2: 'オーディオインターフェース', c1f4: 'スマホ / Pi スピーカー(位相そろい)',
+    c1n1: '卓の空き aux か matrix 1系統(モノで十分)', c1n2: 'USB オーディオインターフェース(入力1ch)', c1n3: 'FOH の Mac/Linux ノート(サーバ兼)と会場LAN',
+    c1p1: 'ノートでサーバを起動、<code>/admin</code> を開く', c1p2: '入力デバイス名を確認して <code>source.py --input</code> を起動(<code>--lead 0.08</code>)', c1p3: 'ステージからの距離で <code>ゾーン</code> を作る(m を入れれば遅延は自動)', c1p4: 'クリックを流し、<code>ALIGN</code> の ±ms でフラム(二重打ち)が消えるまで追い込む', c1p5: 'Pi スピーカーを置き、スマホは旗の QR から参加',
+    c1g: '<b>遅延の中身:</b> 取り込み+送出 ≈10ms、ネットワーク+lead 80ms、端末の出力遅延 10〜30ms(端末が自己申告して差し引く)。そこにゾーンごとの「距離÷343 + 15ms」が乗る。<b>同期精度</b>は LAN で ±1〜3ms、LTE で ±10〜20ms。',
+    c2h: 'Dante', c2s: 'Dante の独自プロトコルは受けない(ライセンス品)。代わりに3つの入口がある。多くの Dante 機器(2016年以降)は AES67 モードを持つ。',
+    c2f1: '卓 / ステージボックス', c2f2b: '3つの入口', c2f2: '(a) DVS (b) AVIO USB (c) AES67 モード',
+    c2n1: '(a) FOH の Mac に Dante Virtual Soundcard', c2n2: '(b) または Dante AVIO USB アダプタ', c2n3: '(c) または Dante Controller で送信側の AES67 を有効化できる権限',
+    c2p1: 'Dante Controller: 送信機器で AES67 を ON、送りたい ch(例: Matrix 7/8)の AES67 マルチキャストフローを作る', c2p2: '同じ LAN のノートで <code>--sap</code>: 流れているストリームが名前付きで一覧に出る', c2p3: '<code>--aes67 auto</code>(1本なら)か名前の一部で選ぶ', c2p4: '以降は 01 と同じ: ゾーン → ALIGN',
+    c2g: '<b>注意:</b> AES67 は 48kHz のみ(96kHz フローは拒否)。受信専用(SOLUNA から Dante へは送らない)。PTP は不要(SOLUNA の時計はサーバ自身)。<b>実機の Dante 機器では未検証</b> — 合成 AES67 送信機で end-to-end 検証済み。',
+    c3h: 'AES67 / Ravenna', c3s: 'Lawo・Merging・Genelec・Neumann など放送系。SAP で告知されているマルチキャストにそのまま乗る。',
+    c3f1: 'RTP マルチキャスト L24/L16 48kHz', c3n1: 'ノートが AES67 の VLAN にいること(IGMP が通るスイッチ)', c3n2: '複数 NIC なら受信する NIC の IP(<code>--iface</code>)',
+    c3p1: '<code>--sap</code> で一覧(名前・アドレス・ch数・形式)', c3p2: 'アドレス直指定か名前の一部で受信開始', c3p3: '8ch ストリームなら <code>--map</code> で L/R/C を選ぶ(<code>+</code> は平均=モノ)', c3p4: '01 と同じくゾーン → ALIGN',
+    c3g: '<b>パケット落ち:</b> RTP タイムスタンプで数えるので、抜けた分は正確に無音で埋め、遅着・重複は捨てる。位相は滑らない(10%ロスで検証)。0.5秒超の穴はストリーム再開扱い。',
+    c4h: 'MADI / AVB / アナログ / AES3 / USB', c4s: 'OS が入力デバイスとして見えるものは全部そのまま。Mac は AVB エンティティを標準で持つ(Thunderbolt/USB-C Ethernet)。',
+    c4f1b: '何でも', c4f1: 'MADI / AVB / アナログ / AES3', c4f2: 'OS に入力として見える機器', c4n1: 'その規格を受けるインターフェース(MADI カード、AVB 対応 Mac、アナログ I/F…)',
+    c4p1: 'デバイス一覧で名前を確認', c4p2: '<code>--input "名前"</code> で起動、8ch 以上なら <code>--map</code>', c4p3: 'ゾーン → ALIGN',
+    c4g: '<b>ファイル再生だけの現場</b>は LIVE を使わず CUE で配る方が強い(帯域ゼロ・途中参加も位相そろい)。<code>/admin</code> でアップロード → PRELOAD → FIRE。',
+    c5h: '照明卓・再生卓から cue を打つ — OSC', c5s: 'QLab / Ableton / grandMA / Eos が UDP で送る OSC を、SOLUNA が聞く。HTTP API と同じ内部処理なので、<code>/admin</code> の FIRE と挙動は同一。',
+    c5f1b: '制御卓', c5n1: '卓とサーバが同じ制御系 LAN(VLAN)にいること', c5n2: 'サーバ起動時に <code>SOLUNA_OSC_PORT</code>(既定 OFF)', c5n3: 'バンドルの timetag で打つなら卓とサーバの NTP',
+    c5p1: 'サーバを <code>SOLUNA_OSC_PORT=9000</code> で起動', c5p2: '卓の OSC 出力先にサーバ IP:9000 を登録', c5p3: '開演前ブロックに <code>/soluna/preload</code>、GO に <code>/soluna/cue</code> か <code>/soluna/go</code>', c5p4: 'Wi-Fi のスマホがいるなら lead は 2秒以上(有線 Pi だけなら 0.5秒で足りる)',
+    t_addr: 'アドレス', t_args: '引数', t_same: '同じ意味の HTTP', t_go: '(セットリスト次へ)',
+    c5g: '<b>おすすめの分担:</b> 光は卓が主(SOLUNA は Art-Net で追従、または卓が OSC でスマホ演出を叩く)。OSC に認証は無い=制御系 VLAN 専用。クラウド版では無効。',
+    c6h: 'タイムコードに乗せる', c6s: '「今この瞬間の番組 TC は X」を一度教えると、以降の cue とセットリストは <code>tc</code> で発火時刻を書ける。再生卓の空き出力の LTC からでも。',
+    c6f1b: '再生卓', c6f1: 'LTC 出力 / OSC / HTTP', c6f2b: 'アンカー', c6f3: 'cue {tc:"01:00:10:00"}',
+    c6n1: 'LTC なら: 再生卓の LTC 出力 → FOH Mac/Pi の空き音声入力', c6n2: 'OSC なら: 卓から毎秒 <code>/soluna/tc</code>', c6n3: '対応レート 24 / 25 / 30 / 29.97DF / 59.94DF / 23.976',
+    c6p1: '<code>ltc.py --list</code> で入力を探し、<code>--device N</code> で起動(毎秒アンカーを POST)', c6p2: '<code>GET /api/timecode</code> の推定 TC と卓の表示を目で合わせる', c6p3: 'cue / セットリストの各ステップに <code>tc</code> を書く', c6p4: '入力バッファ分(10〜20ms 一定)を <code>/api/align</code> で一度だけ追い込む',
+    c6g: '<b>ドロップフレーム</b>は SMPTE 12M どおり(毎分2フレーム落とし、10分毎は落とさない)。<code>ltc.py</code> はレベル変化・DC・ノイズに耐え、24/25/30/29.97DF でラウンドトリップ検証済み。<b>実機の LTC 源では未検証。</b>',
+    c7h: '会場の灯体を同期 — Art-Net / sACN', c7s: '進行中のライトパターンを 40Hz で DMX に落として灯体へ。灯体 i の位置は会場横断 0..1 — スマホの海と同じ向き・同じ速さで wave が渡る。',
+    c7f1: 'パターン + 時計', c7f3b: 'ノード', c7f3: 'DMX ノード / 卓のマージ', c7f4b: '灯体', c7f4: 'RGB 連番パッチ',
+    c7n1: 'Art-Net か sACN の DMX ノード(または対応卓)と同じ LAN', c7n2: 'RGB 灯体 N 台を連番でパッチ(開始 ch は変更可)',
+    c7p1: 'サーバを <code>SOLUNA_ARTNET=&lt;ip&gt;[:universe]</code> か <code>SOLUNA_SACN=</code> 付きで起動', c7p2: '<code>SOLUNA_DMX_FIXTURES</code>(既定 8)と <code>SOLUNA_DMX_START</code>(既定 1)を合わせる', c7p3: '<code>/admin</code> でライトを走らせる → 灯体が追従。停止で消灯1回送って沈黙',
+    c7g: '<b>卓と同じユニバースを共有するなら:</b> sACN は優先度(SOLUNA は 100)で卓が勝つように、Art-Net はノードの HTP/LTP マージか別ユニバース。<code>audio</code> パターンは端末側解析が要るので DMX では <code>pulse</code> に落ちる。strobe は 3Hz 上限のまま。',
+    c8h: 'プロジェクター / LED ウォール', c8s: 'MacBook + HDMI が、同じ時計に乗ったステージスクリーンになる。', c8f1: '映像 cue(url + at)', c8f3: 'プロジェクター / LED プロセッサ',
+    c8n1: 'HDMI 出力のあるノート1台、会場 LAN', c8n2: '映像は mp4、音は別に mp3(完璧な同期が要る本編は「音=mp3 / 映像=mp4 ミュート」の2ファイル構成)',
+    c8p1: 'ノートで <code>http://&lt;server&gt;:8900/screen</code> を開いて1クリック(UI が消え、全画面)', c8p2: '<code>/admin</code> の VIDEO URL に mp4、AUDIO URL に mp3 → PRELOAD → FIRE', c8p3: 'ドリフトは時計に対して自動補正(>0.5s はシーク、それ以下は ±6% の再生速度)',
+    c8g: '<b>実測:</b> 再生ズレ 23ms、ループ途中参加 2ms。音声 cue 併用時は映像側が自動でミュート(音は WebAudio が正)。',
+    c9h: 'Pi スピーカーを会場 LAN に', c9s: 'FOH のノートがサーバなら、Pi の箱は「見つけたサーバに従う」だけ。有線が最良。',
+    c9f1: 'FOH ノート or Pi box', c9f2: 'PoE スイッチ(有線推奨)', c9f4: 'DAC → アンプ → スピーカー(±0.5〜3ms)',
+    c9n1: 'Raspberry Pi 4 + USB か I2S の DAC + アンプ/スピーカー', c9n2: '小さな PoE スイッチと LAN ケーブル(Wi-Fi でも動くが有線が ±1〜3ms)',
+    c9p1: '<code>tools/pi-flash.sh</code> で SD を焼く(設定不要)、電源を入れる', c9p2: '自動: サーバを見つけて従う。FOH ノートが必ず親なら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定(PINNED)', c9p3: '<code>/admin</code> → NODES で箱にゾーン・L/C/R・ゲインを ASSIGN(箱に保存、再接続で再送)', c9p4: '箱の細かい設定は <code>http://&lt;箱名&gt;.local:8900/setup</code>',
+    c9g: '<b>サーバの箱が死んだら:</b> 残りの箱が 15〜20秒で引き継ぐ(ゾーン・cue・ライト・セットリスト位置を再配信)。LIVE の PCM だけは送出側(<code>source.py</code>)の再接続が要る(<code>.local</code> 名で起動していれば自動)。',
+    honest: 'ここに書いた接続は、コード・テスト・合成信号(AES67 送信機、OSC、LTC 生成、Art-Net 受信ソケット)で end-to-end に検証している。<b>実機の Dante 機器、LTC 源、照明卓、DMX ノード・灯体にはまだ繋いでいない。</b>最初の実機は必ずクリックで ALIGN を追い込み、余裕のある lead で始めること。',
+    docs: '詳細:', foot_about: 'サイトへ戻る'
+  },
+  en: {
+    title: 'SOLUNA Sound — connect it to what you already run',
+    nav_about: 'Site', nav_join: '🎧 Join', nav_foh: '🎚 FOH console',
+    eyebrow: 'CONNECT · plug into your existing systems', h1: 'Use what you already have.',
+    lead: 'SOLUNA Sound does not replace the house system. It takes one feed from the desk, listens to your show controller, and hands the venue’s fixtures the same clock — like adding one more delay tower.',
+    lead2: 'Answer the three questions below and the cards that match your rig light up.',
+    q1: 'Where does the audio come from?', q1a: 'Desk aux / matrix', q1b: 'Dante', q1c: 'AES67 / Ravenna', q1d: 'MADI / AVB / analog', q1e: 'File playback only',
+    q2: 'What fires the cues?', q2a: 'SOLUNA’s own console', q2b: 'QLab / grandMA / Eos / Ableton', q2c: 'Timecode',
+    q3: 'Fixtures and screens?', q3a: 'Phones and Pi boxes only', q3b: 'Venue fixtures too', q3c: 'Projector / LED wall too', q3d: 'Pi speakers on the venue LAN',
+    res_pre: 'Your cards:', res_none: 'Answer the three questions.', res_admin: 'Control stays in /admin — no extra card.', res_none_out: 'Outputs are phones and Pi boxes only — no extra card.',
+    h_audio: 'Audio in <span class="en">音を入れる</span>', h_ctl: 'Show control in <span class="en">制御をもらう</span>', h_out: 'More outputs <span class="en">出口を増やす</span>', h_honest: 'Honest note <span class="en">正直な注記</span>',
+    need: 'What you need', steps: 'Steps', fl_desk: 'Desk', fl_laptop: 'FOH laptop', fl_server: 'SOLUNA server', fl_out: 'Out', fl_out_txt: 'phones / Pi speakers',
+    c1h: 'Add to the existing PA — one aux from the desk', c1s: 'The most common rig. The same matrix/aux you would send to a delay tower goes to the phones and the Pi speakers.',
+    c1f1: 'matrix / aux out', c1f2: 'audio interface', c1f4: 'phones / Pi speakers, in phase',
+    c1n1: 'A spare aux or matrix on the desk (mono is fine)', c1n2: 'A USB audio interface (one input)', c1n3: 'The FOH Mac/Linux laptop (also the server) on the venue LAN',
+    c1p1: 'Start the server on the laptop, open <code>/admin</code>', c1p2: 'Find the input device name, start <code>source.py --input</code> with <code>--lead 0.08</code>', c1p3: 'Create <code>zones</code> by distance from the stage (enter metres, delays are computed)', c1p4: 'Play a click and trim <code>ALIGN</code> in ±ms until the flam disappears', c1p5: 'Place the Pi speakers; phones join from the flag QR',
+    c1g: '<b>Latency budget:</b> capture + send ≈10 ms, network + lead 80 ms, device output latency 10–30 ms (self-reported and subtracted). Each zone adds “distance ÷ 343 + 15 ms” on top. <b>Sync</b>: ±1–3 ms on a LAN, ±10–20 ms over LTE.',
+    c2h: 'Dante', c2s: 'SOLUNA does not speak Dante’s proprietary transport (licensed). There are three doors instead — most Dante hardware since 2016 has an AES67 mode.',
+    c2f1: 'desk / stagebox', c2f2b: 'three doors', c2f2: '(a) DVS (b) AVIO USB (c) AES67 mode',
+    c2n1: '(a) Dante Virtual Soundcard on the FOH Mac', c2n2: '(b) or a Dante AVIO USB adapter', c2n3: '(c) or rights in Dante Controller to enable AES67 on the transmitter',
+    c2p1: 'Dante Controller: enable AES67 on the transmitter, create an AES67 multicast flow for the channels you want (e.g. Matrix 7/8)', c2p2: 'On a laptop on the same LAN run <code>--sap</code>: the announced streams appear by name', c2p3: 'Pick with <code>--aes67 auto</code> (single stream) or by a name substring', c2p4: 'Then as in 01: zones → ALIGN',
+    c2g: '<b>Notes:</b> AES67 receive is 48 kHz only (96 kHz flows are refused). Receive only — SOLUNA never transmits to Dante. No PTP needed (SOLUNA’s clock is the server itself). <b>Not yet verified against real Dante hardware</b> — verified end-to-end with a synthetic AES67 sender.',
+    c3h: 'AES67 / Ravenna', c3s: 'Broadcast-side gear — Lawo, Merging, Genelec, Neumann. SOLUNA joins the multicast stream announced over SAP.',
+    c3f1: 'RTP multicast L24/L16 48 kHz', c3n1: 'The laptop on the AES67 VLAN (a switch that passes IGMP)', c3n2: 'With several NICs, the IP of the receiving NIC (<code>--iface</code>)',
+    c3p1: 'List streams with <code>--sap</code> (name, address, channels, format)', c3p2: 'Start receiving by address or by a name substring', c3p3: 'For an 8-channel stream choose L/R/C with <code>--map</code> (<code>+</code> averages = mono)', c3p4: 'As in 01: zones → ALIGN',
+    c3g: '<b>Packet loss:</b> counted by RTP timestamp, so a gap is filled with exactly that many zero samples and late/duplicate packets are dropped — phase never slips (verified at 10 % loss). A hole over 0.5 s is treated as a restarted stream.',
+    c4h: 'MADI / AVB / analog / AES3 / USB', c4s: 'Anything the OS sees as an input device works as is. macOS is an AVB entity natively (Thunderbolt/USB-C Ethernet).',
+    c4f1b: 'anything', c4f1: 'MADI / AVB / analog / AES3', c4f2: 'a device the OS sees as an input', c4n1: 'An interface for that format (MADI card, AVB-capable Mac, analog interface…)',
+    c4p1: 'Find the name in the device list', c4p2: 'Start with <code>--input "name"</code>; for 8+ channels add <code>--map</code>', c4p3: 'Zones → ALIGN',
+    c4g: '<b>Playback-only stage?</b> Skip LIVE and distribute as CUEs instead — zero bandwidth and late joiners land in phase. Upload in <code>/admin</code> → PRELOAD → FIRE.',
+    c5h: 'Fire cues from the lighting or playback desk — OSC', c5s: 'SOLUNA listens to the OSC that QLab / Ableton / grandMA / Eos already send over UDP. It calls the same internal functions as the HTTP API, so a cue from the desk and FIRE in <code>/admin</code> behave identically.',
+    c5f1b: 'console', c5n1: 'Desk and server on the same show-control LAN (VLAN)', c5n2: '<code>SOLUNA_OSC_PORT</code> set when the server starts (off by default)', c5n3: 'NTP on desk and server if you fire by bundle timetag',
+    c5p1: 'Start the server with <code>SOLUNA_OSC_PORT=9000</code>', c5p2: 'Add the server IP:9000 as an OSC destination on the desk', c5p3: '<code>/soluna/preload</code> in the pre-show block; <code>/soluna/cue</code> or <code>/soluna/go</code> on GO', c5p4: 'Keep lead ≥ 2 s when phones are on Wi-Fi (0.5 s is enough with wired Pi nodes only)',
+    t_addr: 'Address', t_args: 'Arguments', t_same: 'Same as HTTP', t_go: '(next setlist step)',
+    c5g: '<b>Recommended split:</b> the desk owns light (SOLUNA follows via Art-Net, or the desk fires SOLUNA’s phone looks over OSC). OSC has no authentication — show-control VLAN only. Disabled on the cloud demo.',
+    c6h: 'Lock to timecode', c6s: 'Tell SOLUNA once “right now the show timecode is X”, and every cue and setlist step can carry <code>tc</code> as its fire time. Works from the LTC on a spare output of the playback rig.',
+    c6f1b: 'playback rig', c6f1: 'LTC out / OSC / HTTP', c6f2b: 'anchor', c6f3: 'cue {tc:"01:00:10:00"}',
+    c6n1: 'LTC: the rig’s LTC output → a spare audio input on the FOH Mac/Pi', c6n2: 'OSC: <code>/soluna/tc</code> every second from the console', c6n3: 'Rates: 24 / 25 / 30 / 29.97DF / 59.94DF / 23.976',
+    c6p1: 'Find the input with <code>ltc.py --list</code>, run with <code>--device N</code> (posts the anchor every second)', c6p2: 'Compare <code>GET /api/timecode</code>’s estimate with the rig’s display', c6p3: 'Write <code>tc</code> on cues and setlist steps', c6p4: 'Trim the constant input-buffer offset (10–20 ms) once with <code>/api/align</code>',
+    c6g: '<b>Drop-frame</b> follows SMPTE 12M (two frames dropped each minute except every tenth). <code>ltc.py</code> survives level changes, DC and noise; round-trip verified at 24/25/30/29.97DF. <b>Not yet verified against a real LTC source.</b>',
+    c7h: 'Sync the venue’s fixtures — Art-Net / sACN', c7s: 'The running light pattern is rendered to DMX at 40 Hz. Fixture i stands at position 0..1 across the venue — the same axis as the phones, so a wave crosses the fixtures in step with the crowd’s screens.',
+    c7f1: 'pattern + clock', c7f3b: 'node', c7f3: 'DMX node / desk merge', c7f4b: 'fixtures', c7f4: 'RGB, patched consecutively',
+    c7n1: 'An Art-Net or sACN DMX node (or a desk that accepts it) on the same LAN', c7n2: 'N RGB fixtures patched consecutively (start channel configurable)',
+    c7p1: 'Start the server with <code>SOLUNA_ARTNET=&lt;ip&gt;[:universe]</code> or <code>SOLUNA_SACN=</code>', c7p2: 'Match <code>SOLUNA_DMX_FIXTURES</code> (default 8) and <code>SOLUNA_DMX_START</code> (default 1)', c7p3: 'Run a light in <code>/admin</code> → fixtures follow. Stop sends one blackout, then goes quiet',
+    c7g: '<b>Sharing a universe with the desk:</b> with sACN let the desk win by priority (SOLUNA sends 100); with Art-Net use HTP/LTP merge on the node or a separate universe. The <code>audio</code> pattern needs the phone-side analysis and falls back to <code>pulse</code> on DMX. Strobe keeps its 3 Hz cap.',
+    c8h: 'Projector / LED wall', c8s: 'A MacBook + HDMI becomes a stage screen on the same clock.', c8f1: 'video cue (url + at)', c8f3: 'projector / LED processor',
+    c8n1: 'One laptop with HDMI out, on the venue LAN', c8n2: 'Video as mp4, audio as a separate mp3 (for sample-accurate sound use the two-file setup: audio=mp3, video=mp4 muted)',
+    c8p1: 'Open <code>http://&lt;server&gt;:8900/screen</code> on the laptop, one click (UI vanishes, fullscreen)', c8p2: 'In <code>/admin</code>: VIDEO URL = mp4, AUDIO URL = mp3 → PRELOAD → FIRE', c8p3: 'Drift is corrected against the clock (hard seek over 0.5 s, ±6 % playback rate below)',
+    c8g: '<b>Measured:</b> 23 ms playback drift, 2 ms mid-track loop join. With an audio cue the video mutes itself (WebAudio is the reference).',
+    c9h: 'Pi speakers on the venue LAN', c9s: 'If the FOH laptop is the server, the Pi boxes simply follow the server they find. Wired is best.',
+    c9f1: 'FOH laptop or Pi box', c9f2: 'PoE switch (wired recommended)', c9f4: 'DAC → amp → speaker (±0.5–3 ms)',
+    c9n1: 'Raspberry Pi 4 + a USB or I2S DAC + amp/speaker', c9n2: 'A small PoE switch and cables (Wi-Fi works, wired gives ±1–3 ms)',
+    c9p1: 'Flash the card with <code>tools/pi-flash.sh</code> (no configuration), power on', c9p2: 'Automatic: it finds the server and follows it. If the FOH laptop must always be the server, pin with <code>SERVER=ws://&lt;ip&gt;:8900</code>', c9p3: '<code>/admin</code> → NODES: ASSIGN zone, L/C/R and gain per box (saved on the box, re-sent on reconnect)', c9p4: 'Box details at <code>http://&lt;box&gt;.local:8900/setup</code>',
+    c9g: '<b>If the server box dies:</b> the remaining boxes take over in 15–20 s (zones, cue, light and setlist position are re-broadcast). Only a LIVE PCM stream needs the source (<code>source.py</code>) to reconnect — automatic if it was started with the <code>.local</code> name.',
+    honest: 'Every connection on this page is verified end-to-end in code and tests with synthetic signals (an AES67 sender, OSC, generated LTC, an Art-Net receiving socket). <b>It has not yet been connected to real Dante hardware, an LTC source, a lighting desk, or DMX nodes and fixtures.</b> On the first real rig, trim ALIGN with a click and start with a generous lead.',
+    docs: 'Details:', foot_about: 'Back to the site'
+  }
+};
+const qs = new URLSearchParams(location.search);
+let LANG = qs.get('lang') || localStorage.getItem('soluna_lang') || ((navigator.language||'ja').startsWith('ja') ? 'ja' : 'en');
+function apply(lang){
+  LANG = I18N[lang] ? lang : 'ja'; const T = I18N[LANG];
+  document.documentElement.lang = LANG; document.title = T.title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (T[k] != null) el.innerHTML = T[k]; });
+  document.getElementById('langJa').setAttribute('aria-pressed', LANG==='ja'); document.getElementById('langEn').setAttribute('aria-pressed', LANG==='en');
+  try { localStorage.setItem('soluna_lang', LANG); } catch(e) {}
+  const u = new URL(location); u.searchParams.set('lang', LANG); history.replaceState(null, '', u);
+  renderResult();
+}
+document.getElementById('langJa').onclick = () => apply('ja');
+document.getElementById('langEn').onclick = () => apply('en');
+
+// ---- chooser: three answers → the cards that apply (plain JS, scroll + highlight)
+const MAP = { src: {pa:'c-pa', dante:'c-dante', aes67:'c-aes67', madi:'c-madi', file:'c-madi'},
+              ctl: {admin:null, osc:'c-osc', tc:'c-tc'},
+              out: {none:null, dmx:'c-dmx', screen:'c-screen', pi:'c-pi'} };
+const ans = {};
+document.querySelectorAll('.q .opts').forEach(g => g.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  ans[g.dataset.q] = b.dataset.v;
+  g.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  renderResult(true);
+}));
+function renderResult(scroll){
+  const T = I18N[LANG]; const out = document.getElementById('result');
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('hit'));
+  const keys = Object.keys(ans);
+  if (!keys.length){ out.textContent = T.res_none; return; }
+  const ids = keys.map(k => MAP[k][ans[k]]).filter(Boolean);
+  ids.forEach(id => document.getElementById(id).classList.add('hit'));
+  const parts = ids.map(id => { const c = document.getElementById(id); const h = c.querySelector('h3'); return `<a href="#${id}">${h.querySelector('.k').textContent} ${h.querySelector('span:last-child').textContent}</a>`; });
+  if (ans.ctl === 'admin') parts.push(`<span class="dim">${T.res_admin}</span>`);
+  if (ans.out === 'none') parts.push(`<span class="dim">${T.res_none_out}</span>`);
+  out.innerHTML = `<b>${T.res_pre}</b> ` + parts.join(' ');
+  if (scroll && ids.length && keys.length === 3) document.getElementById(ids[0]).scrollIntoView({behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start'});
+}
+apply(LANG);
+</script>
+<script defer src="https://enabler-analytics.fly.dev/t.js"></script>
+</body></html>

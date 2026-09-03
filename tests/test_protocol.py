@@ -273,6 +273,8 @@ async def main():
         check("/about 200 + 見出し + 画面画像リンク", r.status == 200 and "ひとつの時計" in t_about and "/site/client-idle.png" in t_about)
         r = await s.get(f"{BASE}/site/client-idle.png")
         check("/site/client-idle.png 配信", r.status == 200 and r.headers.get("Content-Type", "").startswith("image/png"))
+        r = await s.get(f"{BASE}/connect")
+        check("/connect 200 + Dante", r.status == 200 and "Dante" in await r.text())
 
         # 10j) 入場QR(/flags?gate=1)=1ページ・?gate=1 のURL
         r = await s.get(f"{BASE}/flags?ch=flagstest&gate=1")
