@@ -593,6 +593,7 @@ async function onCue(m){
 }
 function armCue(){
   const m = pendingCue; if (!m || !m.url || !cueBuf || !ctx) return;
+  if (ctx.state !== 'running') ctx.resume().catch(()=>{});   // iOS: 復帰/着信後にsuspendへ戻る対策
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
   const src = ctx.createBufferSource();
   src.buffer = cueBuf; src.loop = !!m.loop;
@@ -863,6 +864,8 @@ setInterval(()=>{
 async function start(){
   ctx = new (window.AudioContext||window.webkitAudioContext)({sampleRate:SR});
   await ctx.resume();
+  // iOS: サイレントスイッチONでもWebAudioを鳴らす(Safari 16.4+)。無ければ無視。
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(e){}
   // iOSは無音を一度流すとバックグラウンド化に強くなる
   const silent = ctx.createBufferSource();
   silent.buffer = ctx.createBuffer(1, SR, SR); silent.loop = true;

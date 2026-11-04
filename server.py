@@ -834,6 +834,15 @@ async def do_show(state, body: dict) -> dict:
     """POST /api/show と OSC /soluna/go, /soluna/show/goto が共有する本体。
     auto/gap: 自動進行(各 step の dur[s]+gap 後に次を発火。dur は admin がブラウザで測る or wav ヘッダ)。"""
     touched = False
+    if "no_video" in body:
+        state["show_no_video"] = bool(body["no_video"])
+        touched = True
+    if "no_audio" in body:
+        state["show_no_audio"] = bool(body["no_audio"])
+        touched = True
+    if "no_light" in body:
+        state["show_no_light"] = bool(body["no_light"])
+        touched = True
     if "auto" in body:
         state["show_auto"] = bool(body["auto"])
         if not state["show_auto"]:
@@ -898,20 +907,23 @@ async def do_show(state, body: dict) -> dict:
         step = show[i]
         state["show_i"] = i
         fired = {"i": i + 1, "total": len(show), "label": step["label"]}
-        if step.get("url") or step.get("video"):
+        send_audio = not state.get("show_no_audio")
+        send_video = not state.get("show_no_video")
+        send_light = not state.get("show_no_light")
+        if (step.get("url") or step.get("video")) and (send_audio or send_video):
             at = _cue_at(state, step)             # lead / tc(番組タイムコード) どちらでも
             cue = {"id": f"show{i+1}-{step['label']}", "at": at,
                    "gain": float(step.get("gain", 1.0)),
                    "loop": bool(step.get("loop", False))}
-            if step.get("url"):
+            if step.get("url") and send_audio:
                 cue["url"] = step["url"]
-            if step.get("video"):
+            if step.get("video") and send_video:
                 cue["video"] = step["video"]
             state["cue"] = cue
             await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
             fired["cue"] = cue["id"]
             # 曲中タイムライン: cue の at(サンプル0) を基準に演出を切り替える
-            if step.get("timeline"):
+            if step.get("timeline") and send_light:
                 n = _timeline_start(state, at, step["timeline"])
                 if n:
                     fired["timeline"] = n
@@ -919,7 +931,7 @@ async def do_show(state, body: dict) -> dict:
                 _timeline_cancel(state)
         else:
             _timeline_cancel(state)
-        if step.get("light"):
+        if step.get("light") and send_light:
             light = _light_from(dict(step["light"], at=None), id_prefix=f"showlight{i+1}")
             light["id"] = f"showlight{i+1}"
             state["light"] = light
@@ -995,8 +1007,9 @@ DJ42_KEY = os.environ.get("SOLUNA_DJ42_KEY", "dj42")
 
 async def api_dj42(request):
     """キー(dj42)だけで6曲を全端末へ配信する簡易リモコン。
-    音+映像+ライト+曲中タイムラインを1つの同期瞬間として発火する(本体は do_show)。
-    body: {key:"dj42", action:"play", i:<0始まり>} | {action:"stop"} | {action:"next"}
+    音・光・映像をそれぞれ on/off できる(既定: 音ON・光ON・映像OFF)。
+    本体は do_show。body:
+      {key, action:"play", i, audio?, light?, video?, lead?} | {action:"stop"} | {action:"next"}
     認証は admin ではなく専用キー(会場スタッフがスマホから叩けるように)。"""
     try:
         body = await request.json()
@@ -1006,6 +1019,10 @@ async def api_dj42(request):
         raise web.HTTPForbidden(text="bad key")
     state = _chan(body.get("ch") or "festival")
     action = body.get("action") or "play"
+    # 音・光・映像の on/off(既定: 音ON・光ON・映像OFF)
+    state["show_no_audio"] = not body.get("audio", True)
+    state["show_no_light"] = not body.get("light", True)
+    state["show_no_video"] = not body.get("video", False)
     try:
         if action == "stop":
             await do_cue(state, {"stop": True})
@@ -1020,8 +1037,17 @@ async def api_dj42(request):
         i = int(body.get("i", 0))
         if i < 0 or i >= len(show):
             raise web.HTTPBadRequest(text="index out of range")
+        step = show[i]
+        old_lead = step.get("lead")
+        step["lead"] = float(body.get("lead", 0.6))   # タップ後すぐ鳴らす(全端末を揃える最小リード)
         state["show_i"] = i - 1              # 次の next で i 番を発火
-        r = await do_show(state, {"next": True})
+        try:
+            r = await do_show(state, {"next": True})
+        finally:
+            if old_lead is None:
+                step.pop("lead", None)
+            else:
+                step["lead"] = old_lead
         return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
     except BadRequest as e:
         raise web.HTTPBadRequest(text=str(e))
