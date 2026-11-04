@@ -910,7 +910,12 @@ async def do_show(state, body: dict) -> dict:
         send_audio = not state.get("show_no_audio")
         send_video = not state.get("show_no_video")
         send_light = not state.get("show_no_light")
-        if (step.get("url") or step.get("video")) and (send_audio or send_video):
+        # 音/映像を送らない場合は、前の曲・映像も止める(切り忘れ防止)
+        if not (send_audio or send_video):
+            state["cue"] = None
+            await _broadcast_text(state, json.dumps({"t": "cue_stop"}))
+            fired["cue_stopped"] = True
+        elif step.get("url") or step.get("video"):
             at = _cue_at(state, step)             # lead / tc(番組タイムコード) どちらでも
             cue = {"id": f"show{i+1}-{step['label']}", "at": at,
                    "gain": float(step.get("gain", 1.0)),
@@ -931,7 +936,14 @@ async def do_show(state, body: dict) -> dict:
                 _timeline_cancel(state)
         else:
             _timeline_cancel(state)
-        if step.get("light") and send_light:
+        # 光を送らない場合は前の光も消す
+        if not send_light:
+            _timeline_cancel(state)
+            _zone_auto_cancel(state)
+            state["light"] = None
+            await _broadcast_text(state, json.dumps({"t": "light_stop"}))
+            fired["light_stopped"] = True
+        elif step.get("light"):
             light = _light_from(dict(step["light"], at=None), id_prefix=f"showlight{i+1}")
             light["id"] = f"showlight{i+1}"
             state["light"] = light
