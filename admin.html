@@ -230,6 +230,26 @@
       <div class="field" style="width:84px"><label>Bright</label><input id="bright" type="number" value="1.0" step="0.1" min="0.1" max="1"></div>
     </div>
     <div class="row mt">
+      <div class="field grow"><label>Zones(全ゾーン以外は選択したゾーンだけ点灯)</label>
+        <div id="zonePick" class="row" style="align-items:center;gap:14px;flex-wrap:wrap">
+          <label class="inline"><input type="checkbox" id="zoneAll" checked> 全ゾーン</label>
+        </div>
+      </div>
+    </div>
+    <div class="row mt">
+      <div class="field" style="width:110px"><label>Fade(ms)</label><input id="fadeMs" type="number" value="0" min="0" max="10000" step="50"></div>
+      <label class="inline"><input type="checkbox" id="torch"> LEDトーチ(iOS)</label>
+    </div>
+    <div class="row mt">
+      <div class="field grow"><label>Preset</label><select id="presetSel"><option value="">— プリセット —</option></select></div>
+      <button class="ghost" id="presetSave" title="現在の見た目を保存">💾 save</button>
+      <button class="ghost" id="presetDel" title="選択中のプリセットを削除">🗑 delete</button>
+    </div>
+    <div class="row mt">
+      <div class="field"><label>Preview</label><canvas id="lightPrev" width="220" height="120" style="border:1px solid var(--line2);border-radius:10px;background:#000"></canvas></div>
+      <div class="sub" style="margin:0 0 6px">preview (端末同期の近似)</div>
+    </div>
+    <div class="row mt">
       <button class="gold big" id="lightGo">💡 LIGHT GO — 全端末を光らせる</button>
     </div>
     <div class="danger-row"><button class="red" id="lightStop">■ DARK — 消灯</button></div>
@@ -631,18 +651,143 @@ renderShow();
 
 // ---- light ----
 let selPat = 'pulse';
+function setPat(p){
+  selPat = p;
+  document.querySelectorAll('#patRow button').forEach(x=>x.classList.toggle('gold', x.dataset.pat===p));
+}
 document.querySelectorAll('#patRow [data-pat]').forEach(b=>{
-  b.onclick = ()=>{
-    selPat = b.dataset.pat;
-    document.querySelectorAll('#patRow button').forEach(x=>x.classList.remove('gold'));
-    b.classList.add('gold');
-  };
+  b.onclick = ()=> setPat(b.dataset.pat);
 });
-document.querySelector('#patRow [data-pat="pulse"]').classList.add('gold');
-$('lightGo').onclick = ()=> call('/api/light', {
-  pattern: selPat, colors: [$('col1').value, $('col2').value],
-  bpm: parseFloat($('bpm').value||120), speed: parseFloat($('speed').value||1),
-  brightness: parseFloat($('bright').value||1) });
+setPat('pulse');
+
+// zone picker (keys from /status channels[ch].zones A..F)
+let zoneKeys = [];
+function zoneSel(){
+  return [...document.querySelectorAll('#zonePick input[data-zone]')].filter(x=>x.checked).map(x=>x.dataset.zone);
+}
+function syncZoneMaster(){
+  const boxes = [...document.querySelectorAll('#zonePick input[data-zone]')];
+  $('zoneAll').checked = boxes.length>0 && boxes.every(b=>b.checked);
+}
+function persistZones(){
+  const boxes = [...document.querySelectorAll('#zonePick input[data-zone]')];
+  const all = boxes.length>0 && boxes.every(b=>b.checked);
+  localStorage.setItem('soluna_light_zones', all ? 'all' : JSON.stringify(zoneSel()));
+}
+function renderZonePick(keys){
+  keys = keys || [];
+  if (keys.join(',') === zoneKeys.join(',') && document.querySelector('#zonePick input[data-zone]')) return;
+  zoneKeys = keys;
+  let stored = 'all';
+  try{ stored = localStorage.getItem('soluna_light_zones') || 'all'; }catch(e){}
+  let sel;
+  if (stored === 'all') sel = keys.slice();
+  else { try{ const a = JSON.parse(stored); sel = Array.isArray(a) ? a.filter(k=>keys.includes(k)) : keys.slice(); }catch(e){ sel = keys.slice(); } }
+  const box = $('zonePick'); box.innerHTML = '';
+  const ml = document.createElement('label'); ml.className = 'inline';
+  ml.innerHTML = '<input type="checkbox" id="zoneAll" checked> 全ゾーン';
+  box.appendChild(ml);
+  for (const k of keys){
+    const l = document.createElement('label'); l.className = 'inline';
+    l.innerHTML = `<input type="checkbox" data-zone="${k}"${sel.includes(k)?' checked':''}> ${k}`;
+    box.appendChild(l);
+  }
+  $('zoneAll').onchange = ()=>{
+    const on = $('zoneAll').checked;
+    document.querySelectorAll('#zonePick input[data-zone]').forEach(b=> b.checked = on);
+    persistZones();
+  };
+  box.querySelectorAll('input[data-zone]').forEach(b=> b.onchange = ()=>{ syncZoneMaster(); persistZones(); });
+  syncZoneMaster();
+}
+
+// presets
+let lightPresetMap = {};
+function renderPresetSel(names){
+  const sel = $('presetSel'); const cur = sel.value;
+  sel.innerHTML = '';
+  const ph = document.createElement('option'); ph.value = ''; ph.textContent = '— プリセット —'; sel.appendChild(ph);
+  for (const n of names){ const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); }
+  if (names.includes(cur)) sel.value = cur;
+}
+async function loadPresets(){
+  const r = await call('/api/light/presets', null, 'GET');
+  if (r && r.presets){ lightPresetMap = r.presets; renderPresetSel(Object.keys(r.presets)); }
+}
+$('presetSel').onchange = async ()=>{
+  const name = $('presetSel').value; if (!name) return;
+  if (!lightPresetMap[name]) await loadPresets();
+  const look = lightPresetMap[name]; if (!look) return;
+  if (look.pattern) setPat(look.pattern);
+  if (Array.isArray(look.colors)){
+    if (look.colors[0]) $('col1').value = look.colors[0];
+    if (look.colors[1]) $('col2').value = look.colors[1];
+  }
+  if (look.bpm != null) $('bpm').value = look.bpm;
+  if (look.speed != null) $('speed').value = look.speed;
+  if (look.brightness != null) $('bright').value = look.brightness;
+};
+$('presetSave').onclick = async ()=>{
+  const name = (prompt('プリセット名(40文字以内)') || '').trim(); if (!name) return;
+  await call('/api/light/presets', { name, pattern: selPat, colors: [$('col1').value, $('col2').value],
+    bpm: parseFloat($('bpm').value||120), speed: parseFloat($('speed').value||1), brightness: parseFloat($('bright').value||1) });
+  await loadPresets();
+};
+$('presetDel').onclick = async ()=>{
+  const name = $('presetSel').value; if (!name){ log('プリセットを選択してください'); return; }
+  if (!confirm(`プリセット「${name}」を削除します。OK?`)) return;
+  await call('/api/light/presets', { name, delete: true });
+  delete lightPresetMap[name];
+  await loadPresets();
+};
+
+// live preview — same color math as client.html lightColor() (self-contained, no server)
+const prevJitter = Math.random();
+function prevHex2rgb(h){ const v = parseInt(h.replace('#',''),16); return [(v>>16)&255,(v>>8)&255,v&255]; }
+function prevMix(a,b,t){ return a.map((v,i)=> v+(b[i]-v)*t); }
+function prevScale(c,k){ return c.map(v=> Math.round(Math.max(0,Math.min(255,v*k)))); }
+function previewColor(t){
+  const cols = [prevHex2rgb($('col1').value), prevHex2rgb($('col2').value)];
+  const c0 = cols[0], c1 = cols[1] || c0;
+  const bpm = parseFloat($('bpm').value||120), speed = parseFloat($('speed').value||1), B = parseFloat($('bright').value||1);
+  const beat = bpm/60, x = 0.5;   // preview uses center-of-venue x
+  switch (selPat){
+    case 'solid': return prevScale(c0, B);
+    case 'pulse': { const ph = ((t*beat)%1+1)%1; const p = Math.exp(-5*ph); return prevScale(prevMix(c0,c1,p), B*(0.06+0.94*p)); }
+    case 'beat': { const n = Math.floor(t*beat); return prevScale(n%2 ? c1 : c0, B); }
+    case 'wave': { const p = (Math.sin(2*Math.PI*(t*0.5*speed - x*1.5))+1)/2;
+      const s = p*p*p/(p*p*p+(1-p)*(1-p)*(1-p)); return prevScale(prevMix(c0,c1,s), B*(0.35+0.65*Math.abs(s-0.5)*2)); }
+    case 'plasma': { const v = (Math.sin(6.283*(x*1.7 + t*0.23*speed))
+        + Math.sin(6.283*(prevJitter*2.1 - t*0.17*speed))
+        + Math.sin(6.283*(x + prevJitter + t*0.11*speed)))/3;
+      const p = (v+1)/2, s = p*p*p/(p*p*p+(1-p)*(1-p)*(1-p)); return prevScale(prevMix(c0,c1,s), B); }
+    case 'strobe': { const hz = Math.min(3, beat); const on = (t*hz)%1 < 0.5; return on ? prevScale(c0,B) : [0,0,0]; }
+    case 'audio': return prevScale(c0, B*0.5);   // admin has no audio envelope: static approximation
+  }
+  return [0,0,0];
+}
+function prevLoop(){
+  const cv = $('lightPrev'); if (!cv) return;
+  const g = cv.getContext('2d');
+  const [r,gg,b] = previewColor(performance.now()/1000);
+  g.fillStyle = `rgb(${r},${gg},${b})`; g.fillRect(0,0,cv.width,cv.height);
+  requestAnimationFrame(prevLoop);
+}
+requestAnimationFrame(prevLoop);
+
+$('lightGo').onclick = ()=>{
+  const body = { pattern: selPat, colors: [$('col1').value, $('col2').value],
+    bpm: parseFloat($('bpm').value||120), speed: parseFloat($('speed').value||1),
+    brightness: parseFloat($('bright').value||1) };
+  const boxes = [...document.querySelectorAll('#zonePick input[data-zone]')];
+  const sel = zoneSel();
+  const all = boxes.length===0 || boxes.length===sel.length;
+  if (!all) body.zones = sel;                    // master/all => omit zones
+  const fade = parseInt($('fadeMs').value, 10) || 0;
+  if (fade > 0) body.fade_ms = fade;
+  if ($('torch').checked) body.torch = true;
+  call('/api/light', body);
+};
 $('lightStop').onclick = ()=>{ if (confirm('全端末のライトを消灯します。OK?')) call('/api/light', {stop:true}); };
 
 // ---- status poll ----
@@ -684,7 +829,12 @@ setInterval(async ()=>{
     }
     $('healthnow').textContent = `server ${s.version||''} · epoch ${new Date(s.server_epoch_ms).toTimeString().slice(0,8)}` + (s.asset_base ? ` · assets via ${s.asset_base}` : ' · assets: server-direct');
     $('cuenow').textContent = c.cue ? `● ACTIVE: ${c.cue.id} ${c.cue.url} gain=${c.cue.gain}${c.cue.loop?' loop':''}` : '';
-    $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}` : '';
+    $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}`
+      + (Array.isArray(c.light.zones) && c.light.zones.length ? ` zones=${c.light.zones.join(',')}` : '')
+      + (c.light.fade_ms ? ` fade=${c.light.fade_ms}ms` : '')
+      + (c.light.torch ? ' 🔥torch' : '') : '';
+    if (c.zones) renderZonePick(Object.keys(c.zones));
+    if (Array.isArray(c.presets)) renderPresetSel(c.presets);
     $('geonow').textContent = c.geo ? `● STAGE: ${c.geo.lat.toFixed(5)}, ${c.geo.lng.toFixed(5)} — 来場者は📍で自動ゾーン` : '';
     if (c.show && c.show.total){
       const nxt = c.show.next_at ? ` · 自動で次 → ${new Date(c.show.next_at*1000).toTimeString().slice(0,8)}` : (c.show.auto ? ' · AUTO' : '');
@@ -718,6 +868,7 @@ $('chDelete').onclick = ()=>{
     call('/api/channel', null, 'DELETE');
 };
 renderZones();
+setTimeout(loadPresets, 900);
 </script>
 </body>
 </html>

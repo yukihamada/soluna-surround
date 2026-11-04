@@ -192,6 +192,58 @@ async def main():
         check("light_stop配信", len(ls_) == 1)
         await late2[0].close(); late2[1].cancel()
 
+        # 10d2) LIGHT v2: zones/fade_ms/torch + presets + lit集計
+        r = await s.post(f"{BASE}/api/light?ch=festival",
+                         json={"pattern": "pulse", "zones": ["B"], "fade_ms": 800, "torch": True},
+                         headers={"x-soluna-admin": ADMIN})
+        lb2 = await r.json()
+        check("light v2: zones/fade_ms/torch echo",
+              lb2["light"].get("zones") == ["B"] and lb2["light"].get("fade_ms") == 800
+              and lb2["light"].get("torch") is True, str(lb2["light"]))
+        await asyncio.sleep(0.3)
+        lg2 = [m for m in boxes[1] if isinstance(m, dict) and m.get("t") == "light"
+               and m.get("zones") == ["B"]]
+        check("light v2: zones配信(B端末へ)", len(lg2) == 1 and lg2[0].get("fade_ms") == 800)
+        late3_box = []
+        late3 = await listener(s, "B", late3_box)
+        await asyncio.sleep(0.3)
+        l3 = [m for m in late3_box if isinstance(m, dict) and m.get("t") == "light"]
+        check("light v2: 途中参加がzones/fade_ms受信",
+              len(l3) == 1 and l3[0].get("zones") == ["B"] and l3[0].get("fade_ms") == 800)
+        # 端末litレポート → devices.lit / peak_lit
+        await ws0.send_str(json.dumps({"t": "report", "st": "playing", "ctx": "running", "lit": True}))
+        await asyncio.sleep(0.3)
+        dv2 = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]["devices"]
+        check("light v2: devices.lit=1", dv2.get("lit") == 1, str(dv2))
+        check("light v2: stats.peak_lit>=1",
+              (await (await s.get(f"{BASE}/api/stats?ch=festival", headers={"x-soluna-admin": ADMIN})).json()).get("peak_lit", 0) >= 1)
+        # presets 保存/取得/削除
+        r = await s.post(f"{BASE}/api/light/presets?ch=festival",
+                         json={"name": "Warm Pulse", "pattern": "pulse", "colors": ["#ff8800", "#ffcc00"],
+                               "bpm": 90, "speed": 1.2, "brightness": 0.7},
+                         headers={"x-soluna-admin": ADMIN})
+        pj = await r.json()
+        check("preset save", r.status == 200 and "Warm Pulse" in pj["presets"]
+              and pj["presets"]["Warm Pulse"]["bpm"] == 90.0)
+        r = await s.get(f"{BASE}/api/light/presets?ch=festival", headers={"x-soluna-admin": ADMIN})
+        check("preset get", "Warm Pulse" in (await r.json())["presets"])
+        check("status: presets名一覧",
+              "Warm Pulse" in (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]["presets"])
+        r = await s.post(f"{BASE}/api/light/presets?ch=festival",
+                         json={"pattern": "nope", "name": "bad"}, headers={"x-soluna-admin": ADMIN})
+        check("preset 不正pattern=400", r.status == 400)
+        r = await s.post(f"{BASE}/api/light/presets?ch=festival",
+                         json={"name": "Warm Pulse", "delete": True}, headers={"x-soluna-admin": ADMIN})
+        check("preset delete", "Warm Pulse" not in (await r.json())["presets"])
+        # stop + fade_ms
+        r = await s.post(f"{BASE}/api/light?ch=festival", json={"stop": True, "fade_ms": 500},
+                         headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(0.3)
+        ls2 = [m for m in boxes[1] if isinstance(m, dict) and m.get("t") == "light_stop"
+               and m.get("fade_ms") == 500]
+        check("light v2: light_stopにfade_ms", len(ls2) >= 1)
+        await late3[0].close(); late3[1].cancel()
+
         # 10e) geo API: ステージ座標の登録+config配信+clear
         r = await s.post(f"{BASE}/api/geo?ch=festival",
                          json={"lat": 21.3352, "lng": -158.0879},

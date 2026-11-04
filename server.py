@@ -101,6 +101,7 @@ def _chan(name):
         "lead": LEAD,
         "cue": None,              # active cue dict (途中参加者へ再送する)
         "light": None,            # active light dict (SOLUNAモード: 色の同期)
+        "light_presets": {},      # 名前付きライトプリセット {name -> look}(/admin・再起動で復元)
         "geo": None,              # {"lat","lng"} ステージ位置(GPSゾーン自動選択用)
         "preload": None,          # 事前配布済み音源URL(FIRE前のDLバースト回避)
         "show": None,             # セットリスト [{label,url,video,light},...]
@@ -114,7 +115,7 @@ def _chan(name):
         "mute": False,            # FOHキルスイッチ(全端末・全ノード・CUE/LIVE両方)
         "level": None,            # LIVE入力メータ {"peak_dbfs","rms_dbfs","clip","t"}(FOHが「来てる」を目で見る)
         "stats": {"peak_listeners": 0, "peak_playing": 0, "peak_playing_zone": {}, "cues": 0,
-                  "lights": 0, "first_cue": None, "last_cue": None, "started": None},   # 事後レポート用
+                  "lights": 0, "peak_lit": 0, "first_cue": None, "last_cue": None, "started": None},   # 事後レポート用
     })
 
 
@@ -128,7 +129,7 @@ NODE_STALE_S = float(os.environ.get("SOLUNA_NODE_STALE_S", "15"))
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
             "geo", "preload", "show", "show_i", "net", "node_cfg", "tc", "mute", "stats",
-            "show_auto", "show_gap", "show_next_at")
+            "show_auto", "show_gap", "show_next_at", "light_presets")
 
 
 def _save_state():
@@ -296,6 +297,7 @@ async def audio_ws(request):
                         "acc": (None if m.get("acc") is None else float(m["acc"])),
                         "cue": str(m.get("cue") or "")[:40],
                         "kind": str(m.get("kind") or "phone")[:8],
+                        "lit": bool(m.get("lit")),   # LIGHT v2: 実際に光っている端末
                         "t": now(),
                     }
                     if m.get("host"):
@@ -453,7 +455,7 @@ def _light_from(body: dict, id_prefix="light") -> dict:
     pattern = body.get("pattern", "pulse")
     if pattern not in LIGHT_PATTERNS:
         raise BadRequest("pattern must be one of " + "|".join(LIGHT_PATTERNS))
-    return {
+    light = {
         "id": body.get("id") or f"{id_prefix}-{int(now() * 1000)}",
         "pattern": pattern,
         "colors": body.get("colors") or ["#d4af37", "#7fc9a2"],
@@ -461,6 +463,32 @@ def _light_from(body: dict, id_prefix="light") -> dict:
         "speed": float(body.get("speed", 1.0)),
         "brightness": float(body.get("brightness", 1.0)),
         "at": float(body.get("at") or now()),   # パターン位相の基準時刻
+    }
+    # --- LIGHT v2: ゾーン限定・フェード・トーチ(未指定なら載せない=帯域節約) ---
+    zones = body.get("zones")
+    if zones:
+        zs = [str(z).upper()[:8] for z in zones if str(z).strip()]
+        if zs:
+            light["zones"] = zs
+    fade_ms = body.get("fade_ms")
+    if fade_ms:
+        light["fade_ms"] = int(max(0, min(10000, float(fade_ms))))
+    if body.get("torch"):
+        light["torch"] = True
+    return light
+
+
+def _clamp_look(body: dict) -> dict:
+    """プリセット保存用に見た目フィールドだけを検証・正規化する。"""
+    pattern = body.get("pattern", "pulse")
+    if pattern not in LIGHT_PATTERNS:
+        raise BadRequest("pattern must be one of " + "|".join(LIGHT_PATTERNS))
+    return {
+        "pattern": pattern,
+        "colors": body.get("colors") or ["#d4af37", "#7fc9a2"],
+        "bpm": float(body.get("bpm", 120)),
+        "speed": float(body.get("speed", 1.0)),
+        "brightness": float(body.get("brightness", 1.0)),
     }
 
 
@@ -470,7 +498,10 @@ async def do_light(state, body: dict) -> dict:
     if body.get("stop"):
         state["light"] = None
         _save_state()
-        await _broadcast_text(state, json.dumps({"t": "light_stop"}))
+        stop_msg = {"t": "light_stop"}
+        if body.get("fade_ms"):
+            stop_msg["fade_ms"] = int(max(0, min(10000, float(body["fade_ms"]))))
+        await _broadcast_text(state, json.dumps(stop_msg))
         return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
     light = _light_from(body)
     state["light"] = light
@@ -485,7 +516,8 @@ async def api_light(request):
     配り、各端末が (ゾーン位置, 同期時刻) から色をローカル計算する — 音のCUEと
     同じ思想で帯域ゼロ・台数無制限。
     body: {pattern: solid|pulse|wave|plasma|strobe|audio,
-           colors: ["#rrggbb", ...], bpm, speed, brightness, at?} or {stop:true}
+           colors: ["#rrggbb", ...], bpm, speed, brightness, at?,
+           zones?: ["A","B"], fade_ms?: int, torch?: bool} or {stop:true, fade_ms?}
     pattern=audio は再生中キューの音源から端末側がエネルギー包絡を解析して
     明るさに変換する(追加通信なし)。"""
     state = _admin_state(request)
@@ -493,6 +525,29 @@ async def api_light(request):
         return web.json_response(await do_light(state, await request.json()))
     except BadRequest as e:
         raise web.HTTPBadRequest(text=str(e))
+
+
+async def api_light_presets(request):
+    """名前付きライトプリセットの保存/取得/削除(チャンネル別・再起動で復元)。
+    GET → {"ok":true,"presets":{name:look}}
+    POST {"name":"Warm Pulse", ...look} → 保存 / {"name":"X","delete":true} → 削除。"""
+    state = _admin_state(request)
+    presets = state.setdefault("light_presets", {})
+    if request.method == "GET":
+        return web.json_response({"ok": True, "presets": presets})
+    body = await request.json()
+    name = str(body.get("name") or "").strip()[:40]
+    if not name:
+        raise web.HTTPBadRequest(text="name required")
+    if body.get("delete"):
+        presets.pop(name, None)
+    else:
+        try:
+            presets[name] = _clamp_look(body)
+        except BadRequest as e:
+            raise web.HTTPBadRequest(text=str(e))
+    _save_state()
+    return web.json_response({"ok": True, "name": name, "presets": presets})
 
 
 def _wav_duration(url):
@@ -862,6 +917,13 @@ def _track_peaks(state):
             by_zone[z] = by_zone.get(z, 0) + 1
     if playing > st["peak_playing"]:
         st["peak_playing"] = playing
+    lit = 0
+    for meta in state["listeners"].values():
+        rep_ = meta.get("rep") or {}
+        if rep_.get("lit"):
+            lit += 1
+    if lit > st.get("peak_lit", 0):
+        st["peak_lit"] = lit
     for z, c in by_zone.items():
         if c > st["peak_playing_zone"].get(z, 0):
             st["peak_playing_zone"][z] = c
@@ -883,7 +945,7 @@ async def api_stats(request):
     _track_peaks(state)
     if request.query.get("reset") == "1":
         state["stats"] = {"peak_listeners": 0, "peak_playing": 0, "peak_playing_zone": {}, "cues": 0,
-                          "lights": 0, "first_cue": None, "last_cue": None, "started": now()}
+                          "lights": 0, "peak_lit": 0, "first_cue": None, "last_cue": None, "started": now()}
         _save_state()
     st = dict(state["stats"])
     st["uptime_s"] = round(now() - (st["started"] or now()), 1)
@@ -983,7 +1045,7 @@ def _devices_summary(st):
     """端末レポートの集計: FOHが「何台が実際に鳴っているか」を見るため。
     レポート無し(旧client/play.py)は unknown に数える。"""
     agg = {"preloaded": 0, "playing": 0, "idle": 0, "failed": 0, "unknown": 0,
-           "low_battery": 0, "ctx_suspended": 0, "stale": 0, "nodes": 0}
+           "low_battery": 0, "ctx_suspended": 0, "stale": 0, "nodes": 0, "lit": 0}
     by_zone_playing = {}
     t = now()
     for meta in st["listeners"].values():
@@ -995,6 +1057,8 @@ def _devices_summary(st):
             agg["nodes"] += 1
         stt = rep.get("st") or "idle"
         agg[stt if stt in agg else "unknown"] += 1
+        if rep.get("lit"):
+            agg["lit"] += 1
         if stt == "playing":
             z = meta.get("zone") or "?"
             by_zone_playing[z] = by_zone_playing.get(z, 0) + 1
@@ -1201,6 +1265,7 @@ async def status(request):
             "live_lead": st["lead"],
             "cue": st["cue"],
             "light": st["light"],
+            "presets": sorted((st.get("light_presets") or {}).keys()),
             "geo": st["geo"],
             "tc": st.get("tc"),
             "show": {"i": st.get("show_i", -1) + 1,
@@ -1405,6 +1470,8 @@ def main():
         web.post("/api/nodes/assign", api_nodes_assign),
         web.post("/api/align", api_align),
         web.post("/api/light", api_light),
+        web.get("/api/light/presets", api_light_presets),
+        web.post("/api/light/presets", api_light_presets),
         web.post("/api/geo", api_geo),
         web.post("/api/show", api_show),
         web.get("/api/timecode", api_timecode),

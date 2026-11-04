@@ -152,6 +152,7 @@
     <div class="hint" data-i18n="hint">🚩 近くの旗と同じゾーンを選ぶと、会場全体で音がそろいます。画面はつけたままで。</div>
     <div class="hint" data-i18n="hint2">🔈 音が出ない時: iPhoneはサイレントスイッチをOFF・音量を上げて。</div>
     <div class="hint" data-i18n="hint3">🔋 画面ロックで音は止まります。触らなければ自動で暗くなり電池を節約します。</div>
+    <div class="hint" data-i18n="photo">💡 光の演出があります。点滅が苦手な方は画面を伏せるか参加を控えてください(点滅は3Hz上限)。</div>
     <div class="hint privacy" data-i18n="privacy">位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。</div>
     <div class="hint privacy" style="text-align:center"><a href="/about" style="color:var(--gold2);opacity:.8">SOLUNA Sound とは / about ›</a></div>
   </div>
@@ -182,6 +183,7 @@ const I18N = {
         autoZone:'場所からゾーンを自動選択', geoDenied:'位置情報オフ(手動選択)', geoL:'ステージ距離', trimL:'微調整(耳合わせ)',
         preloaded:'準備OK', hint2:'🔈 音が出ない時: iPhoneはサイレントスイッチをOFF・音量を上げて。',
         hint3:'🔋 画面ロックで音は止まります。触らなければ自動で暗くなり電池を節約します。',
+        photo:'💡 光の演出があります。点滅が苦手な方は画面を伏せるか参加を控えてください(点滅は3Hz上限)。',
         npL:'NOW PLAYING', muted:'FOHにより一時ミュート中', gatePrep:'🎫 音の準備中… このまま数秒お待ちください', gateOk:'🎫 準備OK。会場に入ったら ▶ を押してください(通信なしで鳴ります)',
         gateNone:'🎫 まだ配布前です。会場で ▶ を押せば自動で受け取ります', gateFail:'🎫 準備に失敗しました。会場で ▶ を押せばその場で受け取ります',
         netWifi:'📶 このゾーンは会場Wi-Fi「{ssid}」に接続すると同期が良くなります', netLte:'📶 このゾーンはモバイル回線のままでOK(会場Wi-Fiは前方ゾーン専用)',
@@ -196,6 +198,7 @@ const I18N = {
         autoZone:'auto zone from location', geoDenied:'location off (manual)', geoL:'STAGE DIST', trimL:'FINE TRIM',
         preloaded:'ready', hint2:'🔈 No sound? On iPhone, flip the silent switch off and turn the volume up.',
         hint3:'🔋 Locking the screen stops the sound (browser limitation). It dims by itself when idle to save battery.',
+        photo:'💡 Light show uses flashing colors (capped at 3 Hz). Cover the screen or stay out if you are photosensitive.',
         npL:'NOW PLAYING', muted:'Muted by FOH for a moment', gatePrep:'🎫 Getting the sound ready… a few seconds', gateOk:'🎫 Ready. Once inside, tap ▶ (plays without downloading)',
         gateNone:'🎫 Nothing to prepare yet — tap ▶ inside and it arrives by itself', gateFail:'🎫 Preparation failed — tap ▶ inside and it downloads there',
         netWifi:'📶 In this zone, join venue Wi-Fi "{ssid}" for tighter sync', netLte:'📶 In this zone, stay on mobile data (venue Wi-Fi is for the front zones)',
@@ -252,7 +255,7 @@ function sendReport(st){
   if (!(ws && ws.readyState===1)) return;
   ws.send(JSON.stringify({t:'report', st:devState, ctx: ctx ? ctx.state : 'none',
     bat: batLevel, acc: bestRttMs===null ? null : bestRttMs/2,
-    cue: lastCueId||'', kind: SCREEN ? 'screen' : 'phone'}));
+    cue: lastCueId||'', kind: SCREEN ? 'screen' : 'phone', lit: !!light}));
 }
 setInterval(()=>{ if (active) sendReport(); }, 15000);
 (async ()=>{ try{
@@ -614,6 +617,7 @@ function onCueStop(){
 // 各端末がローカル計算する。音連動(audio)はデコード済みキュー音源の
 // エネルギー包絡をローカル解析して明るさへ変換(追加通信ゼロ)。
 let light=null, lightRAF=0, energyEnv=null, energyHop=1024;
+let lightFade=1, lightFadeFrom=1, lightFadeTo=1, lightFadeStart=0, lightFadeDur=0, lightStopping=false;   // fade_ms 用の不透明度
 const jitter = Math.random();                 // plasma用の端末ごとの揺らぎ
 const hex2rgb = h=>{ const v=parseInt(h.replace('#',''),16);
   return [(v>>16)&255,(v>>8)&255,v&255]; };
@@ -692,14 +696,37 @@ function lightColor(){
 function lightLoop(){
   if (!light){ lightRAF=0; return; }
   const [r,g,b] = lightColor();
-  $('lightLayer').style.background = `rgb(${r},${g},${b})`;
+  if (lightFadeDur > 0){
+    const k = Math.min(1, (performance.now()-lightFadeStart)/lightFadeDur);
+    lightFade = lightFadeFrom + (lightFadeTo-lightFadeFrom)*k;
+  } else lightFade = lightFadeTo;
+  const layer = $('lightLayer');
+  layer.style.background = `rgb(${r},${g},${b})`;
+  layer.style.opacity = lightFade;
+  if (lightStopping && lightFade <= 0){       // フェードアウト完了→片付け
+    light = null; lightStopping = false; lightRAF = 0;
+    layer.style.opacity = '';
+    layer.classList.remove('on');
+    $('lightHud').classList.remove('show');
+    armDim();
+    return;
+  }
   lightRAF = requestAnimationFrame(lightLoop);
 }
 function onLight(m){
+  if (m && Array.isArray(m.zones) && m.zones.length && !m.zones.includes(ZONE)){
+    if (light) onLightStop();                 // 他ゾーン宛→点いていれば消す(暗転のまま)
+    return;
+  }
+  lightStopping = false;
   if (REDUCED_MOTION && m && m.pattern){                // 端末のOS設定「視差効果を減らす」を尊重
     m = {...m, pattern: ({strobe:'pulse', plasma:'solid', beat:'pulse'})[m.pattern] || m.pattern};
   }
+  const wasLit = !!light;
   light = m;
+  const dur = Math.max(0, Number(m.fade_ms) || 0);
+  lightFadeFrom = wasLit ? lightFade : 0; lightFadeTo = 1; lightFadeStart = performance.now(); lightFadeDur = dur;
+  lightFade = dur ? lightFadeFrom : 1;
   $('dim').classList.remove('on');            // ライト中は暗転しない(光が演出)
   $('lightLayer').classList.add('on');
   $('hudZone').textContent = customD ? customD+'m'
@@ -708,10 +735,19 @@ function onLight(m){
   if (cueBuf && !energyEnv) energyEnv = buildEnergyEnv(cueBuf);
   if (!lightRAF) lightLoop();
 }
-function onLightStop(){
-  light = null; armDim();
-  $('lightLayer').classList.remove('on');
+function onLightStop(fadeMs){
   $('lightHud').classList.remove('show');
+  const dur = Math.max(0, Number(fadeMs) || 0);
+  if (light && dur > 0){                       // fade_ms 指定時は 1→0 に落としてから隠す
+    lightStopping = true;
+    lightFadeFrom = lightFade; lightFadeTo = 0; lightFadeStart = performance.now(); lightFadeDur = dur;
+    if (!lightRAF) lightLoop();
+    return;
+  }
+  light = null; lightStopping = false; armDim();
+  lightFade = 1; lightFadeDur = 0;
+  $('lightLayer').style.opacity = '';
+  $('lightLayer').classList.remove('on');
 }
 $('lightLayer').onclick = ()=>{               // タップでHUD表示⇔非表示
   $('lightHud').classList.toggle('show');
@@ -781,7 +817,7 @@ function connect(){
       else if (m.t==='mute'){ muted = !!m.on; $('muteBanner').hidden = !muted; if (liveGain) liveGain.gain.value = muted ? 0 : 1;
         if (cueGainNode && pendingCue) cueGainNode.gain.value = muted ? 0 : (pendingCue.gain??1) * ($('vol').value/100) * levelGain(); }
       else if (m.t==='light') onLight(m);
-      else if (m.t==='light_stop') onLightStop();
+      else if (m.t==='light_stop') onLightStop(m.fade_ms);
     } else onFrame(e.data);
   };
   ws.onclose = ()=>{ setLive(false); if(active) setTimeout(connect, 800 + Math.random()*1200); };
