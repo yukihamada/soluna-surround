@@ -178,6 +178,11 @@
     <h2><span class="step">2</span>曲を鳴らす <small>CUE — 事前配布した音源を全端末で同時再生</small></h2>
     <div class="flow"><span class="fs"><b>1</b> 音源を選ぶ</span> <span class="ar">→</span> <span class="fs"><b>2</b> PRELOAD(先に配る)</span> <span class="ar">→</span> <span class="fs"><b>3</b> FIRE(一斉再生)</span></div>
     <div class="assets" id="assets"><div class="asset ghost">読み込み中…(トークンを入れると一覧が出ます)</div></div>
+    <div class="row mt">
+      <label class="ghost" style="cursor:pointer;padding:11px 16px;border-radius:12px;border:1px solid var(--line2);font-size:.9rem;display:inline-flex;align-items:center;min-height:44px;color:var(--txt);text-transform:none;letter-spacing:0">⬆ 音源・映像をアップロード <input type="file" id="assetUpload" accept="audio/*,video/*,image/*" multiple style="display:none"></label>
+      <span class="dim" style="font-size:.8rem;align-self:center">mp3/aac/mp4/jpg — ブラウザから直接サーバへ届きます(コマンド不要)</span>
+    </div>
+    <div id="upProgress" class="s-hint" style="margin:6px 0"></div>
     <div class="row">
       <div class="field grow"><label>Audio URL(手入力可)</label><input id="url" type="text" placeholder="/assets/opening.mp3"></div>
       <div class="field" style="width:84px"><label>Lead s</label><input id="clead" type="number" value="5" min="3"></div>
@@ -563,6 +568,25 @@ async function loadAssets(){
     box.appendChild(d);
   }
 }
+// 音源・映像をブラウザから直接アップロード(コマンド不要 = Web完結)
+$('assetUpload').onchange = async e=>{
+  const files = [...e.target.files]; if (!files.length) return;
+  if (!$('tok').value){ $('upProgress').textContent = '⚠ 先に「設定」で Admin token を入れてください'; return; }
+  let done = 0;
+  for (const f of files){
+    $('upProgress').textContent = `アップロード中… ${done+1}/${files.length}: ${f.name} (${(f.size/1048576).toFixed(1)} MB)`;
+    try{
+      const r = await fetch(`/api/upload?name=${encodeURIComponent(f.name)}`, {
+        method:'POST', headers:{'x-soluna-admin':$('tok').value, 'content-type':'application/octet-stream'},
+        body: f });
+      if (!r.ok) throw new Error(r.status);
+      done++;
+    }catch(err){ $('upProgress').textContent = `✕ ${f.name} 失敗 (${err})`; return; }
+  }
+  $('upProgress').textContent = `✓ ${done}件アップロードしました`;
+  await loadAssets();
+  e.target.value = '';
+};
 $('preload').onclick = async ()=>{
   for (const u of [$('url').value, $('vurl').value])
     if (u) await call('/api/cue', {url: u, preload:true});
