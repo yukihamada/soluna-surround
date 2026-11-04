@@ -910,13 +910,15 @@ async def do_show(state, body: dict) -> dict:
         send_audio = not state.get("show_no_audio")
         send_video = not state.get("show_no_video")
         send_light = not state.get("show_no_light")
+        # 音・光・自動進行の共通基準時刻。音/映像を送らなくても(光だけ運用でも)
+        # タイムラインと自動進行が動くよう、分岐の外で一度だけ解決する。
+        at = _cue_at(state, step)                 # lead / tc(番組タイムコード) どちらでも
         # 音/映像を送らない場合は、前の曲・映像も止める(切り忘れ防止)
         if not (send_audio or send_video):
             state["cue"] = None
             await _broadcast_text(state, json.dumps({"t": "cue_stop"}))
             fired["cue_stopped"] = True
         elif step.get("url") or step.get("video"):
-            at = _cue_at(state, step)             # lead / tc(番組タイムコード) どちらでも
             cue = {"id": f"show{i+1}-{step['label']}", "at": at,
                    "gain": float(step.get("gain", 1.0)),
                    "loop": bool(step.get("loop", False))}
@@ -927,13 +929,12 @@ async def do_show(state, body: dict) -> dict:
             state["cue"] = cue
             await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
             fired["cue"] = cue["id"]
-            # 曲中タイムライン: cue の at(サンプル0) を基準に演出を切り替える
-            if step.get("timeline") and send_light:
-                n = _timeline_start(state, at, step["timeline"])
-                if n:
-                    fired["timeline"] = n
-            else:
-                _timeline_cancel(state)
+        # 曲中タイムライン: at(サンプル0) を基準に演出を切り替える(光を送るときだけ)。
+        # 音・映像OFFの光だけ運用でも動くよう、cue の有無に依存させない。
+        if step.get("timeline") and send_light:
+            n = _timeline_start(state, at, step["timeline"])
+            if n:
+                fired["timeline"] = n
         else:
             _timeline_cancel(state)
         # 光を送らない場合は前の光も消す
