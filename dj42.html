@@ -38,6 +38,11 @@
   .live b{font-size:15px}
   .live span{color:var(--dim);font-size:12px;margin-left:auto}
   .list{padding:0 12px}
+  .toggles{display:flex;gap:8px;padding:0 12px 12px;flex-wrap:wrap}
+  .tg{display:flex;align-items:center;gap:6px;padding:9px 14px;border:1px solid var(--line);border-radius:999px;
+      background:var(--panel);font-size:14px;cursor:pointer;user-select:none}
+  .tg input{width:18px;height:18px;accent-color:var(--gold)}
+  .tg:has(input:checked){border-color:var(--gold);background:#1e1a10}
   .track{display:flex;align-items:center;gap:12px;padding:14px 12px;border:1px solid var(--line);border-radius:14px;
          background:var(--panel);margin-bottom:10px;cursor:pointer;transition:border-color .15s,background .15s}
   .track:active{transform:scale(.99)}
@@ -85,6 +90,12 @@
     <span id="nListeners"></span>
   </div>
 
+  <div class="toggles">
+    <label class="tg"><input type="checkbox" id="tgAudio" checked> 🔊 音</label>
+    <label class="tg"><input type="checkbox" id="tgLight" checked> 💡 光</label>
+    <label class="tg"><input type="checkbox" id="tgVideo"> 🎬 映像</label>
+  </div>
+
   <div class="list" id="list"></div>
 
   <div id="stopRow">
@@ -119,6 +130,18 @@ $('go').onclick = ()=>{
 };
 $('key').addEventListener('keydown', e=>{ if (e.key==='Enter') $('go').click(); });
 try{ if (localStorage.getItem('dj42_ok')==='1') unlock(); }catch(e){}
+// 音/光/映像トグルの記憶
+try{
+  const saved = JSON.parse(localStorage.getItem('dj42_opts')||'{}');
+  if (saved.audio!==undefined) $('tgAudio').checked = saved.audio;
+  if (saved.light!==undefined) $('tgLight').checked = saved.light;
+  if (saved.video!==undefined) $('tgVideo').checked = saved.video;
+}catch(e){}
+['tgAudio','tgLight','tgVideo'].forEach(id=>{
+  $(id).addEventListener('change', ()=>{
+    try{ localStorage.setItem('dj42_opts', JSON.stringify(opts())); }catch(e){}
+  });
+});
 
 // ---- セットリスト取得 ----
 async function load(){
@@ -150,13 +173,23 @@ function mark(i){
 }
 
 // ---- 配信 ----
+function opts(){
+  return {
+    audio: $('tgAudio').checked,
+    light: $('tgLight').checked,
+    video: $('tgVideo').checked
+  };
+}
 async function fire(i){
   mark(i);
-  toast(`「${tracks[i] ? tracks[i].label : i+1}」を全端末へ配信`);
+  const o = opts();
+  const parts = [o.audio?'音':null, o.light?'光':null, o.video?'映像':null].filter(Boolean);
+  toast(parts.length ? `「${tracks[i] ? tracks[i].label : i+1}」を${parts.join('+')}で配信` : '配信する項目がありません');
+  if (!parts.length) return;
   try{
     const r = await fetch('/api/dj42', {
       method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({key: KEY, action:'play', i})
+      body: JSON.stringify({key: KEY, action:'play', i, ...o})
     });
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
@@ -168,7 +201,7 @@ $('stop').onclick = async ()=>{
   mark(-1);
   try{
     await fetch('/api/dj42', {method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({key: KEY, action:'stop'})});
+      body: JSON.stringify({key: KEY, action:'stop', ...opts()})});
   }catch(e){}
   toast('停止しました');
   pollLive();
