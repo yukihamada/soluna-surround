@@ -980,6 +980,8 @@ async def api_show(request):
             "show": {"i": state.get("show_i", -1) + 1, "total": len(show),
                      "auto": bool(state.get("show_auto")), "steps": steps},
             "steps": steps,
+            "trailer": {"h": _ver("/assets/dj42-trailer.mp4"),
+                        "v": _ver("/assets/dj42-trailer-vertical.mp4")},
         })
     state = _admin_state(request)
     try:

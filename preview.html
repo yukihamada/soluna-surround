@@ -36,6 +36,13 @@
   <span class="sub">6曲 · 各曲のスクリーン映像と演出タイムライン（非公開・内部確認用）</span>
 </header>
 <div class="warn">⚠ 内部確認用です。Zamnaブランド表記・アーティスト名・価格等の外部公開は別承認。音源の権利確認も未了。</div>
+<section id="trailer" style="padding:18px 24px 0;max-width:900px">
+  <h2 style="font-size:16px;margin:0 0 8px">トレーラー <em style="color:#8a8a92;font-style:normal;font-size:12px">— 6曲のドロップを繋いだショート映像（16:9 / 9:16縦）</em></h2>
+  <div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">
+    <video id="trailerV" controls preload="metadata" playsinline style="flex:1 1 480px;min-width:280px;border-radius:12px;border:1px solid #2a2a30;background:#000"></video>
+    <video id="trailerVert" controls preload="metadata" playsinline style="width:200px;border-radius:12px;border:1px solid #2a2a30;background:#000"></video>
+  </div>
+</section>
 <div id="grid" class="grid"></div>
 <footer>
   ゾーンは <code>A=最前 → F=最後方</code>。wave は各曲BPMで「2拍でA→Fを1周」。<br>
@@ -47,6 +54,11 @@ const SCENE_JA = {idle:"イントロ",harp:"ハープ",pulse:"キック",wave:"�
 fetch("/api/show?ch=festival").then(r=>r.json()).then(d=>{
   const steps=(d.show&&d.show.steps)||d.steps||[];
   const grid=document.getElementById("grid");
+  // トレーラーはアセット更新時刻でキャッシュを無効化
+  const tv=d.trailer||{};
+  const hEl=document.getElementById("trailerV"), vEl=document.getElementById("trailerVert");
+  if(hEl) hEl.src="/assets/dj42-trailer.mp4"+(tv.h?`?v=${tv.h}`:"");
+  if(vEl) vEl.src="/assets/dj42-trailer-vertical.mp4"+(tv.v?`?v=${tv.v}`:"");
   steps.forEach((s,i)=>{
     const card=document.createElement("div");card.className="card";
     const tl=s.timeline||[];
