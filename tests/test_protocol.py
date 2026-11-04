@@ -270,6 +270,41 @@ async def main():
         st_off3 = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
         check("auto_off: 手動stopで予約取消", st_off3.get("light_off_at") is None)
 
+        # 10d4) LIGHT v2: ゾーン自動巡回(zones_auto) — 光が会場を動き回る
+        r = await s.post(f"{BASE}/api/light?ch=festival",
+                         json={"pattern": "wave", "zones_auto": {"mode": "chase", "period_s": 0.25}},
+                         headers={"x-soluna-admin": ADMIN})
+        zaj = await r.json()
+        check("zones_auto: 開始応答にcfg", r.status == 200 and zaj.get("zones_auto", {}).get("mode") == "chase",
+              str(zaj.get("zones_auto")))
+        await asyncio.sleep(0.9)   # 3〜4フレーム進む
+        frames = [m for m in boxes[1] if isinstance(m, dict) and m.get("t") == "light"
+                  and isinstance(m.get("zones"), list) and m.get("id", "").find("-za") >= 0]
+        zs = [tuple(f["zones"]) for f in frames]
+        check("zones_auto: 複数フレーム配信", len(zs) >= 2, str(zs[:5]))
+        check("zones_auto: ゾーンが変化する", len(set(zs)) >= 2, str(zs[:5]))
+        check("zones_auto: 各フレームは単一ゾーン(chase)", all(len(z) == 1 for z in zs), str(zs[:5]))
+        st_za = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("zones_auto: statusに反映", (st_za.get("zones_auto") or {}).get("mode") == "chase")
+        # stop で巡回も止まる
+        await s.post(f"{BASE}/api/light?ch=festival", json={"stop": True},
+                     headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(0.2)
+        st_za2 = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("zones_auto: stopで巡回停止", st_za2.get("zones_auto") is None)
+        # sweep は幅ぶんのゾーンが同時点灯
+        n_before = len(boxes[1])
+        r = await s.post(f"{BASE}/api/light?ch=festival",
+                         json={"pattern": "wave", "zones_auto": {"mode": "sweep", "period_s": 0.2, "width": 2}},
+                         headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(0.5)
+        sw = [m for m in boxes[1][n_before:] if isinstance(m, dict) and m.get("t") == "light"
+              and isinstance(m.get("zones"), list) and m.get("id", "").find("-za") >= 0]
+        check("zones_auto: sweepは幅2で2ゾーン", sw and all(len(m["zones"]) == 2 for m in sw),
+              str([m["zones"] for m in sw[:3]]))
+        await s.post(f"{BASE}/api/light?ch=festival", json={"stop": True},
+                     headers={"x-soluna-admin": ADMIN})
+
         # 10e) geo API: ステージ座標の登録+config配信+clear
         r = await s.post(f"{BASE}/api/geo?ch=festival",
                          json={"lat": 21.3352, "lng": -158.0879},
@@ -327,6 +362,35 @@ async def main():
         r = await s.post(f"{BASE}/api/show?ch=festival", json={"next": True},
                          headers={"x-soluna-admin": ADMIN})
         check("最後のNEXTはdone", (await r.json()).get("done") is True)
+
+        # 10g2) DJ42ショー: step の light.zones_auto が NEXT で自動巡回を開始する
+        r = await s.post(f"{BASE}/api/show?ch=festival",
+                         json={"steps": [
+                             {"label": "dj42-intro", "video": "/assets/dj42-intro.mp4",
+                              "light": {"pattern": "pulse", "colors": ["#ffffff", "#ffffff"], "bpm": 120}},
+                             {"label": "dj42-drop",
+                              "light": {"pattern": "solid", "colors": ["#ffffff", "#ffffff"],
+                                        "fade_ms": 80, "torch": True}},
+                             {"label": "dj42-main", "video": "/assets/dj42-nowplaying.mp4",
+                              "light": {"pattern": "audio", "colors": ["#ff2a00", "#00e0ff"], "bpm": 128,
+                                        "zones_auto": {"mode": "chase", "period_s": 0.2, "width": 1},
+                                        "torch": True}}]},
+                         headers={"x-soluna-admin": ADMIN})
+        check("dj42: セットリスト3ステップ", (await r.json())["steps"] == 3)
+        for _ in range(3):
+            await s.post(f"{BASE}/api/show?ch=festival", json={"next": True},
+                         headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(0.7)
+        st_dj = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("dj42: main step で zones_auto=chase が起動",
+              (st_dj.get("zones_auto") or {}).get("mode") == "chase", str(st_dj.get("zones_auto")))
+        za_frames = [m for m in boxes[0] if isinstance(m, dict) and m.get("t") == "light"
+                     and m.get("id", "").find("-za") >= 0]
+        check("dj42: 自動巡回フレームが配信される", len(za_frames) >= 2, str(len(za_frames)))
+        await s.post(f"{BASE}/api/light?ch=festival", json={"stop": True},
+                     headers={"x-soluna-admin": ADMIN})
+        await s.post(f"{BASE}/api/show?ch=festival", json={"reset": True},
+                     headers={"x-soluna-admin": ADMIN})
 
         # 10h) ゾーン指定キュー(ウォークテスト): zonesフィールドが配信される
         r = await s.post(f"{BASE}/api/cue?ch=festival",

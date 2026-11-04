@@ -38,6 +38,8 @@ HTTP:
 """
 import asyncio
 import json
+import math
+import random
 import shutil
 import socket
 import struct
@@ -498,6 +500,7 @@ async def do_light(state, body: dict) -> dict:
     40Hz で読む showctl.DmxOut が拾うので、ここでは状態更新+配信だけ。"""
     if body.get("stop"):
         _light_auto_cancel(state)
+        _zone_auto_cancel(state)
         if body.get("fade_ms"):
             _fade_hint = int(max(0, min(10000, float(body["fade_ms"]))))
         else:
@@ -517,11 +520,22 @@ async def do_light(state, body: dict) -> dict:
         _light_auto_schedule(state, now() + max(0.0, float(auto_off)), body.get("then"))
     else:
         _light_auto_cancel(state)
+    # LIGHT v2: ゾーン自動巡回(zones_auto) — 光が会場を勝手に動き回る
+    za = body.get("zones_auto")
+    if za:
+        cfg = za if isinstance(za, dict) else {"mode": str(za)}
+        if body.get("fade_ms") and not cfg.get("fade_ms"):
+            cfg["fade_ms"] = body["fade_ms"]
+        if body.get("torch"):
+            cfg["torch"] = True
+        _zone_auto_start(state, cfg)
+    else:
+        _zone_auto_cancel(state)
     state["stats"]["lights"] += 1
     _save_state()
     await _broadcast_text(state, json.dumps({"t": "light", **light}))
     return {"ok": True, "light": light, "listeners": len(state["listeners"]),
-            "auto_off_at": state.get("light_off_at")}
+            "auto_off_at": state.get("light_off_at"), "zones_auto": state.get("zones_auto")}
 
 
 async def api_light(request):
@@ -652,6 +666,79 @@ def _light_resume_all():
             print(f"[light] auto-off resumed: in {max(0.0, off - now()):.1f}s")
 
 
+# ---- ゾーン自動巡回 (zones_auto): 光が会場を勝手に動き回る --------------------
+# サーバが一定間隔で「点灯するゾーンの組」を計算し直し、lightを再配信する。
+# 端末側は zones を見て自分のゾーンだけ光る(v2)ので、追加実装は不要。
+ZONE_AUTO_MODES = ("sweep", "chase", "random", "bounce")
+
+
+def _zone_auto_cancel(state):
+    t = state.get("_zone_auto_task")
+    if t is not None and not t.done():
+        t.cancel()
+    state["_zone_auto_task"] = None
+    state["zones_auto"] = None
+
+
+def _zone_auto_frame(mode, keys, i, width):
+    """i番目のフレームで点灯するゾーン集合を返す(純関数)。"""
+    n = len(keys)
+    if n == 0:
+        return []
+    width = max(1, min(n, int(width or 1)))
+    if mode == "chase":
+        return [keys[i % n]]
+    if mode == "bounce":
+        period = max(1, 2 * n - 2)
+        k = i % period
+        idx = k if k < n else period - k
+        return [keys[idx % n]]
+    if mode == "random":
+        return [random.choice(keys)]
+    # sweep: width 個の窓が前から後ろへ流れ、端で折り返す
+    start = i % n
+    return [keys[(start + w) % n] for w in range(width)]
+
+
+async def _zone_auto_run(state, cfg):
+    """cfg = {mode, period_s, width, fade_ms, torch}。period_s ごとにフレームを進めて再配信。
+    light が消されたら止まる。"""
+    keys = list((state.get("zones") or {}).keys())
+    i = 0
+    try:
+        while state.get("zones_auto") is cfg and state.get("light"):
+            base = state["light"]
+            zs = _zone_auto_frame(cfg["mode"], keys, i, cfg.get("width", 1))
+            light = dict(base)
+            light["zones"] = zs
+            light["id"] = f"{base.get('id', 'light')}-za{i}"
+            light["at"] = now()
+            if cfg.get("fade_ms"):
+                light["fade_ms"] = int(cfg["fade_ms"])
+            if cfg.get("torch"):
+                light["torch"] = True
+            state["light"] = light
+            await _broadcast_text(state, json.dumps({"t": "light", **light}))
+            i += 1
+            await asyncio.sleep(max(0.05, float(cfg.get("period_s") or 0.6)))
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:                       # noqa: BLE001
+        print(f"[light] zones_auto failed: {e}")
+
+
+def _zone_auto_start(state, cfg):
+    _zone_auto_cancel(state)
+    cfg = {"mode": cfg.get("mode", "sweep"), "period_s": cfg.get("period_s", 0.6),
+           "width": cfg.get("width", 1), "fade_ms": cfg.get("fade_ms") or 0,
+           "torch": bool(cfg.get("torch"))}
+    if cfg["mode"] not in ZONE_AUTO_MODES:
+        cfg["mode"] = "sweep"
+    state["zones_auto"] = cfg
+    state["_zone_auto_task"] = asyncio.get_event_loop().create_task(_zone_auto_run(state, cfg))
+    return cfg
+
+
 async def _auto_fire(state, next_at):
     try:
         await asyncio.sleep(max(0.0, next_at - now()))
@@ -769,6 +856,18 @@ async def do_show(state, body: dict) -> dict:
             state["light"] = light
             await _broadcast_text(state, json.dumps({"t": "light", **light}))
             fired["light"] = light["pattern"]
+            # LIGHT v2: step に zones_auto があれば自動巡回を開始
+            za = step["light"].get("zones_auto")
+            if za:
+                cfg = za if isinstance(za, dict) else {"mode": str(za)}
+                if step["light"].get("fade_ms") and not cfg.get("fade_ms"):
+                    cfg["fade_ms"] = step["light"]["fade_ms"]
+                if step["light"].get("torch"):
+                    cfg["torch"] = True
+                _zone_auto_start(state, cfg)
+                fired["zones_auto"] = cfg["mode"]
+            else:
+                _zone_auto_cancel(state)
         # 自動進行: この step の終わり + gap に次を予約(音/映像を出した step のみ)
         if step.get("url") or step.get("video"):
             nxt = _auto_schedule(state, at, step, i)
@@ -1302,6 +1401,7 @@ async def api_channel_delete(request):
     if channels[name]["listeners"] or channels[name]["source"]:
         raise web.HTTPConflict(text="channel has live connections")
     _light_auto_cancel(channels[name])
+    _zone_auto_cancel(channels[name])
     _auto_cancel(channels[name])
     del channels[name]
     _save_state()
@@ -1334,6 +1434,7 @@ async def status(request):
             "cue": st["cue"],
             "light": st["light"],
             "light_off_at": st.get("light_off_at"),
+            "zones_auto": st.get("zones_auto"),
             "presets": sorted((st.get("light_presets") or {}).keys()),
             "geo": st["geo"],
             "tc": st.get("tc"),

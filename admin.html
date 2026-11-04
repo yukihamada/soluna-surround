@@ -155,7 +155,7 @@
       <summary>セットリストを編集 <span class="dim">(setlist editor)</span></summary>
       <div class="inner">
         <div class="tscroll"><table id="showTab">
-          <thead><tr><th>#</th><th>label</th><th>audio</th><th>長さ</th><th>video</th><th>light</th><th>bpm</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>label</th><th>audio</th><th>長さ</th><th>video</th><th>light</th><th>bpm</th><th>zone</th><th></th></tr></thead>
           <tbody></tbody>
         </table></div>
         <div class="row mt" style="align-items:center;gap:14px">
@@ -240,6 +240,18 @@
       <div class="field" style="width:110px"><label>Fade(ms)</label><input id="fadeMs" type="number" value="0" min="0" max="10000" step="50"></div>
       <div class="field" style="width:130px"><label>自動消灯(s)</label><input id="autoOff" type="number" value="0" min="0" max="3600" step="5"></div>
       <label class="inline"><input type="checkbox" id="torch"> LEDトーチ(iOS)</label>
+    </div>
+    <div class="row mt">
+      <div class="field" style="width:150px"><label>ゾーン自動巡回</label>
+        <select id="zoneAuto">
+          <option value="">OFF(手動)</option>
+          <option value="sweep">SWEEP(波が流れる)</option>
+          <option value="chase">CHASE(1ゾーン追いかけ)</option>
+          <option value="bounce">BOUNCE(往復)</option>
+          <option value="random">RANDOM(ランダム)</option>
+        </select></div>
+      <div class="field" style="width:100px"><label>周期(s)</label><input id="zoneAutoPeriod" type="number" value="0.6" min="0.1" max="5" step="0.1"></div>
+      <div class="field" style="width:90px"><label>幅</label><input id="zoneAutoWidth" type="number" value="2" min="1" max="6" step="1"></div>
     </div>
     <div class="row mt">
       <div class="field grow"><label>Preset</label><select id="presetSel"><option value="">— プリセット —</option></select></div>
@@ -590,6 +602,7 @@ function renderShow(){
       <td><input data-f="video" data-i="${i}" value="${st.video||''}" placeholder="…mp4" style="width:120px"></td>
       <td><select data-f="pat" data-i="${i}">${PATS.map(p=>`<option${p===st.pat?' selected':''}>${p}</option>`).join('')}</select></td>
       <td><input data-f="bpm" data-i="${i}" type="number" value="${st.bpm||120}" style="width:64px"></td>
+      <td><select data-f="zone" data-i="${i}"><option value=""${!st.zone?' selected':''}>—</option>${['sweep','chase','bounce','random'].map(z=>`<option${z===st.zone?' selected':''}>${z}</option>`).join('')}</select></td>
       <td><button class="ghost" data-sdel="${i}">✕</button></td>`;
     tb.appendChild(tr);
   });
@@ -645,7 +658,8 @@ $('showApply').onclick = ()=> call('/api/show', { auto: $('showAuto').checked, g
   steps: showSteps.map(st=>({
     label: st.label, url: st.url||undefined, video: st.video||undefined, dur: st.dur||undefined,
     light: st.pat && st.pat!=='—' ? {pattern:st.pat, colors:[$('col1').value,$('col2').value],
-                                     bpm: st.bpm||120} : undefined }))});
+                                     bpm: st.bpm||120,
+                                     zones_auto: st.zone ? {mode:st.zone, period_s:0.6, width:2} : undefined} : undefined }))});
 $('showNext').onclick = ()=> call('/api/show', {next:true});
 $('showReset').onclick = ()=>{ if (confirm('進行位置を先頭に戻します。OK?')) call('/api/show', {reset:true}); };
 renderShow();
@@ -789,6 +803,10 @@ $('lightGo').onclick = ()=>{
   const autoOff = parseFloat($('autoOff').value || 0);
   if (autoOff > 0) body.auto_off_s = autoOff;    // 指定秒後に自動消灯
   if ($('torch').checked) body.torch = true;
+  const za = $('zoneAuto').value;
+  if (za) body.zones_auto = { mode: za,
+    period_s: parseFloat($('zoneAutoPeriod').value||0.6),
+    width: parseInt($('zoneAutoWidth').value||2, 10) };
   call('/api/light', body);
 };
 $('lightStop').onclick = ()=>{ if (confirm('全端末のライトを消灯します。OK?')) call('/api/light', {stop:true}); };
@@ -835,7 +853,8 @@ setInterval(async ()=>{
     $('lightnow').textContent = c.light ? `● LIGHT: ${c.light.pattern} ${c.light.colors.join(' ')} bpm=${c.light.bpm}`
       + (Array.isArray(c.light.zones) && c.light.zones.length ? ` zones=${c.light.zones.join(',')}` : '')
       + (c.light.fade_ms ? ` fade=${c.light.fade_ms}ms` : '')
-      + (c.light.torch ? ' 🔥torch' : '') : '';
+      + (c.light.torch ? ' 🔥torch' : '')
+      + (c.zones_auto ? ` 🔁${c.zones_auto.mode}@${c.zones_auto.period_s}s` : '') : '';
     if (c.zones) renderZonePick(Object.keys(c.zones));
     if (Array.isArray(c.presets)) renderPresetSel(c.presets);
     $('geonow').textContent = c.geo ? `● STAGE: ${c.geo.lat.toFixed(5)}, ${c.geo.lng.toFixed(5)} — 来場者は📍で自動ゾーン` : '';
