@@ -133,7 +133,7 @@ async function load(){
     const el = document.createElement('div');
     el.className = 'track'; el.dataset.i = i;
     el.innerHTML = `<div class="no">${i+1}</div>
-      <div class="t"><b>${s.label}</b><span>音 + 光 + 映像</span></div>
+      <div class="t"><b>${s.label}</b><span>音 + 光</span></div>
       <div class="dur">${fmt(s.dur)}</div>
       <div class="go">▶</div>`;
     el.onclick = ()=> fire(i);

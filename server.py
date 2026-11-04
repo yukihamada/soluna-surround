@@ -834,6 +834,9 @@ async def do_show(state, body: dict) -> dict:
     """POST /api/show と OSC /soluna/go, /soluna/show/goto が共有する本体。
     auto/gap: 自動進行(各 step の dur[s]+gap 後に次を発火。dur は admin がブラウザで測る or wav ヘッダ)。"""
     touched = False
+    if "no_video" in body:
+        state["show_no_video"] = bool(body["no_video"])
+        touched = True
     if "auto" in body:
         state["show_auto"] = bool(body["auto"])
         if not state["show_auto"]:
@@ -905,7 +908,7 @@ async def do_show(state, body: dict) -> dict:
                    "loop": bool(step.get("loop", False))}
             if step.get("url"):
                 cue["url"] = step["url"]
-            if step.get("video"):
+            if step.get("video") and not state.get("show_no_video"):
                 cue["video"] = step["video"]
             state["cue"] = cue
             await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
@@ -1006,6 +1009,8 @@ async def api_dj42(request):
         raise web.HTTPForbidden(text="bad key")
     state = _chan(body.get("ch") or "festival")
     action = body.get("action") or "play"
+    # 映像は既定で送らない(音と光だけ配信)。no_video:false で映像も送る
+    state["show_no_video"] = body.get("no_video", True)
     try:
         if action == "stop":
             await do_cue(state, {"stop": True})
@@ -1020,8 +1025,17 @@ async def api_dj42(request):
         i = int(body.get("i", 0))
         if i < 0 or i >= len(show):
             raise web.HTTPBadRequest(text="index out of range")
+        step = show[i]
+        old_lead = step.get("lead")
+        step["lead"] = float(body.get("lead", 0.6))   # タップ後すぐ鳴らす(全端末を揃える最小リード)
         state["show_i"] = i - 1              # 次の next で i 番を発火
-        r = await do_show(state, {"next": True})
+        try:
+            r = await do_show(state, {"next": True})
+        finally:
+            if old_lead is None:
+                step.pop("lead", None)
+            else:
+                step["lead"] = old_lead
         return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
     except BadRequest as e:
         raise web.HTTPBadRequest(text=str(e))
