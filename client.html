@@ -325,9 +325,30 @@ function delayMs(){
     z = zones[ZONE] ?? 15;                               // ゾーン旗(フォールバック)
   return Math.max(0, z + baseMs + trimMs);
 }
-// 端末固有の出力レイテンシ(スピーカーまでのHWバッファ)。機種差10〜30msを打ち消す
+// 端末固有の出力レイテンシ(スピーカーまでのHWバッファ)。機種差10〜40msを打ち消す。
+// iOS Safari は outputLatency が未実装のことがあり、その場合 baseLatency(数ms)に落ちて
+// 実際の20〜40msが補正されない — スマホのズレの最大要因。getOutputTimestamp() から直接測る:
+//   今まさに鳴っているサンプルの (contextTime, performanceTime) を返すので、
+//   ctx.currentTime - contextTime = 「今のctx時刻」と「耳に出ている音のctx時刻」の差 = 出力遅延。
+let outLatEma = null;
 function outLatSec(){
-  return (ctx && (ctx.outputLatency || ctx.baseLatency)) || 0;
+  if (!ctx) return 0;
+  let lat = null;
+  try{
+    if (ctx.getOutputTimestamp){
+      const ts = ctx.getOutputTimestamp();
+      if (ts && ts.contextTime > 0 && ctx.currentTime >= ts.contextTime)
+        lat = ctx.currentTime - ts.contextTime;         // 実測(最優先)
+    }
+  }catch(e){}
+  if (lat === null || !(lat >= 0 && lat < 0.3))
+    lat = ctx.outputLatency || ctx.baseLatency || 0;    // フォールバック
+  outLatEma = outLatEma === null ? lat : outLatEma*0.8 + lat*0.2;  // 平滑化
+  return outLatEma;
+}
+// performance時刻 → AudioContext時刻(スケジューリング時計)。同一tickで対にして量子化誤差を抑える。
+function ctxTimeFor(perfMs){
+  return ctx.currentTime + (perfMs - performance.now())/1000;
 }
 
 // ---- GPS自動(ゾーン不要) ------------------------------------------------------
@@ -584,7 +605,6 @@ function armCue(){
   // start時刻からさらに端末固有の出力レイテンシぶん早めて機種差を打ち消す。
   const targetSec = m.at + delayMs()/1000;
   const perfAtCtx = performance.now(), ctxNow = ctx.currentTime;
-  const ctxTimeFor = perfMs => ctxNow + (perfMs - perfAtCtx)/1000;
   const targetPerfMs = targetSec*1000 - offsetMs;
   const oL = outLatSec();
 
