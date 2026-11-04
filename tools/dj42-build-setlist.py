@@ -33,6 +33,9 @@ TRACKS = [  # (file stem, 表示名, 音源ファイル名, スクリーン映�
 
 GOLD = "#d4af37"
 
+# ステム(方式C): demucs htdemucs の4パート。リモコンで選んで流す。
+STEMS = ("drums", "bass", "other", "vocals")
+
 # 会場ゾーン: ステージからの距離順 A(最前)→F(最後方)。Echoa Ridge 暫定距離。
 # 実区画図(site plan)が届いたら server の /api/zones で上書きする。
 N_ZONES = 6
@@ -110,6 +113,10 @@ def main():
             "light": timeline[0]["light"] if timeline else {"pattern": "pulse"},
             "timeline": timeline,
         }
+        # ステム(方式C): demucs で分けたパート別音源。事前に assets へ置いておく。
+        # リモコンで「ドラムだけ」「ボーカル抜き」等を選んで流せる。
+        stems = {s: f"/assets/dj42-{stem}-{s}.m4a" for s in STEMS}
+        step["stems"] = stems
         if video:
             step["video"] = f"/assets/{video}"
         steps.append(step)

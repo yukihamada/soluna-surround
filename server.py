@@ -875,6 +875,9 @@ async def do_show(state, body: dict) -> dict:
                 step["light"] = raw["light"]
             if isinstance(raw.get("timeline"), list):
                 step["timeline"] = raw["timeline"]
+            # ステム(方式C): パート別音源のURL表 {drums,bass,other,vocals}。リモコンで選んで流す。
+            if isinstance(raw.get("stems"), dict):
+                step["stems"] = {str(k): str(v) for k, v in raw["stems"].items() if v}
             steps.append(step)
         state["show"] = steps
         state["show_i"] = -1
@@ -1051,6 +1054,17 @@ async def api_dj42(request):
         if i < 0 or i >= len(show):
             raise web.HTTPBadRequest(text="index out of range")
         step = show[i]
+        # ステム(方式C): 事前に分けたパートだけを流す。url を選んだステムへ差し替える。
+        # 差し替えはこのリクエスト内だけで、state.json には残さない。
+        stem = (body.get("stem") or "").strip().lower()
+        saved = None
+        if stem and stem != "full":
+            stems = step.get("stems") or {}
+            if stem not in stems:
+                raise web.HTTPBadRequest(text=f"unknown stem: {stem}")
+            saved = dict(step)
+            step["url"] = stems[stem]
+            step.pop("video", None)          # ステム再生では映像は送らない
         old_lead = step.get("lead")
         step["lead"] = float(body.get("lead", 0.6))   # タップ後すぐ鳴らす(全端末を揃える最小リード)
         state["show_i"] = i - 1              # 次の next で i 番を発火
@@ -1061,7 +1075,11 @@ async def api_dj42(request):
                 step.pop("lead", None)
             else:
                 step["lead"] = old_lead
-        return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
+            if saved is not None:
+                step.clear(); step.update(saved)
+                _save_state()                # 差し替えを永続化しない
+        return web.json_response({"ok": True, **r, "stem": stem or "full",
+                                  "listeners": len(state["listeners"])})
     except BadRequest as e:
         raise web.HTTPBadRequest(text=str(e))
 

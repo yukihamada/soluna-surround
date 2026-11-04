@@ -42,6 +42,8 @@ async def main():
                     {"at": 0.4, "light": {"pattern": "audio", "colors": ["#d4af37", "#ffffff"], "bpm": 120}},
                     {"at": 1.2, "light": {"pattern": "pulse", "colors": ["#25b6f4", "#f46325"], "bpm": 120}},
                 ],
+                "stems": {"drums": "/assets/dj42-T-drums.m4a",
+                          "vocals": "/assets/dj42-T-vocals.m4a"},
             }
             r = await s.post(f"{BASE}/api/show?ch=festival", json={"steps": [step]}, headers=H)
             check("show 登録", r.status == 200, str(r.status))
@@ -78,6 +80,33 @@ async def main():
             # --- 4) 誤キーは403 ---
             r = await s.post(f"{BASE}/api/dj42", json={"key": "nope", "action": "play", "i": 0})
             check("誤キー403", r.status == 403, str(r.status))
+
+            # --- 4b) ステム(方式C): 選んだパートだけを cue の url に載せる ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "play", "i": 0, "stem": "drums",
+                                   "audio": True, "light": True, "video": False})
+            body = await r.json()
+            check("ステムdrums: play 200", r.status == 200 and body.get("ok"), str(body))
+            check("ステムdrums: stem=drums を返す", body.get("stem") == "drums", str(body.get("stem")))
+            cue = await recv_json(lambda d: d.get("t") == "cue", timeout=2)
+            check("ステムdrums: cue.url がステム音源", cue is not None and cue.get("url") == "/assets/dj42-T-drums.m4a",
+                  str(cue and cue.get("url")))
+            check("ステムdrums: 映像は送らない", cue is not None and "video" not in cue, str(cue))
+
+            # --- 4c) 未知のステムは400 ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "play", "i": 0, "stem": "nope",
+                                   "audio": True, "light": True})
+            check("未知ステム400", r.status == 400, str(r.status))
+
+            # --- 4d) full は通常の url のまま ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "play", "i": 0, "stem": "full",
+                                   "audio": True, "light": True, "video": False})
+            body = await r.json()
+            cue = await recv_json(lambda d: d.get("t") == "cue", timeout=2)
+            check("ステムfull: cue.url は通常音源", cue is not None and cue.get("url") == "/assets/x.mp3",
+                  str(cue and cue.get("url")))
 
             # --- 5) stop で音・光とも停止 ---
             r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "stop"})
