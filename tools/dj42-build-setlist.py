@@ -22,16 +22,21 @@ CROWD = os.path.expanduser(
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 
-TRACKS = [  # (file stem, 表示名, 音源ファイル名, スクリーン映像(任意))
+TRACKS = [  # (file stem, 表示名, 音源ファイル名, スクリーン映像)
     ("aetheria", "Aetheria", "dj42-aetheria.m4a", "dj42-aetheria-screen.mp4"),
-    ("vip-sovereignty", "40Hz VIP Sovereignty", "dj42-vip-sovereignty.m4a", None),
-    ("emotional-gravity", "Emotional Gravity", "dj42-emotional-gravity.m4a", None),
-    ("aura", "We Got the AURA", "dj42-aura.m4a", None),
-    ("amapiano", "Quantum Afro-Amapiano", "dj42-amapiano.m4a", None),
-    ("prada", "PRADA (Mainstage Techno Overdrive)", "dj42-prada.m4a", None),
+    ("vip-sovereignty", "40Hz VIP Sovereignty", "dj42-vip-sovereignty.m4a", "dj42-vip-sovereignty-screen.mp4"),
+    ("emotional-gravity", "Emotional Gravity", "dj42-emotional-gravity.m4a", "dj42-emotional-gravity-screen.mp4"),
+    ("aura", "We Got the AURA", "dj42-aura.m4a", "dj42-aura-screen.mp4"),
+    ("amapiano", "Quantum Afro-Amapiano", "dj42-amapiano.m4a", "dj42-amapiano-screen.mp4"),
+    ("prada", "PRADA (Mainstage Techno Overdrive)", "dj42-prada.m4a", "dj42-prada-screen.mp4"),
 ]
 
 GOLD = "#d4af37"
+
+# 会場ゾーン: ステージからの距離順 A(最前)→F(最後方)。Echoa Ridge 暫定距離。
+# 実区画図(site plan)が届いたら server の /api/zones で上書きする。
+N_ZONES = 6
+ZONE_DIST_M = {"A": 0, "B": 15, "C": 30, "D": 45, "E": 60, "F": 80}
 
 
 def hsl_hex(h, s=0.9, l=0.55):
@@ -58,8 +63,11 @@ def scene_light(scene, hue, bpm, text):
     if scene == "harp":
         return {"pattern": "audio", "colors": [GOLD, "#ffffff"], "bpm": bpm}
     if scene == "wave":
+        # crowd-view と同じ「2拍でゾーン A→F を1周」。period_s = 2拍秒 / ゾーン数(6)。
+        # 端末は自分のゾーンだけ光るので、サーバの sweep が前→後ろへ波を流す。
+        period = round((120.0 / bpm) / N_ZONES, 3)
         return {"pattern": "wave", "colors": [c1, c2], "bpm": bpm,
-                "zones_auto": {"mode": "sweep", "period_s": 0.5, "width": 2}}
+                "zones_auto": {"mode": "sweep", "period_s": period, "width": 1}}
     if scene == "rainbow":
         return {"pattern": "beat", "colors": ["#ff2a00", "#00e0ff"], "bpm": bpm}
     if scene == "message":
