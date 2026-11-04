@@ -43,6 +43,12 @@
       background:var(--panel);font-size:14px;cursor:pointer;user-select:none}
   .tg input{width:18px;height:18px;accent-color:var(--gold)}
   .tg:has(input:checked){border-color:var(--gold);background:#1e1a10}
+  /* ---- ステム(音のパート)選択 ---- */
+  .stems{display:flex;align-items:center;gap:8px;padding:0 12px 12px;flex-wrap:wrap}
+  .stems .lbl{color:var(--dim);font-size:12px;margin-right:2px}
+  .stem{padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:var(--panel);
+        color:var(--ink);font-size:13px;cursor:pointer}
+  .stem.on{border-color:var(--gold);background:#1e1a10;color:#f5e6b8;font-weight:700}
   .track{display:flex;align-items:center;gap:12px;padding:14px 12px;border:1px solid var(--line);border-radius:14px;
          background:var(--panel);margin-bottom:10px;cursor:pointer;transition:border-color .15s,background .15s}
   .track:active{transform:scale(.99)}
@@ -96,6 +102,15 @@
     <label class="tg"><input type="checkbox" id="tgVideo"> 🎬 映像</label>
   </div>
 
+  <div class="stems" id="stemRow">
+    <span class="lbl">音のパート</span>
+    <button class="stem on" data-stem="full">全体</button>
+    <button class="stem" data-stem="drums">ドラム</button>
+    <button class="stem" data-stem="bass">ベース</button>
+    <button class="stem" data-stem="other">その他</button>
+    <button class="stem" data-stem="vocals">ボーカル</button>
+  </div>
+
   <div class="list" id="list"></div>
 
   <div id="stopRow">
@@ -111,6 +126,8 @@
 const KEY = 'dj42';
 const $ = id => document.getElementById(id);
 let tracks = [], idx = -1, liveTimer = null;
+let stem = 'full';                 // 選択中のステム(音のパート)。既定=全体
+const STEM_LABEL = {full:'全体', drums:'ドラム', bass:'ベース', other:'その他', vocals:'ボーカル'};
 
 function toast(msg){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -141,6 +158,17 @@ try{
   $(id).addEventListener('change', ()=>{
     try{ localStorage.setItem('dj42_opts', JSON.stringify(opts())); }catch(e){}
   });
+});
+// ステム選択の記憶
+try{ const s = localStorage.getItem('dj42_stem'); if (s && STEM_LABEL[s]) stem = s; }catch(e){}
+document.querySelectorAll('.stem').forEach(b=>{
+  b.classList.toggle('on', b.dataset.stem === stem);
+  b.onclick = ()=>{
+    stem = b.dataset.stem;
+    document.querySelectorAll('.stem').forEach(x=>x.classList.toggle('on', x===b));
+    try{ localStorage.setItem('dj42_stem', stem); }catch(e){}
+    toast(stem==='full' ? '音は全体で流します' : `音は「${STEM_LABEL[stem]}」だけ流します`);
+  };
 });
 
 // ---- セットリスト取得 ----
@@ -183,13 +211,13 @@ function opts(){
 async function fire(i){
   mark(i);
   const o = opts();
-  const parts = [o.audio?'音':null, o.light?'光':null, o.video?'映像':null].filter(Boolean);
+  const parts = [o.audio?('音'+(stem!=='full'?'('+STEM_LABEL[stem]+')':'')):null, o.light?'光':null, o.video?'映像':null].filter(Boolean);
   toast(parts.length ? `「${tracks[i] ? tracks[i].label : i+1}」を${parts.join('+')}で配信` : '配信する項目がありません');
   if (!parts.length) return;
   try{
     const r = await fetch('/api/dj42', {
       method:'POST', headers:{'content-type':'application/json'},
-      body: JSON.stringify({key: KEY, action:'play', i, ...o})
+      body: JSON.stringify({key: KEY, action:'play', i, stem, ...o})
     });
     if (!r.ok) throw new Error(r.status);
     const d = await r.json();
