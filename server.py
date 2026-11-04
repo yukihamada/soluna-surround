@@ -1570,6 +1570,10 @@ async def preview_page(request):
     return web.FileResponse(os.path.join(HERE, "preview.html"))
 
 
+async def dj42_page(request):
+    return web.FileResponse(os.path.join(HERE, "dj42.html"))
+
+
 async def favicon(request):
     return web.FileResponse(os.path.join(HERE, "icons", "icon-192.png"))
 
@@ -1722,6 +1726,7 @@ def main():
         web.get("/connect", connect_page),  # 既存システムの繋げ方(卓/Dante/AES67/OSC/TC/Art-Net/Pi)
         web.get("/dj", dj_page),
         web.get("/preview", preview_page),  # DJ42セットリストの非公開プレビュー(映像+演出)
+        web.get("/dj42", dj42_page),        # キー(dj42)で6曲を再生するスマホ用プレイヤー
         web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),
         web.get("/sw.js", sw),
