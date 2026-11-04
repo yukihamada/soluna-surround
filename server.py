@@ -990,6 +990,43 @@ async def api_show(request):
         raise web.HTTPBadRequest(text=str(e))
 
 
+DJ42_KEY = os.environ.get("SOLUNA_DJ42_KEY", "dj42")
+
+
+async def api_dj42(request):
+    """キー(dj42)だけで6曲を全端末へ配信する簡易リモコン。
+    音+映像+ライト+曲中タイムラインを1つの同期瞬間として発火する(本体は do_show)。
+    body: {key:"dj42", action:"play", i:<0始まり>} | {action:"stop"} | {action:"next"}
+    認証は admin ではなく専用キー(会場スタッフがスマホから叩けるように)。"""
+    try:
+        body = await request.json()
+    except Exception:
+        raise web.HTTPBadRequest(text="json body required")
+    if (body.get("key") or "").strip().lower() != DJ42_KEY.lower():
+        raise web.HTTPForbidden(text="bad key")
+    state = _chan(body.get("ch") or "festival")
+    action = body.get("action") or "play"
+    try:
+        if action == "stop":
+            await do_cue(state, {"stop": True})
+            await do_light(state, {"stop": True})
+            return web.json_response({"ok": True, "stopped": True,
+                                      "listeners": len(state["listeners"])})
+        if action == "next":
+            r = await do_show(state, {"next": True})
+            return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
+        # play: 指定トラックを発火(0始まり)
+        show = state.get("show") or []
+        i = int(body.get("i", 0))
+        if i < 0 or i >= len(show):
+            raise web.HTTPBadRequest(text="index out of range")
+        state["show_i"] = i - 1              # 次の next で i 番を発火
+        r = await do_show(state, {"next": True})
+        return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
+    except BadRequest as e:
+        raise web.HTTPBadRequest(text=str(e))
+
+
 async def flags_page(request):
     """A4印刷用のゾーン旗: 大きなゾーン文字+そのゾーン直行のQR。1ゾーン=1ページ。?gate=1 で入場QR。"""
     ch = request.query.get("ch", "festival")
@@ -1727,6 +1764,7 @@ def main():
         web.get("/dj", dj_page),
         web.get("/preview", preview_page),  # DJ42セットリストの非公開プレビュー(映像+演出)
         web.get("/dj42", dj42_page),        # キー(dj42)で6曲を再生するスマホ用プレイヤー
+        web.post("/api/dj42", api_dj42),    # キーだけで全端末へ音+光を配信する簡易リモコン
         web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),
         web.get("/sw.js", sw),
