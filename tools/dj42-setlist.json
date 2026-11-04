@@ -17,6 +17,8 @@
    "timeline": [
     {
      "at": 0.0,
+     "scene": "idle",
+     "title": "イントロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -28,6 +30,8 @@
     },
     {
      "at": 8.333,
+     "scene": "harp",
+     "title": "ハープ",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -39,6 +43,8 @@
     },
     {
      "at": 16.344,
+     "scene": "pulse",
+     "title": "キックが入る",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -50,6 +56,8 @@
     },
     {
      "at": 32.368,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -66,6 +74,8 @@
     },
     {
      "at": 48.392,
+     "scene": "harp",
+     "title": "ブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -77,6 +87,8 @@
     },
     {
      "at": 54.401,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -89,6 +101,8 @@
     },
     {
      "at": 56.404,
+     "scene": "rainbow",
+     "title": "中盤の盛り上がり",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -100,6 +114,8 @@
     },
     {
      "at": 72.427,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -116,6 +132,8 @@
     },
     {
      "at": 88.451,
+     "scene": "pulse",
+     "title": "パルス",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -127,6 +145,8 @@
     },
     {
      "at": 104.474,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -143,6 +163,8 @@
     },
     {
      "at": 120.498,
+     "scene": "rainbow",
+     "title": "虹",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -154,6 +176,8 @@
     },
     {
      "at": 134.519,
+     "scene": "harp",
+     "title": "大きなブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -165,6 +189,8 @@
     },
     {
      "at": 148.539,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -177,6 +203,8 @@
     },
     {
      "at": 152.545,
+     "scene": "drop",
+     "title": "ドロップ",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -190,6 +218,8 @@
     },
     {
      "at": 166.566,
+     "scene": "idle",
+     "title": "アウトロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -201,6 +231,8 @@
     },
     {
      "at": 170.572,
+     "scene": "hold",
+     "title": "STOP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -230,6 +262,8 @@
    "timeline": [
     {
      "at": 0.0,
+     "scene": "idle",
+     "title": "イントロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -241,6 +275,8 @@
     },
     {
      "at": 12.088,
+     "scene": "harp",
+     "title": "ハープ",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -252,6 +288,8 @@
     },
     {
      "at": 21.843,
+     "scene": "pulse",
+     "title": "キックが入る",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -263,6 +301,8 @@
     },
     {
      "at": 45.257,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -279,6 +319,8 @@
     },
     {
      "at": 66.719,
+     "scene": "harp",
+     "title": "ブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -290,6 +332,8 @@
     },
     {
      "at": 76.474,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -302,6 +346,8 @@
     },
     {
      "at": 78.425,
+     "scene": "rainbow",
+     "title": "中盤の盛り上がり",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -313,6 +359,8 @@
     },
     {
      "at": 101.839,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -329,6 +377,8 @@
     },
     {
      "at": 123.301,
+     "scene": "pulse",
+     "title": "パルス",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -340,6 +390,8 @@
     },
     {
      "at": 144.763,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -356,6 +408,8 @@
     },
     {
      "at": 168.176,
+     "scene": "rainbow",
+     "title": "虹",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -367,6 +421,8 @@
     },
     {
      "at": 187.688,
+     "scene": "harp",
+     "title": "大きなブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -378,6 +434,8 @@
     },
     {
      "at": 207.199,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -390,6 +448,8 @@
     },
     {
      "at": 213.052,
+     "scene": "drop",
+     "title": "ドロップ",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -403,6 +463,8 @@
     },
     {
      "at": 232.563,
+     "scene": "idle",
+     "title": "アウトロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -414,6 +476,8 @@
     },
     {
      "at": 238.416,
+     "scene": "hold",
+     "title": "STOP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -443,6 +507,8 @@
    "timeline": [
     {
      "at": 0.0,
+     "scene": "idle",
+     "title": "イントロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -454,6 +520,8 @@
     },
     {
      "at": 9.958,
+     "scene": "harp",
+     "title": "ハープ",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -465,6 +533,8 @@
     },
     {
      "at": 19.484,
+     "scene": "pulse",
+     "title": "キックが入る",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -476,6 +546,8 @@
     },
     {
      "at": 38.536,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -492,6 +564,8 @@
     },
     {
      "at": 55.683,
+     "scene": "harp",
+     "title": "ブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -503,6 +577,8 @@
     },
     {
      "at": 63.304,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -515,6 +591,8 @@
     },
     {
      "at": 65.21,
+     "scene": "rainbow",
+     "title": "中盤の盛り上がり",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -526,6 +604,8 @@
     },
     {
      "at": 84.262,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -542,6 +622,8 @@
     },
     {
      "at": 103.314,
+     "scene": "pulse",
+     "title": "パルス",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -553,6 +635,8 @@
     },
     {
      "at": 122.366,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -569,6 +653,8 @@
     },
     {
      "at": 139.514,
+     "scene": "rainbow",
+     "title": "虹",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -580,6 +666,8 @@
     },
     {
      "at": 156.661,
+     "scene": "harp",
+     "title": "大きなブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -591,6 +679,8 @@
     },
     {
      "at": 171.902,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -603,6 +693,8 @@
     },
     {
      "at": 177.618,
+     "scene": "drop",
+     "title": "ドロップ",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -616,6 +708,8 @@
     },
     {
      "at": 192.86,
+     "scene": "idle",
+     "title": "アウトロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -627,6 +721,8 @@
     },
     {
      "at": 198.576,
+     "scene": "hold",
+     "title": "STOP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -656,6 +752,8 @@
    "timeline": [
     {
      "at": 0.0,
+     "scene": "idle",
+     "title": "イントロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -667,6 +765,8 @@
     },
     {
      "at": 11.486,
+     "scene": "harp",
+     "title": "ハープ",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -678,6 +778,8 @@
     },
     {
      "at": 20.838,
+     "scene": "pulse",
+     "title": "キックが入る",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -689,6 +791,8 @@
     },
     {
      "at": 43.284,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -705,6 +809,8 @@
     },
     {
      "at": 63.859,
+     "scene": "harp",
+     "title": "ブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -716,6 +822,8 @@
     },
     {
      "at": 71.341,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -728,6 +836,8 @@
     },
     {
      "at": 75.082,
+     "scene": "rainbow",
+     "title": "中盤の盛り上がり",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -739,6 +849,8 @@
     },
     {
      "at": 95.658,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -755,6 +867,8 @@
     },
     {
      "at": 116.233,
+     "scene": "pulse",
+     "title": "パルス",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -766,6 +880,8 @@
     },
     {
      "at": 138.679,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -782,6 +898,8 @@
     },
     {
      "at": 159.254,
+     "scene": "rainbow",
+     "title": "虹",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -793,6 +911,8 @@
     },
     {
      "at": 177.959,
+     "scene": "harp",
+     "title": "大きなブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -804,6 +924,8 @@
     },
     {
      "at": 196.664,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -816,6 +938,8 @@
     },
     {
      "at": 202.275,
+     "scene": "drop",
+     "title": "ドロップ",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -829,6 +953,8 @@
     },
     {
      "at": 220.98,
+     "scene": "idle",
+     "title": "アウトロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -840,6 +966,8 @@
     },
     {
      "at": 226.592,
+     "scene": "hold",
+     "title": "STOP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -869,6 +997,8 @@
    "timeline": [
     {
      "at": 0.0,
+     "scene": "idle",
+     "title": "イントロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -880,6 +1010,8 @@
     },
     {
      "at": 10.18,
+     "scene": "harp",
+     "title": "ハープ",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -891,6 +1023,8 @@
     },
     {
      "at": 18.03,
+     "scene": "pulse",
+     "title": "キックが入る",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -902,6 +1036,8 @@
     },
     {
      "at": 35.692,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -918,6 +1054,8 @@
     },
     {
      "at": 53.355,
+     "scene": "harp",
+     "title": "ブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -929,6 +1067,8 @@
     },
     {
      "at": 59.242,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -941,6 +1081,8 @@
     },
     {
      "at": 63.167,
+     "scene": "rainbow",
+     "title": "中盤の盛り上がり",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -952,6 +1094,8 @@
     },
     {
      "at": 80.829,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -968,6 +1112,8 @@
     },
     {
      "at": 98.491,
+     "scene": "pulse",
+     "title": "パルス",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -979,6 +1125,8 @@
     },
     {
      "at": 116.154,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -995,6 +1143,8 @@
     },
     {
      "at": 133.816,
+     "scene": "rainbow",
+     "title": "虹",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -1006,6 +1156,8 @@
     },
     {
      "at": 149.516,
+     "scene": "harp",
+     "title": "大きなブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -1017,6 +1169,8 @@
     },
     {
      "at": 163.253,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -1029,6 +1183,8 @@
     },
     {
      "at": 169.14,
+     "scene": "drop",
+     "title": "ドロップ",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -1042,6 +1198,8 @@
     },
     {
      "at": 184.84,
+     "scene": "idle",
+     "title": "アウトロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -1053,6 +1211,8 @@
     },
     {
      "at": 188.765,
+     "scene": "hold",
+     "title": "STOP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -1082,6 +1242,8 @@
    "timeline": [
     {
      "at": 0.0,
+     "scene": "idle",
+     "title": "イントロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -1093,6 +1255,8 @@
     },
     {
      "at": 8.869,
+     "scene": "harp",
+     "title": "ハープ",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -1104,6 +1268,8 @@
     },
     {
      "at": 19.413,
+     "scene": "pulse",
+     "title": "キックが入る",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -1115,6 +1281,8 @@
     },
     {
      "at": 36.986,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -1131,6 +1299,8 @@
     },
     {
      "at": 56.317,
+     "scene": "harp",
+     "title": "ブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -1142,6 +1312,8 @@
     },
     {
      "at": 63.346,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -1154,6 +1326,8 @@
     },
     {
      "at": 65.104,
+     "scene": "rainbow",
+     "title": "中盤の盛り上がり",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -1165,6 +1339,8 @@
     },
     {
      "at": 84.434,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -1181,6 +1357,8 @@
     },
     {
      "at": 103.765,
+     "scene": "pulse",
+     "title": "パルス",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -1192,6 +1370,8 @@
     },
     {
      "at": 123.095,
+     "scene": "wave",
+     "title": "ウェーブ",
      "light": {
       "pattern": "wave",
       "colors": [
@@ -1208,6 +1388,8 @@
     },
     {
      "at": 140.669,
+     "scene": "rainbow",
+     "title": "虹",
      "light": {
       "pattern": "beat",
       "colors": [
@@ -1219,6 +1401,8 @@
     },
     {
      "at": 158.242,
+     "scene": "harp",
+     "title": "大きなブレイク",
      "light": {
       "pattern": "audio",
       "colors": [
@@ -1230,6 +1414,8 @@
     },
     {
      "at": 174.058,
+     "scene": "message",
+     "title": "PHONES UP",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -1242,6 +1428,8 @@
     },
     {
      "at": 179.33,
+     "scene": "drop",
+     "title": "ドロップ",
      "light": {
       "pattern": "solid",
       "colors": [
@@ -1255,6 +1443,8 @@
     },
     {
      "at": 195.146,
+     "scene": "idle",
+     "title": "アウトロ",
      "light": {
       "pattern": "pulse",
       "colors": [
@@ -1266,6 +1456,8 @@
     },
     {
      "at": 200.418,
+     "scene": "hold",
+     "title": "STOP",
      "light": {
       "pattern": "solid",
       "colors": [

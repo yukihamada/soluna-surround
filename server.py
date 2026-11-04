@@ -960,7 +960,27 @@ async def api_show(request):
     """ショーランナー: 一晩のセットリストを組み、NEXTボタンだけで進行する。
     各ステップ = 音(url) + 映像(video) + ライト(light) の束を1つの同期瞬間として発火。
     body: {steps:[{label,url?,video?,gain?,loop?,lead?|tc?,light:{pattern,colors,bpm,...}?}]}
-        | {next:true} | {goto:<1始まりの番号>} | {reset:true}"""
+        | {next:true} | {goto:<1始まりの番号>} | {reset:true}
+    GET: 現在のセットリスト(プレビュー用・読み取りのみ、秘密を含まないので公開)。"""
+    if request.method == "GET":
+        state = _chan(request.query.get("ch", "festival"))
+        show = state.get("show") or []
+
+        def _ver(u):
+            """/assets/x の更新時刻(プレビューのキャッシュバスター用)。"""
+            if not isinstance(u, str) or not u.startswith("/assets/"):
+                return 0
+            try:
+                return int(os.path.getmtime(os.path.join(ASSETS, os.path.basename(u))))
+            except OSError:
+                return 0
+
+        steps = [dict(s, _v=max(_ver(s.get("url")), _ver(s.get("video")))) for s in show]
+        return web.json_response({
+            "show": {"i": state.get("show_i", -1) + 1, "total": len(show),
+                     "auto": bool(state.get("show_auto")), "steps": steps},
+            "steps": steps,
+        })
     state = _admin_state(request)
     try:
         return web.json_response(await do_show(state, await request.json()))
@@ -1544,6 +1564,10 @@ async def dj_page(request):
     return web.FileResponse(os.path.join(HERE, "dj.html"))
 
 
+async def preview_page(request):
+    return web.FileResponse(os.path.join(HERE, "preview.html"))
+
+
 async def favicon(request):
     return web.FileResponse(os.path.join(HERE, "icons", "icon-192.png"))
 
@@ -1570,7 +1594,7 @@ async def cache_headers(request, handler):
     if p.startswith("/assets/"):
         resp.headers.setdefault("Cache-Control", "public, max-age=86400")
         resp.headers.setdefault("Access-Control-Allow-Origin", "*")
-    elif p in ("/", "/screen", "/admin", "/dj", "/sw.js", "/mic", "/flags"):
+    elif p in ("/", "/screen", "/admin", "/dj", "/preview", "/sw.js", "/mic", "/flags"):
         resp.headers.setdefault("Cache-Control", "no-cache")
     return resp
 
@@ -1695,6 +1719,7 @@ def main():
         web.get("/about", about_page),      # 製品サイト(何か・画面・つなぎ方・箱・数字)
         web.get("/connect", connect_page),  # 既存システムの繋げ方(卓/Dante/AES67/OSC/TC/Art-Net/Pi)
         web.get("/dj", dj_page),
+        web.get("/preview", preview_page),  # DJ42セットリストの非公開プレビュー(映像+演出)
         web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),
         web.get("/sw.js", sw),
@@ -1716,6 +1741,7 @@ def main():
         web.post("/api/light/presets", api_light_presets),
         web.post("/api/geo", api_geo),
         web.post("/api/show", api_show),
+        web.get("/api/show", api_show),       # セットリスト読み取り(プレビュー用)
         web.get("/api/timecode", api_timecode),
         web.post("/api/timecode", api_timecode),
         web.get("/flags", flags_page),

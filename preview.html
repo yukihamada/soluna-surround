@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SOLUNA SOUND · DJ42 プレビュー</title>
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  :root{--gold:#d4af37;--bg:#0a0a0c;--panel:#141418;--line:#2a2a30;--dim:#8a8a92}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:#eee;font:15px/1.5 "Helvetica Neue",Arial,"Hiragino Sans",sans-serif}
+  header{padding:22px 24px 6px;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  h1{font-size:22px;margin:0;letter-spacing:1px}
+  h1 span{background:linear-gradient(90deg,#ff3d6e,#ff8a3d,#ffcf5c);-webkit-background-clip:text;color:transparent}
+  .sub{color:var(--dim);font-size:13px}
+  .warn{margin:10px 24px;padding:10px 14px;border:1px solid #6a4a1a;background:#2a1f0a;border-radius:8px;font-size:13px;color:#f0c75a}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;padding:18px 24px 40px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column}
+  .card h2{font-size:15px;margin:0;padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+  .card h2 b{color:var(--gold);font-weight:600}
+  .card h2 em{color:var(--dim);font-style:normal;font-size:12px}
+  video{width:100%;display:block;background:#000;aspect-ratio:16/9}
+  .meta{padding:10px 14px;font-size:12px;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap}
+  .scenes{padding:8px 10px 12px;display:flex;flex-wrap:wrap;gap:6px}
+  .sc{font-size:11px;padding:3px 8px;border-radius:999px;border:1px solid var(--line);color:#cfcfd6;background:#1c1c22}
+  .sc b{color:var(--gold);font-weight:600}
+  .bar{height:4px;background:#222;border-radius:2px;overflow:hidden;margin:0 14px 12px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#ff3d6e,#ffcf5c);width:0}
+  footer{color:var(--dim);font-size:12px;padding:0 24px 40px}
+  footer code{color:#cfcfd6}
+</style>
+</head>
+<body>
+<header>
+  <h1>SOLUNA <span>SOUND</span> · DJ42 プレビュー</h1>
+  <span class="sub">6曲 · 各曲のスクリーン映像と演出タイムライン（非公開・内部確認用）</span>
+</header>
+<div class="warn">⚠ 内部確認用です。Zamnaブランド表記・アーティスト名・価格等の外部公開は別承認。音源の権利確認も未了。</div>
+<div id="grid" class="grid"></div>
+<footer>
+  ゾーンは <code>A=最前 → F=最後方</code>。wave は各曲BPMで「2拍でA→Fを1周」。<br>
+  本番投入: <code>tools/dj42-upload.sh</code> → <code>tools/dj42-zones.sh</code> → <code>tools/dj42-show.sh</code>
+</footer>
+<script>
+const SCENE_JA = {idle:"イントロ",harp:"ハープ",pulse:"キック",wave:"ウェーブ",rainbow:"レインボー",
+  drop:"ドロップ",blackout:"暗転",message:"メッセージ",hold:"静",fire:"炎"};
+fetch("/api/show?ch=festival").then(r=>r.json()).then(d=>{
+  const steps=(d.show&&d.show.steps)||d.steps||[];
+  const grid=document.getElementById("grid");
+  steps.forEach((s,i)=>{
+    const card=document.createElement("div");card.className="card";
+    const tl=s.timeline||[];
+    const vq=s._v?`?v=${s._v}`:"";   // アセット更新時刻でキャッシュを無効化
+    const scenes=tl.map(e=>`<span class="sc"><b>${(e.at||0).toFixed(0)}s</b> ${SCENE_JA[e.scene]||e.title||e.scene||""}</span>`).join("");
+    card.innerHTML=`
+      <h2><span>${i+1}. ${s.label}</span><em>${(s.dur||0).toFixed(0)}s</em></h2>
+      ${s.video?`<video src="${s.video}${vq}" poster="${s.video.replace('-screen.mp4','-poster.jpg')}${vq}" controls preload="metadata" playsinline></video>`:'<div style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;color:#666">映像なし</div>'}
+      <div class="meta"><span>🎬 映像 ${s.video?'あり':'なし'}</span><span>🎵 ${s.url? s.url.split('/').pop():'-'}</span><span>💡 ${tl.length} シーン</span></div>
+      <div class="bar"><i></i></div>
+      <div class="scenes">${scenes}</div>`;
+    grid.appendChild(card);
+    const v=card.querySelector("video");
+    if(v){const bar=card.querySelector(".bar i");
+      v.addEventListener("timeupdate",()=>{bar.style.width=(v.currentTime/(v.duration||1)*100)+"%";});}
+  });
+  if(!steps.length) grid.innerHTML='<p style="color:#888">セットリストが未投入です。tools/dj42-show.sh で投入してください。</p>';
+}).catch(e=>{document.getElementById("grid").innerHTML='<p style="color:#f88">読み込みに失敗: '+e+'</p>';});
+</script>
+</body>
+</html>

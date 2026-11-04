@@ -101,7 +101,8 @@ def main():
         for seg in sh["seg"]:
             at = round(float(seg["at"]), 3)
             light = scene_light(seg["scene"], hue_by_at.get(round(at, 3)), bpm, seg.get("title"))
-            timeline.append({"at": at, "light": light})
+            timeline.append({"at": at, "scene": seg["scene"],
+                             "title": seg.get("title") or seg["scene"], "light": light})
         step = {
             "label": title,
             "url": f"/assets/{audio}",
