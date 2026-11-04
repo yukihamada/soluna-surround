@@ -1,0 +1,1279 @@
+{
+ "auto": true,
+ "gap": 1.0,
+ "steps": [
+  {
+   "label": "Aetheria",
+   "url": "/assets/dj42-aetheria.m4a",
+   "dur": 172.87,
+   "light": {
+    "pattern": "pulse",
+    "colors": [
+     "#d4af37",
+     "#d4af37"
+    ],
+    "bpm": 119.823
+   },
+   "timeline": [
+    {
+     "at": 0.0,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 8.333,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 16.344,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#25b6f4",
+       "#f46325"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 32.368,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f48825",
+       "#2590f4"
+      ],
+      "bpm": 119.823,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 48.392,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 54.401,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 119.823,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 56.404,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 72.427,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f42588",
+       "#25f490"
+      ],
+      "bpm": 119.823,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 88.451,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#255ff4",
+       "#f4ba25"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 104.474,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#25f4b6",
+       "#f42563"
+      ],
+      "bpm": 119.823,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 120.498,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 134.519,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 148.539,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 119.823,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 152.545,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#ffffff",
+       "#ffffff"
+      ],
+      "bpm": 119.823,
+      "fade_ms": 80,
+      "torch": true
+     }
+    },
+    {
+     "at": 166.566,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 119.823
+     }
+    },
+    {
+     "at": 170.572,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 119.823,
+      "brightness": 0.12,
+      "fade_ms": 2000
+     }
+    }
+   ],
+   "video": "/assets/dj42-aetheria-screen.mp4"
+  },
+  {
+   "label": "40Hz VIP Sovereignty",
+   "url": "/assets/dj42-vip-sovereignty.m4a",
+   "dur": 242.27,
+   "light": {
+    "pattern": "pulse",
+    "colors": [
+     "#d4af37",
+     "#d4af37"
+    ],
+    "bpm": 123.007
+   },
+   "timeline": [
+    {
+     "at": 0.0,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 12.088,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 21.843,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#25b6f4",
+       "#f46325"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 45.257,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f48825",
+       "#2590f4"
+      ],
+      "bpm": 123.007,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 66.719,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 76.474,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 123.007,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 78.425,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 101.839,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f42588",
+       "#25f490"
+      ],
+      "bpm": 123.007,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 123.301,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#255ff4",
+       "#f4ba25"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 144.763,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#25f4b6",
+       "#f42563"
+      ],
+      "bpm": 123.007,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 168.176,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 187.688,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 207.199,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 123.007,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 213.052,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#ffffff",
+       "#ffffff"
+      ],
+      "bpm": 123.007,
+      "fade_ms": 80,
+      "torch": true
+     }
+    },
+    {
+     "at": 232.563,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 123.007
+     }
+    },
+    {
+     "at": 238.416,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 123.007,
+      "brightness": 0.12,
+      "fade_ms": 2000
+     }
+    }
+   ]
+  },
+  {
+   "label": "Emotional Gravity",
+   "url": "/assets/dj42-emotional-gravity.m4a",
+   "dur": 202.03,
+   "light": {
+    "pattern": "pulse",
+    "colors": [
+     "#d4af37",
+     "#d4af37"
+    ],
+    "bpm": 125.969
+   },
+   "timeline": [
+    {
+     "at": 0.0,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 9.958,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 19.484,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#25b6f4",
+       "#f46325"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 38.536,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f48825",
+       "#2590f4"
+      ],
+      "bpm": 125.969,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 55.683,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 63.304,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 125.969,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 65.21,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 84.262,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f42588",
+       "#25f490"
+      ],
+      "bpm": 125.969,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 103.314,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#255ff4",
+       "#f4ba25"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 122.366,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#25f4b6",
+       "#f42563"
+      ],
+      "bpm": 125.969,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 139.514,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 156.661,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 171.902,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 125.969,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 177.618,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#ffffff",
+       "#ffffff"
+      ],
+      "bpm": 125.969,
+      "fade_ms": 80,
+      "torch": true
+     }
+    },
+    {
+     "at": 192.86,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 125.969
+     }
+    },
+    {
+     "at": 198.576,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 125.969,
+      "brightness": 0.12,
+      "fade_ms": 2000
+     }
+    }
+   ]
+  },
+  {
+   "label": "We Got the AURA",
+   "url": "/assets/dj42-aura.m4a",
+   "dur": 228.75,
+   "light": {
+    "pattern": "pulse",
+    "colors": [
+     "#d4af37",
+     "#d4af37"
+    ],
+    "bpm": 128.309
+   },
+   "timeline": [
+    {
+     "at": 0.0,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 11.486,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 20.838,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#25b6f4",
+       "#f46325"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 43.284,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f48825",
+       "#2590f4"
+      ],
+      "bpm": 128.309,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 63.859,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 71.341,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 128.309,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 75.082,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 95.658,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f42588",
+       "#25f490"
+      ],
+      "bpm": 128.309,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 116.233,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#255ff4",
+       "#f4ba25"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 138.679,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#25f4b6",
+       "#f42563"
+      ],
+      "bpm": 128.309,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 159.254,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 177.959,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 196.664,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 128.309,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 202.275,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#ffffff",
+       "#ffffff"
+      ],
+      "bpm": 128.309,
+      "fade_ms": 80,
+      "torch": true
+     }
+    },
+    {
+     "at": 220.98,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 128.309
+     }
+    },
+    {
+     "at": 226.592,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 128.309,
+      "brightness": 0.12,
+      "fade_ms": 2000
+     }
+    }
+   ]
+  },
+  {
+   "label": "Quantum Afro-Amapiano",
+   "url": "/assets/dj42-amapiano.m4a",
+   "dur": 192.63,
+   "light": {
+    "pattern": "pulse",
+    "colors": [
+     "#d4af37",
+     "#d4af37"
+    ],
+    "bpm": 122.295
+   },
+   "timeline": [
+    {
+     "at": 0.0,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 10.18,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 18.03,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#25b6f4",
+       "#f46325"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 35.692,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f48825",
+       "#2590f4"
+      ],
+      "bpm": 122.295,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 53.355,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 59.242,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 122.295,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 63.167,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 80.829,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f42588",
+       "#25f490"
+      ],
+      "bpm": 122.295,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 98.491,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#255ff4",
+       "#f4ba25"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 116.154,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#25f4b6",
+       "#f42563"
+      ],
+      "bpm": 122.295,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 133.816,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 149.516,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 163.253,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 122.295,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 169.14,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#ffffff",
+       "#ffffff"
+      ],
+      "bpm": 122.295,
+      "fade_ms": 80,
+      "torch": true
+     }
+    },
+    {
+     "at": 184.84,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 122.295
+     }
+    },
+    {
+     "at": 188.765,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 122.295,
+      "brightness": 0.12,
+      "fade_ms": 2000
+     }
+    }
+   ]
+  },
+  {
+   "label": "PRADA (Mainstage Techno Overdrive)",
+   "url": "/assets/dj42-prada.m4a",
+   "dur": 203.03,
+   "light": {
+    "pattern": "pulse",
+    "colors": [
+     "#d4af37",
+     "#d4af37"
+    ],
+    "bpm": 136.571
+   },
+   "timeline": [
+    {
+     "at": 0.0,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 8.869,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 19.413,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#25b6f4",
+       "#f46325"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 36.986,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f48825",
+       "#2590f4"
+      ],
+      "bpm": 136.571,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 56.317,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 63.346,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 136.571,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 65.104,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 84.434,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#f42588",
+       "#25f490"
+      ],
+      "bpm": 136.571,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 103.765,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#255ff4",
+       "#f4ba25"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 123.095,
+     "light": {
+      "pattern": "wave",
+      "colors": [
+       "#25f4b6",
+       "#f42563"
+      ],
+      "bpm": 136.571,
+      "zones_auto": {
+       "mode": "sweep",
+       "period_s": 0.5,
+       "width": 2
+      }
+     }
+    },
+    {
+     "at": 140.669,
+     "light": {
+      "pattern": "beat",
+      "colors": [
+       "#ff2a00",
+       "#00e0ff"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 158.242,
+     "light": {
+      "pattern": "audio",
+      "colors": [
+       "#d4af37",
+       "#ffffff"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 174.058,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 136.571,
+      "brightness": 0.5
+     }
+    },
+    {
+     "at": 179.33,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#ffffff",
+       "#ffffff"
+      ],
+      "bpm": 136.571,
+      "fade_ms": 80,
+      "torch": true
+     }
+    },
+    {
+     "at": 195.146,
+     "light": {
+      "pattern": "pulse",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 136.571
+     }
+    },
+    {
+     "at": 200.418,
+     "light": {
+      "pattern": "solid",
+      "colors": [
+       "#d4af37",
+       "#d4af37"
+      ],
+      "bpm": 136.571,
+      "brightness": 0.12,
+      "fade_ms": 2000
+     }
+    }
+   ]
+  }
+ ]
+}

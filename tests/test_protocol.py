@@ -392,6 +392,39 @@ async def main():
         await s.post(f"{BASE}/api/show?ch=festival", json={"reset": True},
                      headers={"x-soluna-admin": ADMIN})
 
+        # 10g3) DJ42 タイムライン: 1曲の中で演出が切り替わる(step.timeline)
+        r = await s.post(f"{BASE}/api/show?ch=festival",
+                         json={"steps": [{
+                             "label": "dj42-test", "url": "/assets/dj42-aetheria.m4a", "lead": 0.2,
+                             "light": {"pattern": "pulse", "colors": ["#d4af37", "#d4af37"], "bpm": 120},
+                             "timeline": [
+                                 {"at": 0.0, "light": {"pattern": "pulse", "colors": ["#d4af37", "#d4af37"], "bpm": 120}},
+                                 {"at": 0.4, "light": {"pattern": "audio", "colors": ["#d4af37", "#ffffff"], "bpm": 120}},
+                                 {"at": 0.8, "light": {"pattern": "wave", "colors": ["#ff2a00", "#00e0ff"], "bpm": 120,
+                                                       "zones_auto": {"mode": "sweep", "period_s": 0.2, "width": 2}}},
+                             ]}]},
+                         headers={"x-soluna-admin": ADMIN})
+        check("dj42-tl: セットリスト投入", r.status == 200)
+        b_tl = len(boxes[0])
+        await s.post(f"{BASE}/api/show?ch=festival", json={"next": True}, headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(1.1)   # 3エントリ(0/0.4/0.8s)が進む
+        tl_lights = [m for m in boxes[0][b_tl:] if isinstance(m, dict) and m.get("t") == "light"
+                     and str(m.get("id", "")).startswith("tl")]
+        pats = [m.get("pattern") for m in tl_lights]
+        check("dj42-tl: 曲中でパターンが切り替わる", "pulse" in pats and "audio" in pats and "wave" in pats, str(pats))
+        check("dj42-tl: 最終エントリでzones_auto起動",
+              any(isinstance(m.get("zones"), list) for m in tl_lights), str([m.get("zones") for m in tl_lights[-3:]]))
+        st_tl = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("dj42-tl: status.timeline_i が進む", st_tl.get("timeline_i") == 2, str(st_tl.get("timeline_i")))
+        # 手動lightでタイムラインが止まる
+        await s.post(f"{BASE}/api/light?ch=festival", json={"pattern": "solid", "colors": ["#ffffff", "#ffffff"]},
+                     headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(0.1)
+        st_tl2 = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("dj42-tl: 手動lightでタイムライン停止", st_tl2.get("timeline_i") is None)
+        await s.post(f"{BASE}/api/light?ch=festival", json={"stop": True}, headers={"x-soluna-admin": ADMIN})
+        await s.post(f"{BASE}/api/show?ch=festival", json={"reset": True}, headers={"x-soluna-admin": ADMIN})
+
         # 10h) ゾーン指定キュー(ウォークテスト): zonesフィールドが配信される
         r = await s.post(f"{BASE}/api/cue?ch=festival",
                          json={"url": "/assets/opening.mp3", "zones": ["b"], "lead": 2},

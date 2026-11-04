@@ -501,6 +501,7 @@ async def do_light(state, body: dict) -> dict:
     if body.get("stop"):
         _light_auto_cancel(state)
         _zone_auto_cancel(state)
+        _timeline_cancel(state)
         if body.get("fade_ms"):
             _fade_hint = int(max(0, min(10000, float(body["fade_ms"]))))
         else:
@@ -514,6 +515,7 @@ async def do_light(state, body: dict) -> dict:
         return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
     light = _light_from(body)
     state["light"] = light
+    _timeline_cancel(state)                      # 手動ライトは曲中タイムラインを上書きする
     # LIGHT v2: 自動消灯(auto_off_s 秒後に停止。then='next' でショー次へ)
     auto_off = body.get("auto_off_s", body.get("auto_off"))
     if auto_off is not None:
@@ -739,6 +741,59 @@ def _zone_auto_start(state, cfg):
     return cfg
 
 
+# ---- ステップ内ライト・タイムライン (timeline): 1曲の中で演出が切り替わる ----
+# DJ42の各曲は「イントロ→ハープ→キック→ウェーブ→…→ドロップ→アウトロ」と
+# 曲中で光の表情が変わる。step に timeline=[{at, light}, ...] を持たせると、
+# サーバが cue の at(サンプル0) を基準に各時刻で light を切り替えて配信する。
+def _timeline_cancel(state):
+    t = state.get("_timeline_task")
+    if t is not None and not t.done():
+        t.cancel()
+    state["_timeline_task"] = None
+    state["timeline_i"] = None
+
+
+async def _timeline_run(state, base_at, timeline):
+    """base_at(server epoch秒=音源の0秒) を基準に、各エントリの at で light を発火。"""
+    try:
+        for i, ent in enumerate(timeline):
+            fire_at = base_at + float(ent.get("at") or 0.0)
+            await asyncio.sleep(max(0.0, fire_at - now()))
+            if state.get("_timeline_task") is not asyncio.current_task():
+                return                            # 差し替え/停止済み
+            body = dict(ent.get("light") or {})
+            body["at"] = None                     # 即時配信(サーバ時刻)
+            light = _light_from(body, id_prefix=f"tl{i}")
+            light["id"] = f"tl{i}"
+            state["light"] = light
+            state["timeline_i"] = i
+            # エントリ単位のゾーン自動巡回
+            za = body.get("zones_auto")
+            if za:
+                cfg = za if isinstance(za, dict) else {"mode": str(za)}
+                if body.get("fade_ms") and not cfg.get("fade_ms"):
+                    cfg["fade_ms"] = body["fade_ms"]
+                if body.get("torch"):
+                    cfg["torch"] = True
+                _zone_auto_start(state, cfg)
+            else:
+                _zone_auto_cancel(state)
+            await _broadcast_text(state, json.dumps({"t": "light", **light}))
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:                       # noqa: BLE001
+        print(f"[light] timeline failed: {e}")
+
+
+def _timeline_start(state, base_at, timeline):
+    _timeline_cancel(state)
+    tl = [e for e in (timeline or []) if isinstance(e, dict) and e.get("light")]
+    if not tl:
+        return None
+    state["_timeline_task"] = asyncio.get_event_loop().create_task(_timeline_run(state, base_at, tl))
+    return len(tl)
+
+
 async def _auto_fire(state, next_at):
     try:
         await asyncio.sleep(max(0.0, next_at - now()))
@@ -809,22 +864,27 @@ async def do_show(state, body: dict) -> dict:
                 step["loop"] = True
             if isinstance(raw.get("light"), dict):
                 step["light"] = raw["light"]
+            if isinstance(raw.get("timeline"), list):
+                step["timeline"] = raw["timeline"]
             steps.append(step)
         state["show"] = steps
         state["show_i"] = -1
         _auto_cancel(state)
+        _timeline_cancel(state)
         _save_state()
         return {"ok": True, "steps": len(steps), "auto": state["show_auto"], "gap": state["show_gap"]}
 
     if body.get("reset"):
         state["show_i"] = -1
         _auto_cancel(state)
+        _timeline_cancel(state)
         _save_state()
         return {"ok": True, "i": 0}
 
     if body.get("goto") is not None:
         state["show_i"] = int(body["goto"]) - 2   # 次のNEXTで goto 番を発火
         _auto_cancel(state)
+        _timeline_cancel(state)
         _save_state()
         return {"ok": True, "next": int(body["goto"])}
 
@@ -850,6 +910,15 @@ async def do_show(state, body: dict) -> dict:
             state["cue"] = cue
             await _broadcast_text(state, json.dumps({"t": "cue", **cue}))
             fired["cue"] = cue["id"]
+            # 曲中タイムライン: cue の at(サンプル0) を基準に演出を切り替える
+            if step.get("timeline"):
+                n = _timeline_start(state, at, step["timeline"])
+                if n:
+                    fired["timeline"] = n
+            else:
+                _timeline_cancel(state)
+        else:
+            _timeline_cancel(state)
         if step.get("light"):
             light = _light_from(dict(step["light"], at=None), id_prefix=f"showlight{i+1}")
             light["id"] = f"showlight{i+1}"
@@ -1402,6 +1471,7 @@ async def api_channel_delete(request):
         raise web.HTTPConflict(text="channel has live connections")
     _light_auto_cancel(channels[name])
     _zone_auto_cancel(channels[name])
+    _timeline_cancel(channels[name])
     _auto_cancel(channels[name])
     del channels[name]
     _save_state()
@@ -1435,6 +1505,7 @@ async def status(request):
             "light": st["light"],
             "light_off_at": st.get("light_off_at"),
             "zones_auto": st.get("zones_auto"),
+            "timeline_i": st.get("timeline_i"),
             "presets": sorted((st.get("light_presets") or {}).keys()),
             "geo": st["geo"],
             "tc": st.get("tc"),
