@@ -245,6 +245,12 @@
      }
     }
    ],
+   "stems": {
+    "drums": "/assets/dj42-aetheria-drums.m4a",
+    "bass": "/assets/dj42-aetheria-bass.m4a",
+    "other": "/assets/dj42-aetheria-other.m4a",
+    "vocals": "/assets/dj42-aetheria-vocals.m4a"
+   },
    "video": "/assets/dj42-aetheria-screen.mp4"
   },
   {
@@ -490,6 +496,12 @@
      }
     }
    ],
+   "stems": {
+    "drums": "/assets/dj42-vip-sovereignty-drums.m4a",
+    "bass": "/assets/dj42-vip-sovereignty-bass.m4a",
+    "other": "/assets/dj42-vip-sovereignty-other.m4a",
+    "vocals": "/assets/dj42-vip-sovereignty-vocals.m4a"
+   },
    "video": "/assets/dj42-vip-sovereignty-screen.mp4"
   },
   {
@@ -735,6 +747,12 @@
      }
     }
    ],
+   "stems": {
+    "drums": "/assets/dj42-emotional-gravity-drums.m4a",
+    "bass": "/assets/dj42-emotional-gravity-bass.m4a",
+    "other": "/assets/dj42-emotional-gravity-other.m4a",
+    "vocals": "/assets/dj42-emotional-gravity-vocals.m4a"
+   },
    "video": "/assets/dj42-emotional-gravity-screen.mp4"
   },
   {
@@ -980,6 +998,12 @@
      }
     }
    ],
+   "stems": {
+    "drums": "/assets/dj42-aura-drums.m4a",
+    "bass": "/assets/dj42-aura-bass.m4a",
+    "other": "/assets/dj42-aura-other.m4a",
+    "vocals": "/assets/dj42-aura-vocals.m4a"
+   },
    "video": "/assets/dj42-aura-screen.mp4"
   },
   {
@@ -1225,6 +1249,12 @@
      }
     }
    ],
+   "stems": {
+    "drums": "/assets/dj42-amapiano-drums.m4a",
+    "bass": "/assets/dj42-amapiano-bass.m4a",
+    "other": "/assets/dj42-amapiano-other.m4a",
+    "vocals": "/assets/dj42-amapiano-vocals.m4a"
+   },
    "video": "/assets/dj42-amapiano-screen.mp4"
   },
   {
@@ -1470,6 +1500,12 @@
      }
     }
    ],
+   "stems": {
+    "drums": "/assets/dj42-prada-drums.m4a",
+    "bass": "/assets/dj42-prada-bass.m4a",
+    "other": "/assets/dj42-prada-other.m4a",
+    "vocals": "/assets/dj42-prada-vocals.m4a"
+   },
    "video": "/assets/dj42-prada-screen.mp4"
   }
  ]
