@@ -244,6 +244,32 @@ async def main():
         check("light v2: light_stopにfade_ms", len(ls2) >= 1)
         await late3[0].close(); late3[1].cancel()
 
+        # 10d3) LIGHT v2: 自動消灯(auto_off_s) + 予約のstatus表示
+        r = await s.post(f"{BASE}/api/light?ch=festival",
+                         json={"pattern": "solid", "auto_off_s": 0.6, "fade_ms": 300},
+                         headers={"x-soluna-admin": ADMIN})
+        aj = await r.json()
+        check("auto_off: 予約時刻を返す", r.status == 200 and aj.get("auto_off_at"),
+              str(aj.get("auto_off_at")))
+        st_off = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("auto_off: statusにlight_off_at", st_off.get("light_off_at") is not None)
+        await asyncio.sleep(1.1)
+        st_off2 = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("auto_off: 0.6s後に自動消灯(light=None)", st_off2["light"] is None,
+              str(st_off2["light"]))
+        offmsgs = [m for m in boxes[1] if isinstance(m, dict) and m.get("t") == "light_stop"]
+        check("auto_off: light_stopが端末へ届く", len(offmsgs) >= 1)
+        # 手動stopが予約を取消す
+        r = await s.post(f"{BASE}/api/light?ch=festival",
+                         json={"pattern": "solid", "auto_off_s": 30},
+                         headers={"x-soluna-admin": ADMIN})
+        check("auto_off: 30s予約", (await r.json()).get("auto_off_at") is not None)
+        await s.post(f"{BASE}/api/light?ch=festival", json={"stop": True},
+                     headers={"x-soluna-admin": ADMIN})
+        await asyncio.sleep(0.2)
+        st_off3 = (await (await s.get(f"{BASE}/status")).json())["channels"]["festival"]
+        check("auto_off: 手動stopで予約取消", st_off3.get("light_off_at") is None)
+
         # 10e) geo API: ステージ座標の登録+config配信+clear
         r = await s.post(f"{BASE}/api/geo?ch=festival",
                          json={"lat": 21.3352, "lng": -158.0879},

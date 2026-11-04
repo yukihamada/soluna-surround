@@ -238,6 +238,7 @@
     </div>
     <div class="row mt">
       <div class="field" style="width:110px"><label>Fade(ms)</label><input id="fadeMs" type="number" value="0" min="0" max="10000" step="50"></div>
+      <div class="field" style="width:130px"><label>自動消灯(s)</label><input id="autoOff" type="number" value="0" min="0" max="3600" step="5"></div>
       <label class="inline"><input type="checkbox" id="torch"> LEDトーチ(iOS)</label>
     </div>
     <div class="row mt">
@@ -785,6 +786,8 @@ $('lightGo').onclick = ()=>{
   if (!all) body.zones = sel;                    // master/all => omit zones
   const fade = parseInt($('fadeMs').value, 10) || 0;
   if (fade > 0) body.fade_ms = fade;
+  const autoOff = parseFloat($('autoOff').value || 0);
+  if (autoOff > 0) body.auto_off_s = autoOff;    // 指定秒後に自動消灯
   if ($('torch').checked) body.torch = true;
   call('/api/light', body);
 };

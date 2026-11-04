@@ -102,6 +102,7 @@ def _chan(name):
         "cue": None,              # active cue dict (途中参加者へ再送する)
         "light": None,            # active light dict (SOLUNAモード: 色の同期)
         "light_presets": {},      # 名前付きライトプリセット {name -> look}(/admin・再起動で復元)
+        "light_off_at": None,     # 自動消灯の予約時刻(server epoch秒)。None=予約なし
         "geo": None,              # {"lat","lng"} ステージ位置(GPSゾーン自動選択用)
         "preload": None,          # 事前配布済み音源URL(FIRE前のDLバースト回避)
         "show": None,             # セットリスト [{label,url,video,light},...]
@@ -129,7 +130,7 @@ NODE_STALE_S = float(os.environ.get("SOLUNA_NODE_STALE_S", "15"))
 # ---- クラッシュセーフ: 電源断でもサウンドチェックとショー進行を失わない ----------
 _PERSIST = ("map", "sr", "zones", "zone_gain_db", "base_ms", "lead", "cue", "light",
             "geo", "preload", "show", "show_i", "net", "node_cfg", "tc", "mute", "stats",
-            "show_auto", "show_gap", "show_next_at", "light_presets")
+            "show_auto", "show_gap", "show_next_at", "light_presets", "light_off_at")
 
 
 def _save_state():
@@ -496,19 +497,31 @@ async def do_light(state, body: dict) -> dict:
     """POST /api/light と OSC /soluna/light が共有する本体。DMX 出力は state["light"] を
     40Hz で読む showctl.DmxOut が拾うので、ここでは状態更新+配信だけ。"""
     if body.get("stop"):
+        _light_auto_cancel(state)
+        if body.get("fade_ms"):
+            _fade_hint = int(max(0, min(10000, float(body["fade_ms"]))))
+        else:
+            _fade_hint = (state["light"] or {}).get("fade_ms") or 0
         state["light"] = None
         _save_state()
         stop_msg = {"t": "light_stop"}
-        if body.get("fade_ms"):
-            stop_msg["fade_ms"] = int(max(0, min(10000, float(body["fade_ms"]))))
+        if _fade_hint:
+            stop_msg["fade_ms"] = _fade_hint
         await _broadcast_text(state, json.dumps(stop_msg))
         return {"ok": True, "stopped": True, "listeners": len(state["listeners"])}
     light = _light_from(body)
     state["light"] = light
+    # LIGHT v2: 自動消灯(auto_off_s 秒後に停止。then='next' でショー次へ)
+    auto_off = body.get("auto_off_s", body.get("auto_off"))
+    if auto_off is not None:
+        _light_auto_schedule(state, now() + max(0.0, float(auto_off)), body.get("then"))
+    else:
+        _light_auto_cancel(state)
     state["stats"]["lights"] += 1
     _save_state()
     await _broadcast_text(state, json.dumps({"t": "light", **light}))
-    return {"ok": True, "light": light, "listeners": len(state["listeners"])}
+    return {"ok": True, "light": light, "listeners": len(state["listeners"]),
+            "auto_off_at": state.get("light_off_at")}
 
 
 async def api_light(request):
@@ -584,6 +597,59 @@ def _auto_cancel(state):
         t.cancel()
     state["_auto_task"] = None
     state["show_next_at"] = None
+
+
+def _light_auto_cancel(state):
+    """自動消灯の予約を取り消す(新しいライト・手動stop・チャンネル削除で呼ぶ)。"""
+    t = state.get("_light_task")
+    if t is not None and not t.done():
+        t.cancel()
+    state["_light_task"] = None
+    state["light_off_at"] = None
+
+
+async def _light_auto_off(state, off_at):
+    """off_at(server epoch秒)に達したら自動で消灯。then='next' なら続けてショーの次へ。"""
+    try:
+        await asyncio.sleep(max(0.0, off_at - now()))
+        if state.get("light_off_at") != off_at or not state.get("light"):
+            return                               # 取り消し済み/差し替え済み
+        state["_light_task"] = None
+        state["light_off_at"] = None
+        fade = (state["light"] or {}).get("fade_ms") or 0
+        state["light"] = None
+        _save_state()
+        msg = {"t": "light_stop"}
+        if fade:
+            msg["fade_ms"] = int(fade)
+        await _broadcast_text(state, json.dumps(msg))
+        if state.get("light_then") == "next":
+            state["light_then"] = None
+            await do_show(state, {"next": True, "_auto": True})
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:                       # noqa: BLE001
+        print(f"[light] auto-off failed: {e}")
+
+
+def _light_auto_schedule(state, off_at, then=None):
+    """off_at に自動消灯を予約。0/None なら解除のみ。then='next' で消灯後にショー次へ。"""
+    _light_auto_cancel(state)
+    if not off_at or off_at <= now():
+        return None
+    state["light_off_at"] = off_at
+    state["light_then"] = then if then == "next" else None
+    state["_light_task"] = asyncio.get_event_loop().create_task(_light_auto_off(state, off_at))
+    return off_at
+
+
+def _light_resume_all():
+    """再起動後: 自動消灯の予約が残っていれば復元(時刻が過ぎていれば即消灯)。on_startup から呼ぶ。"""
+    for st in channels.values():
+        off = st.get("light_off_at")
+        if off and st.get("light"):
+            st["_light_task"] = asyncio.get_event_loop().create_task(_light_auto_off(st, off))
+            print(f"[light] auto-off resumed: in {max(0.0, off - now()):.1f}s")
 
 
 async def _auto_fire(state, next_at):
@@ -1235,6 +1301,8 @@ async def api_channel_delete(request):
         raise web.HTTPNotFound(text="unknown channel")
     if channels[name]["listeners"] or channels[name]["source"]:
         raise web.HTTPConflict(text="channel has live connections")
+    _light_auto_cancel(channels[name])
+    _auto_cancel(channels[name])
     del channels[name]
     _save_state()
     return web.json_response({"ok": True, "deleted": name})
@@ -1265,6 +1333,7 @@ async def status(request):
             "live_lead": st["lead"],
             "cue": st["cue"],
             "light": st["light"],
+            "light_off_at": st.get("light_off_at"),
             "presets": sorted((st.get("light_presets") or {}).keys()),
             "geo": st["geo"],
             "tc": st.get("tc"),
@@ -1441,6 +1510,7 @@ def main():
 
     async def _resume_auto(app):
         _auto_resume_all()
+        _light_resume_all()
     app.on_startup.append(_resume_auto)
     app.add_routes([
         web.get("/health", health),
