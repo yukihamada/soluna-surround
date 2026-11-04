@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
+<title>DJ42 · SOLUNA SOUND</title>
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  :root{--gold:#d4af37;--bg:#0a0a0c;--panel:#141418;--line:#2a2a30;--dim:#8a8a92;--ink:#eee}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Helvetica Neue",Arial,"Hiragino Sans",sans-serif;
+       padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+  /* ---- キー画面 ---- */
+  #gate{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:18px;background:radial-gradient(120% 90% at 50% 0%,#1a1420 0%,#0a0a0c 60%);padding:24px;text-align:center}
+  #gate h1{font-size:26px;margin:0;letter-spacing:2px}
+  #gate h1 span{background:linear-gradient(90deg,#ff3d6e,#ff8a3d,#ffcf5c);-webkit-background-clip:text;color:transparent}
+  #gate p{color:var(--dim);font-size:13px;margin:0;max-width:320px}
+  #keyRow{display:flex;gap:8px;width:100%;max-width:340px}
+  #key{flex:1;min-height:52px;font-size:18px;letter-spacing:3px;text-align:center;text-transform:lowercase;
+       background:#1c1c22;border:1px solid var(--line);border-radius:14px;color:#fff;padding:0 14px}
+  #key:focus{outline:none;border-color:var(--gold)}
+  #go{min-height:52px;padding:0 22px;border:none;border-radius:14px;font-weight:800;font-size:16px;
+      background:linear-gradient(90deg,#ff3d6e,#ffcf5c);color:#1a1206;cursor:pointer}
+  #gateErr{color:#ff8a8a;font-size:13px;min-height:18px}
+  .lock{font-size:34px}
+  /* ---- プレイヤー ---- */
+  #app{display:none;padding-bottom:120px}
+  header{padding:18px 18px 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  header h1{font-size:19px;margin:0;letter-spacing:1px}
+  header h1 span{background:linear-gradient(90deg,#ff3d6e,#ff8a3d,#ffcf5c);-webkit-background-clip:text;color:transparent}
+  header .sub{color:var(--dim);font-size:12px}
+  .hero{margin:6px 14px 14px;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:#000;position:relative}
+  .hero video{width:100%;display:block;aspect-ratio:16/9;background:#000}
+  .hero .np{position:absolute;left:12px;bottom:10px;font-size:13px;font-weight:700;color:#fff;
+            text-shadow:0 1px 8px #000;pointer-events:none}
+  .list{padding:0 12px}
+  .track{display:flex;align-items:center;gap:12px;padding:12px 12px;border:1px solid var(--line);border-radius:14px;
+         background:var(--panel);margin-bottom:10px;cursor:pointer;transition:border-color .15s,background .15s}
+  .track.on{border-color:var(--gold);background:#1e1a10}
+  .track .no{width:26px;text-align:center;color:var(--dim);font-size:14px;font-weight:700}
+  .track.on .no{color:var(--gold)}
+  .track .t{flex:1;min-width:0}
+  .track .t b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .track .t span{font-size:12px;color:var(--dim)}
+  .track .dur{font-size:12px;color:var(--dim)}
+  .track .eq{width:20px;text-align:center;color:var(--gold);font-size:15px;opacity:0}
+  .track.on .eq{opacity:1}
+  /* 下部プレイヤー */
+  #bar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(16,16,20,.94);backdrop-filter:blur(12px);
+       border-top:1px solid var(--line);padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
+  #bar .row1{display:flex;align-items:center;gap:12px}
+  #bar .info{flex:1;min-width:0}
+  #bar .info b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #bar .info span{font-size:11px;color:var(--dim)}
+  #play{width:52px;height:52px;border-radius:50%;border:none;flex:0 0 auto;font-size:20px;cursor:pointer;
+        background:linear-gradient(90deg,#ff3d6e,#ffcf5c);color:#1a1206}
+  #prev,#next{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:#1c1c22;color:#ddd;font-size:16px;cursor:pointer}
+  #seek{width:100%;margin-top:8px;-webkit-appearance:none;height:4px;border-radius:2px;background:#2a2a30;outline:none}
+  #seek::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold)}
+  #times{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:3px}
+  .warn{margin:0 14px 14px;padding:9px 12px;border:1px solid #6a4a1a;background:#2a1f0a;border-radius:10px;font-size:11.5px;color:#f0c75a}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="lock">🔒</div>
+  <h1>SOLUNA <span>SOUND</span> · DJ42</h1>
+  <p>合言葉を入れると、DJ42の6曲をこの端末で再生できます。</p>
+  <div id="keyRow">
+    <input id="key" type="password" inputmode="text" autocomplete="off" placeholder="キー" aria-label="キー">
+    <button id="go">開く</button>
+  </div>
+  <div id="gateErr"></div>
+</div>
+
+<div id="app">
+  <header>
+    <h1>SOLUNA <span>SOUND</span> · DJ42</h1>
+    <span class="sub">6曲 · タップで再生</span>
+  </header>
+  <div class="warn">⚠ 音源の権利確認は未了。外部公開・配布は別承認。</div>
+
+  <div class="hero">
+    <video id="screen" playsinline preload="metadata"></video>
+    <div class="np" id="np"></div>
+  </div>
+
+  <div class="list" id="list"></div>
+</div>
+
+<div id="bar">
+  <div class="row1">
+    <button id="prev" aria-label="前へ">⏮</button>
+    <button id="play" aria-label="再生">▶</button>
+    <button id="next" aria-label="次へ">⏭</button>
+    <div class="info"><b id="cur">—</b><span id="st">停止中</span></div>
+  </div>
+  <input id="seek" type="range" min="0" max="1000" value="0">
+  <div id="times"><span id="t0">0:00</span><span id="t1">0:00</span></div>
+</div>
+
+<script>
+// ===== キー解錠（合言葉 = dj42）=====
+const KEY = 'dj42';
+const $ = id => document.getElementById(id);
+function unlock(){
+  $('gate').style.display = 'none';
+  $('app').style.display = 'block';
+  $('bar').style.display = 'block';
+  load();
+}
+$('go').onclick = ()=>{
+  const v = ($('key').value || '').trim().toLowerCase();
+  if (v === KEY){ try{ localStorage.setItem('dj42_ok','1'); }catch(e){} unlock(); }
+  else { $('gateErr').textContent = 'キーが違います'; $('key').value=''; }
+};
+$('key').addEventListener('keydown', e=>{ if (e.key==='Enter') $('go').click(); });
+// 一度入れたら記憶（同じ端末では次回から直行）
+try{ if (localStorage.getItem('dj42_ok')==='1') unlock(); }catch(e){}
+
+// ===== プレイヤー =====
+let tracks = [], idx = 0;
+const audio = new Audio();
+audio.preload = 'metadata';
+
+function fmt(s){ s = Math.max(0, Math.floor(s||0)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+
+async function load(){
+  try{
+    const d = await (await fetch('/api/show?ch=festival')).json();
+    tracks = (d.show && d.show.steps) || d.steps || [];
+  }catch(e){ tracks = []; }
+  const list = $('list');
+  if (!tracks.length){ list.innerHTML = '<p style="color:#888;padding:0 6px">セットリストが未投入です。</p>'; return; }
+  list.innerHTML = '';
+  tracks.forEach((s,i)=>{
+    const el = document.createElement('div');
+    el.className = 'track'; el.dataset.i = i;
+    el.innerHTML = `<div class="no">${i+1}</div>
+      <div class="t"><b>${s.label}</b><span>${(s.timeline||[]).length} 演出</span></div>
+      <div class="dur">${fmt(s.dur)}</div>
+      <div class="eq">♪</div>`;
+    el.onclick = ()=> play(i);
+    list.appendChild(el);
+  });
+  play(0, true);   // 先頭を選択（自動再生はしない）
+}
+
+function mark(){
+  document.querySelectorAll('.track').forEach(el=>{
+    el.classList.toggle('on', Number(el.dataset.i) === idx);
+  });
+}
+function play(i, selectOnly){
+  if (i < 0) i = tracks.length - 1;
+  if (i >= tracks.length) i = 0;
+  idx = i;
+  const s = tracks[idx];
+  if (!s) return;
+  mark();
+  $('cur').textContent = s.label;
+  $('np').textContent = s.label;
+  if (!selectOnly){
+    audio.src = s.url;
+    audio.play().catch(()=>{});
+  } else {
+    audio.src = s.url;
+  }
+  if (s.video) $('screen').src = s.video;
+  $('st').textContent = selectOnly ? '選択中' : '再生中';
+}
+$('play').onclick = ()=>{
+  if (audio.paused){ audio.play().catch(()=>{}); } else { audio.pause(); }
+};
+$('prev').onclick = ()=> play(idx-1);
+$('next').onclick = ()=> play(idx+1);
+audio.onplay = ()=>{ $('play').textContent='❚❚'; $('st').textContent='再生中'; };
+audio.onpause = ()=>{ $('play').textContent='▶'; $('st').textContent='一時停止'; };
+audio.onended = ()=> play(idx+1);
+audio.ontimeupdate = ()=>{
+  const d = audio.duration || 0;
+  $('seek').value = d ? (audio.currentTime/d*1000) : 0;
+  $('t0').textContent = fmt(audio.currentTime);
+  $('t1').textContent = fmt(d);
+};
+$('seek').oninput = ()=>{
+  const d = audio.duration || 0;
+  if (d) audio.currentTime = ($('seek').value/1000)*d;
+};
+</script>
+</body>
+</html>
