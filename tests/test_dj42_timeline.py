@@ -99,6 +99,26 @@ async def main():
                                    "audio": True, "light": True})
             check("未知ステム400", r.status == 400, str(r.status))
 
+            # --- 4c2) 複数パート同時再生(方式C拡張): cue.urls に両方載る ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "play", "i": 0, "stem": "drums,vocals",
+                                   "audio": True, "light": True, "video": False})
+            body = await r.json()
+            check("複数パート: play 200", r.status == 200 and body.get("ok"), str(body))
+            check("複数パート: stem をそのまま返す", body.get("stem") == "drums,vocals", str(body.get("stem")))
+            cue = await recv_json(lambda d: d.get("t") == "cue", timeout=2)
+            check("複数パート: cue.urls が2音源",
+                  cue is not None and cue.get("urls") == ["/assets/dj42-T-drums.m4a", "/assets/dj42-T-vocals.m4a"],
+                  str(cue and cue.get("urls")))
+            check("複数パート: cue.url は先頭パート",
+                  cue is not None and cue.get("url") == "/assets/dj42-T-drums.m4a", str(cue and cue.get("url")))
+
+            # --- 4c3) 複数指定で1つでも未知なら400 ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "play", "i": 0, "stem": "drums,nope",
+                                   "audio": True, "light": True})
+            check("複数パート: 未知混在400", r.status == 400, str(r.status))
+
             # --- 4d) full は通常の url のまま ---
             r = await s.post(f"{BASE}/api/dj42",
                              json={"key": "dj42", "action": "play", "i": 0, "stem": "full",
