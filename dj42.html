@@ -110,6 +110,12 @@
     <button class="stem" data-stem="other">その他</button>
     <button class="stem" data-stem="vocals">ボーカル</button>
   </div>
+  <div class="stems" id="mixRow">
+    <span class="lbl">組み合わせ</span>
+    <button class="stem mix" data-mix="drums,bass">ドラム+ベース</button>
+    <button class="stem mix" data-mix="drums,bass,other">ボーカル抜き</button>
+    <button class="stem mix" data-mix="drums,bass,other,vocals">全パート</button>
+  </div>
 
   <div class="list" id="list"></div>
 
@@ -126,8 +132,12 @@
 const KEY = 'dj42';
 const $ = id => document.getElementById(id);
 let tracks = [], idx = -1, liveTimer = null;
-let stem = 'full';                 // 選択中のステム(音のパート)。既定=全体
+let stem = 'full';                 // 選択中のステム(音のパート)。既定=全体。複数はカンマ区切り
 const STEM_LABEL = {full:'全体', drums:'ドラム', bass:'ベース', other:'その他', vocals:'ボーカル'};
+function stemLabel(s){             // 'drums,bass' → 'ドラム+ベース'
+  if (!s || s==='full') return '全体';
+  return s.split(',').map(x=>STEM_LABEL[x]||x).join('+');
+}
 
 function toast(msg){
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
@@ -160,16 +170,23 @@ try{
   });
 });
 // ステム選択の記憶
-try{ const s = localStorage.getItem('dj42_stem'); if (s && STEM_LABEL[s]) stem = s; }catch(e){}
+try{ const s = localStorage.getItem('dj42_stem'); if (s && (s==='full' || s.split(',').every(p=>STEM_LABEL[p]))) stem = s; }catch(e){}
+function markStem(){
+  document.querySelectorAll('.stem').forEach(b=>{
+    const v = b.dataset.stem || b.dataset.mix;
+    b.classList.toggle('on', v === stem);
+  });
+}
 document.querySelectorAll('.stem').forEach(b=>{
-  b.classList.toggle('on', b.dataset.stem === stem);
+  const v = b.dataset.stem || b.dataset.mix;
   b.onclick = ()=>{
-    stem = b.dataset.stem;
-    document.querySelectorAll('.stem').forEach(x=>x.classList.toggle('on', x===b));
+    stem = v;
+    markStem();
     try{ localStorage.setItem('dj42_stem', stem); }catch(e){}
-    toast(stem==='full' ? '音は全体で流します' : `音は「${STEM_LABEL[stem]}」だけ流します`);
+    toast(stem==='full' ? '音は全体で流します' : `音は「${stemLabel(stem)}」で流します`);
   };
 });
+markStem();
 
 // ---- セットリスト取得 ----
 async function load(){
@@ -211,7 +228,7 @@ function opts(){
 async function fire(i){
   mark(i);
   const o = opts();
-  const parts = [o.audio?('音'+(stem!=='full'?'('+STEM_LABEL[stem]+')':'')):null, o.light?'光':null, o.video?'映像':null].filter(Boolean);
+  const parts = [o.audio?('音'+(stem!=='full'?'('+stemLabel(stem)+')':'')):null, o.light?'光':null, o.video?'映像':null].filter(Boolean);
   toast(parts.length ? `「${tracks[i] ? tracks[i].label : i+1}」を${parts.join('+')}で配信` : '配信する項目がありません');
   if (!parts.length) return;
   try{

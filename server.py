@@ -927,6 +927,9 @@ async def do_show(state, body: dict) -> dict:
                    "loop": bool(step.get("loop", False))}
             if step.get("url") and send_audio:
                 cue["url"] = step["url"]
+            # 方式C: 複数パート同時再生(端末が一斉に鳴らす)。単一なら url のみ。
+            if step.get("urls") and send_audio:
+                cue["urls"] = list(step["urls"])
             if step.get("video") and send_video:
                 cue["video"] = step["video"]
             state["cue"] = cue
@@ -1060,10 +1063,15 @@ async def api_dj42(request):
         saved = None
         if stem and stem != "full":
             stems = step.get("stems") or {}
-            if stem not in stems:
-                raise web.HTTPBadRequest(text=f"unknown stem: {stem}")
+            # 方式C拡張: カンマ区切りで複数パートを同時再生(drums,bass 等)。
+            parts = [p for p in (x.strip() for x in stem.split(",")) if p]
+            bad = next((p for p in parts if p not in stems), None)
+            if bad is not None:
+                raise web.HTTPBadRequest(text=f"unknown stem: {bad}")
             saved = dict(step)
-            step["url"] = stems[stem]
+            urls = [stems[p] for p in parts]
+            step["url"] = urls[0]
+            step["urls"] = urls              # 複数パート同時再生(端末が一斉に鳴らす)
             step.pop("video", None)          # ステム再生では映像は送らない
         old_lead = step.get("lead")
         step["lead"] = float(body.get("lead", 0.6))   # タップ後すぐ鳴らす(全端末を揃える最小リード)

@@ -276,6 +276,7 @@ function undim(){ $('dim').classList.remove('on'); armDim(); }
 $('dim').addEventListener('click', undim);
 ['touchstart','pointerdown','keydown'].forEach(ev => document.addEventListener(ev, ()=>{ if (active) armDim(); }, {passive:true}));
 let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null, muted=false, liveGain=null;
+let cueSrcs=[], cueBufs=[];   // 方式C: 複数パート同時再生(ドラム+ベース等)のソース/バッファ
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;   // アクセシビリティ: 点滅/うねりを穏やかに
 
 // ---- clock sync: 直近windowの最小RTTサンプルのoffsetを採用 ------------------
@@ -559,8 +560,31 @@ async function loadTrack(url){
   const raw = await res.arrayBuffer();
   cueBuf = await ctx.decodeAudioData(raw);
   cueBufUrl = url;
+  cueBufs = [cueBuf];                          // 通常は単一
   energyEnv = null;                            // 音源が替わったら包絡も作り直す
   if (light) energyEnv = buildEnergyEnv(cueBuf);
+}
+// 方式C: 選んだ複数パートを一斉に鳴らすため、全バッファを先にデコードする。
+// 合算でピークが上がるため、再生側でリミッター(ダイナミクス圧縮)を通す。
+async function loadTracks(urls){
+  const key = urls.join('|');
+  if (cueBufUrl === key && cueBufs.length === urls.length) return;
+  const bufs = [];
+  for (const u of urls){
+    const res = await fetchAsset(u);
+    bufs.push(await ctx.decodeAudioData(await res.arrayBuffer()));
+  }
+  cueBufs = bufs; cueBuf = bufs[0]; cueBufUrl = key;
+  energyEnv = null;
+  if (light) energyEnv = buildEnergyEnv(bufs[0]);   // 光は主パートで反応
+}
+// 合算クリップ防止: 単一=素通し、複数=コンプレッサで山を抑える
+function cueChain(input){
+  if (cueBufs.length <= 1) return input;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -6; comp.knee.value = 6; comp.ratio.value = 6;
+  comp.attack.value = 0.003; comp.release.value = 0.25;
+  input.connect(comp); return comp;
 }
 async function onPreload(m){                    // 開演前DL: 再生はしない
   try{
@@ -586,7 +610,10 @@ async function onCue(m){
   lastCueId = m.id;
   if (m.video){ await loadVideo(m.video); armVideo(m); }
   else stopVideo();
-  if (m.url){
+  if (m.urls && m.urls.length > 1){
+    await loadTracks(m.urls);
+    if (offsetMs !== null) armCue();
+  } else if (m.url){
     await loadTrack(m.url);
     if (offsetMs !== null) armCue();
   }
@@ -595,11 +622,10 @@ function armCue(){
   const m = pendingCue; if (!m || !m.url || !cueBuf || !ctx) return;
   if (ctx.state !== 'running') ctx.resume().catch(()=>{});   // iOS: 復帰/着信後にsuspendへ戻る対策
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
-  const src = ctx.createBufferSource();
-  src.buffer = cueBuf; src.loop = !!m.loop;
+  cueSrcs.forEach(s=>{ try{s.stop()}catch(e){} }); cueSrcs=[];
   const g = ctx.createGain();
   g.gain.value = muted ? 0 : (m.gain ?? 1) * ($('vol').value/100) * levelGain();
-  src.connect(g); g.connect(ctx.destination);
+  cueChain(g).connect(ctx.destination);        // 複数パート時はここでリミッターを通す
   cueGainNode = g;
 
   // sample0 が「耳に届く」べき実時間 = at + ゾーン遅延。
@@ -608,26 +634,35 @@ function armCue(){
   const perfAtCtx = performance.now(), ctxNow = ctx.currentTime;
   const targetPerfMs = targetSec*1000 - offsetMs;
   const oL = outLatSec();
+  const bufs = (cueBufs.length ? cueBufs : [cueBuf]);
+  const scheduled = targetPerfMs > performance.now() + 50;
 
-  if (targetPerfMs > performance.now() + 50){
-    src.start(Math.max(ctxNow, ctxTimeFor(targetPerfMs) - oL), 0);   // 予約(早め出し)
-  } else {
-    const startCtx = ctxNow + 0.20;                    // 途中参加 → 曲中同期で合流
-    const startPerfMs = perfAtCtx + 200;
-    let intoSec = (startPerfMs + offsetMs)/1000 - targetSec + oL;
-    if (m.loop) intoSec = intoSec % cueBuf.duration;
-    if (intoSec >= cueBuf.duration && !m.loop){ $('cue').textContent=T.done; return; }
-    src.start(startCtx, Math.max(0, intoSec));
+  for (const buf of bufs){
+    const src = ctx.createBufferSource();
+    src.buffer = buf; src.loop = !!m.loop;
+    src.connect(g);
+    if (scheduled){
+      src.start(Math.max(ctxNow, ctxTimeFor(targetPerfMs) - oL), 0);   // 予約(早め出し)
+    } else {
+      const startCtx = ctxNow + 0.20;                    // 途中参加 → 曲中同期で合流
+      const startPerfMs = perfAtCtx + 200;
+      let intoSec = (startPerfMs + offsetMs)/1000 - targetSec + oL;
+      if (m.loop) intoSec = intoSec % buf.duration;
+      if (intoSec >= buf.duration && !m.loop){ $('cue').textContent=T.done; return; }
+      src.start(startCtx, Math.max(0, intoSec));
+    }
+    cueSrcs.push(src);
   }
-  cueSrc = src;
+  cueSrc = cueSrcs[0];
   $('cue').textContent = m.id;
   sendReport('playing');
-  src.onended = ()=>{ if (cueSrc===src && !m.loop) sendReport('idle'); };
+  cueSrc.onended = ()=>{ if (cueSrc===cueSrcs[0] && !m.loop) sendReport('idle'); };
 }
 function onCueStop(){
   showNowPlaying(null); showImage(null);
   pendingCue=null; lastCueId=null;
   if (cueSrc){ try{cueSrc.stop()}catch(e){} cueSrc=null; }
+  cueSrcs.forEach(s=>{ try{s.stop()}catch(e){} }); cueSrcs=[];
   stopVideo();
   $('cue').textContent = '—';
   if (active) sendReport('idle');
