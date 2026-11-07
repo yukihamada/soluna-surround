@@ -132,6 +132,37 @@ async def main():
             r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "stop"})
             check("stop 200", r.status == 200 and (await r.json()).get("stopped"))
 
+            # --- 6) ブース用: 曲を止めずにライトだけ変える ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "light", "pattern": "wave",
+                                   "colors": ["#7cc4ff", "#c084fc"], "brightness": 0.8})
+            body = await r.json()
+            check("light: 200", r.status == 200 and body.get("ok"), str(body))
+            check("light: pattern=wave", (body.get("light") or {}).get("pattern") == "wave", str(body.get("light")))
+            lm = await recv_json(lambda d: d.get("t") == "light" and d.get("pattern") == "wave", timeout=2)
+            check("light: light 配信", lm is not None, str(lm and lm.get("pattern")))
+
+            # --- 6b) light_stop でライトだけ消す ---
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "light_stop"})
+            body = await r.json()
+            check("light_stop: 200", r.status == 200 and body.get("stopped"), str(body))
+            ls = await recv_json(lambda d: d.get("t") == "light_stop", timeout=2)
+            check("light_stop: light_stop 配信", ls is not None)
+
+            # --- 6c) mute キルスイッチ: mute メッセージが配信される ---
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "mute", "on": True})
+            body = await r.json()
+            check("mute on: 200", r.status == 200 and body.get("mute") is True, str(body))
+            mm = await recv_json(lambda d: d.get("t") == "mute", timeout=2)
+            check("mute on: mute 配信", mm is not None and mm.get("on") is True, str(mm))
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "mute", "on": False})
+            body = await r.json()
+            check("mute off: 200", r.status == 200 and body.get("mute") is False, str(body))
+
+            # --- 7) stop で音・光とも停止 ---
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "stop"})
+            check("stop 200", r.status == 200 and (await r.json()).get("stopped"))
+
             await ws.close()
 
     print(f"\n== PASS {len(ok)} / FAIL {len(ng)} ==")

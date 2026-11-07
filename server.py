@@ -1052,6 +1052,22 @@ async def api_dj42(request):
         if action == "next":
             r = await do_show(state, {"next": True})
             return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
+        # ライトだけ即時に変える(曲は止めない)。DJブースのクイックルック用
+        if action == "light":
+            look = {k: body[k] for k in ("pattern", "colors", "bpm", "brightness", "speed")
+                    if body.get(k) is not None}
+            r = await do_light(state, look)
+            return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
+        if action == "light_stop":
+            r = await do_light(state, {"stop": True, "fade_ms": body.get("fade_ms", 800)})
+            return web.json_response({"ok": True, **r, "listeners": len(state["listeners"])})
+        # ミュート(キルスイッチ): 端末は止めずゲイン0。解除で位相ズレなく戻る
+        if action == "mute":
+            state["mute"] = bool(body.get("on", True))
+            _save_state()
+            await _broadcast_text(state, json.dumps({"t": "mute", "on": state["mute"]}))
+            return web.json_response({"ok": True, "mute": state["mute"],
+                                      "listeners": len(state["listeners"])})
         # play: 指定トラックを発火(0始まり)
         show = state.get("show") or []
         i = int(body.get("i", 0))
@@ -1904,6 +1920,10 @@ async def dj42_page(request):
     return web.FileResponse(os.path.join(HERE, "dj42.html"))
 
 
+async def booth_page(request):
+    return web.FileResponse(os.path.join(HERE, "booth.html"))
+
+
 async def favicon(request):
     return web.FileResponse(os.path.join(HERE, "icons", "icon-192.png"))
 
@@ -2057,6 +2077,7 @@ def main():
         web.get("/dj", dj_page),
         web.get("/preview", preview_page),  # DJ42セットリストの非公開プレビュー(映像+演出)
         web.get("/dj42", dj42_page),        # キー(dj42)で6曲を再生するスマホ用プレイヤー
+        web.get("/booth", booth_page),      # DJブース用コンソール(セットリスト/ライト/ミュート)
         web.post("/api/dj42", api_dj42),    # キーだけで全端末へ音+光を配信する簡易リモコン
         web.get("/favicon.ico", favicon),
         web.get("/manifest.webmanifest", manifest),

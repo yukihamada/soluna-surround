@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0507">
+<title>SOLUNA · DJ BOOTH</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Shippori+Mincho:wght@600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  :root{--live:#4ade80;--rec:#f87171}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:var(--ink);color:var(--txt);font-family:var(--sans);
+       padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+       -webkit-user-select:none;user-select:none;overscroll-behavior:contain}
+  body::before{background:radial-gradient(70% 40% at 50% -8%, rgba(212,175,55,.14), transparent 70%)}
+  .wrap{max-width:760px;margin:0 auto;padding:10px 12px 120px}
+
+  /* ---- gate ---- */
+  #gate{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        gap:16px;padding:24px;text-align:center;background:radial-gradient(120% 90% at 50% 0%,#1a1420 0%,#0a0507 62%)}
+  #gate .mark{width:40px;height:40px;border-radius:50%;background:conic-gradient(from 200deg,var(--gold) 0 50%,var(--moon) 50% 100%);box-shadow:0 0 26px rgba(212,175,55,.4)}
+  #gate h1{font-family:var(--serif);font-size:1.5rem;letter-spacing:.28em;color:var(--gold);margin:0;text-indent:.28em}
+  #gate p{color:var(--dim);font-size:.82rem;max-width:320px;line-height:1.7;margin:0}
+  #keyRow{display:flex;gap:8px;width:100%;max-width:340px}
+  #key{flex:1;min-height:54px;font-size:1.1rem;letter-spacing:.2em;text-align:center;background:#1c1418;border:1px solid var(--line2);border-radius:14px;color:#fff;padding:0 14px}
+  #key:focus{outline:none;border-color:var(--gold)}
+  #go{min-height:54px;padding:0 24px;border:none;border-radius:14px;font-weight:800;font-size:1rem;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1206;cursor:pointer}
+  #gateErr{color:var(--bad);font-size:.82rem;min-height:18px}
+
+  #app{display:none}
+
+  /* ---- top bar ---- */
+  .top{display:flex;align-items:center;gap:10px;padding:8px 4px 12px}
+  .top .brand{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:.68rem;letter-spacing:.26em;color:var(--gold);font-weight:700}
+  .top .brand .mark{width:20px;height:20px;border-radius:50%;background:conic-gradient(from 200deg,var(--gold) 0 50%,var(--moon) 50% 100%);box-shadow:0 0 16px rgba(212,175,55,.35);flex:none}
+  .top .live{display:flex;align-items:center;gap:7px;margin-left:auto;font-size:.78rem;color:var(--dim);
+       border:1px solid var(--line);border-radius:999px;padding:6px 12px;background:rgba(255,255,255,.02)}
+  .top .live .dot{width:9px;height:9px;border-radius:50%;background:#4a413c;transition:.3s}
+  .top .live .dot.on{background:var(--live);box-shadow:0 0 12px var(--live)}
+  .top .live b{color:var(--txt);font-weight:600}
+  .top .live.warn{border-color:var(--warn);color:var(--warn);animation:pulsew 1.6s infinite}
+  .top .live.warn b{color:var(--warn)}
+  @keyframes pulsew{50%{opacity:.5}}
+  .top .conn{font-size:.7rem;color:var(--mute);margin-left:6px;transition:.3s}
+  .top .conn.ok{color:var(--ok)} .top .conn.bad{color:var(--bad);animation:pulsew 1s infinite}
+
+  /* ---- now playing ---- */
+  .now{background:linear-gradient(180deg,rgba(212,175,55,.08),transparent 60%),var(--panel);border:1px solid var(--line);
+       border-radius:20px;padding:18px 18px 16px;margin-bottom:12px;position:relative;overflow:hidden}
+  .now .k{font-family:var(--mono);font-size:.6rem;letter-spacing:.3em;color:var(--gold);display:flex;align-items:center;gap:8px}
+  .now .k .rec{width:8px;height:8px;border-radius:50%;background:#4a413c}
+  .now.playing .k .rec{background:var(--rec);box-shadow:0 0 10px var(--rec);animation:blink 1.4s infinite}
+  @keyframes blink{50%{opacity:.35}}
+  .now .title{font-family:var(--serif);font-size:1.9rem;font-weight:700;line-height:1.15;margin:8px 0 2px;color:var(--txt);
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .now .pos{font-family:var(--mono);font-size:.78rem;color:var(--dim);display:flex;justify-content:space-between;margin-top:12px}
+  .now .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:8px}
+  .now .bar i{display:block;height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .4s linear}
+
+  /* ---- transport ---- */
+  .transport{display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:12px}
+  .next{grid-column:1;min-height:88px;border:none;border-radius:18px;cursor:pointer;
+       background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1a1206;font-weight:800;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+       box-shadow:0 10px 30px rgba(212,175,55,.28);font-family:var(--sans)}
+  .next:active{transform:scale(.985)}
+  .next.armed{background:linear-gradient(180deg,#fff0b8,#e8c34a);box-shadow:0 0 0 3px rgba(255,255,255,.4),0 10px 30px rgba(212,175,55,.4)}
+  .next .big{font-size:1.5rem;letter-spacing:.06em;display:flex;align-items:center;gap:10px}
+  .next small{font-size:.72rem;font-weight:600;opacity:.7;max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kill{grid-column:2;width:96px;min-height:88px;border-radius:18px;cursor:pointer;border:1px solid #7a2a2a;
+       background:#2a1414;color:#ff8a8a;font-weight:800;font-size:.82rem;display:flex;flex-direction:column;
+       align-items:center;justify-content:center;gap:4px;font-family:var(--sans)}
+  .kill:active{transform:scale(.97)}
+  .kill.on{background:#7a1d1d;color:#fff;border-color:#ff5a5a;box-shadow:0 0 24px rgba(255,90,90,.4)}
+  .kill .ic{font-size:1.4rem}
+
+  .stopall{width:100%;margin-bottom:12px;padding:14px;border-radius:14px;border:1px solid #7a2a2a;
+       background:#2a1414;color:#ff8a8a;font-weight:700;font-size:.9rem;cursor:pointer;font-family:var(--sans);
+       display:flex;align-items:center;justify-content:center;gap:8px}
+  .stopall:active{transform:scale(.99)}
+  .stopall .ic{font-size:.9rem}
+
+  /* ---- toggles ---- */
+  .toggles{display:flex;gap:8px;margin-bottom:12px}
+  .tg{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:13px 8px;border:1px solid var(--line);
+      border-radius:14px;background:var(--panel);font-size:.86rem;font-weight:600;cursor:pointer;color:var(--dim);transition:.15s}
+  .tg.on{border-color:var(--gold);background:rgba(212,175,55,.12);color:var(--gold2)}
+  .tg .ic{font-size:1.05rem}
+
+  /* ---- section ---- */
+  .sec{margin-bottom:14px}
+  .sec>h2{font-family:var(--mono);font-size:.62rem;letter-spacing:.28em;color:var(--gold);margin:0 0 8px 4px;font-weight:700;
+       display:flex;align-items:center;gap:8px}
+  .sec>h2 small{letter-spacing:0;font-family:var(--sans);color:var(--dim);font-weight:400;font-size:.72rem}
+  .curcolor{width:16px;height:16px;border-radius:5px;margin-left:auto;border:1px solid rgba(255,255,255,.3)}
+
+  /* ---- setlist ---- */
+  .list{display:flex;flex-direction:column;gap:7px}
+  .track{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;
+         background:var(--panel);cursor:pointer;transition:.12s}
+  .track:active{transform:scale(.99)}
+  .track .no{width:24px;text-align:center;color:var(--mute);font-family:var(--mono);font-size:.82rem;font-weight:700;flex:none}
+  .track .t{flex:1;min-width:0}
+  .track .t b{display:block;font-size:.98rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .track .t span{font-size:.7rem;color:var(--dim)}
+  .track .dur{font-family:var(--mono);font-size:.72rem;color:var(--dim);flex:none}
+  .track.on{border-color:var(--gold);background:rgba(212,175,55,.1)}
+  .track.on .no{color:var(--gold)}
+  .track.playing{border-color:var(--rec);background:rgba(248,113,113,.08)}
+  .track.playing .no{color:var(--rec)}
+
+  /* ---- light ---- */
+  .looks{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+  .look{padding:10px 15px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--txt);
+        font-size:.82rem;cursor:pointer;font-weight:600}
+  .look.on{border-color:var(--gold);background:rgba(212,175,55,.14);color:var(--gold2)}
+  .swatches{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .sw{width:38px;height:38px;border-radius:10px;cursor:pointer;border:2px solid transparent;transition:.12s}
+  .sw.on{border-color:#fff;box-shadow:0 0 0 2px rgba(0,0,0,.5),0 0 16px currentColor}
+  .lightrow{display:flex;align-items:center;gap:12px;font-size:.78rem;color:var(--dim)}
+  .lightrow input[type=range]{flex:1}
+  .lightrow b{color:var(--txt);font-family:var(--mono);min-width:42px;text-align:right}
+
+  /* ---- stems ---- */
+  .stems{display:flex;gap:7px;flex-wrap:wrap}
+  .stem{padding:9px 14px;border:1px solid var(--line);border-radius:11px;background:var(--panel);color:var(--txt);
+        font-size:.8rem;cursor:pointer;font-weight:600}
+  .stem.on{border-color:var(--gold);background:rgba(212,175,55,.14);color:var(--gold2)}
+
+  /* ---- toast ---- */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;
+         background:#1e1a10;border:1px solid var(--gold);color:var(--gold2);padding:11px 20px;border-radius:999px;
+         font-size:.84rem;pointer-events:none;z-index:90;white-space:nowrap;max-width:90vw;overflow:hidden;text-overflow:ellipsis}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{background:#2a1414;border-color:#7a2a2a;color:#ff8a8a}
+
+  /* ---- footer note ---- */
+  .foot{font-size:.66rem;color:var(--mute);text-align:center;line-height:1.7;margin-top:20px;padding:0 10px}
+
+  @media (min-width:560px){
+    .now .title{font-size:2.3rem}
+    .transport{grid-template-columns:1fr 120px}
+    .kill{width:120px}
+  }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="mark"></div>
+  <h1>DJ BOOTH</h1>
+  <p>合言葉を入れると、会場の全端末へ 音・光・映像 を配信できます。</p>
+  <div id="keyRow">
+    <input id="key" type="password" inputmode="text" autocomplete="off" placeholder="キー" aria-label="キー">
+    <button id="go">開く</button>
+  </div>
+  <div id="gateErr"></div>
+</div>
+
+<div id="app" class="wrap">
+  <div class="top">
+    <div class="brand"><span class="mark"></span>SOLUNA · BOOTH</div>
+    <div class="conn" id="conn" title="接続">●</div>
+    <div class="live"><span class="dot" id="dot"></span><b id="nListeners">0</b><span>台</span></div>
+  </div>
+
+  <!-- NOW PLAYING -->
+  <div class="now" id="nowCard">
+    <div class="k"><span class="rec"></span><span id="nowState">待機中</span></div>
+    <div class="title" id="nowTitle">—</div>
+    <div class="pos"><span id="nowElapsed">0:00</span><span id="nowRemain">—</span></div>
+    <div class="bar"><i id="nowBar"></i></div>
+  </div>
+
+  <!-- TRANSPORT -->
+  <div class="transport">
+    <button class="next" id="nextBtn">
+      <span class="big">NEXT ▶</span>
+      <small id="nextLabel">次の曲</small>
+    </button>
+    <button class="kill" id="muteBtn">
+      <span class="ic">🔇</span><span id="muteTxt">MUTE</span>
+    </button>
+  </div>
+
+  <!-- OUTPUT TOGGLES -->
+  <div class="toggles">
+    <button class="tg on" id="tgAudio" data-on="1"><span class="ic">🔊</span>音</button>
+    <button class="tg on" id="tgLight" data-on="1"><span class="ic">💡</span>光</button>
+    <button class="tg" id="tgVideo" data-on="0"><span class="ic">🎬</span>映像</button>
+  </div>
+
+  <!-- EMERGENCY STOP -->
+  <button class="stopall" id="stopBtn"><span class="ic">■</span> 全停止（音も光も止める）</button>
+
+  <!-- SETLIST -->
+  <div class="sec">
+    <h2>セットリスト <small>タップで即発火 / NEXTで順送り</small></h2>
+    <div class="list" id="list"></div>
+  </div>
+
+  <!-- LIGHT QUICK LOOKS -->
+  <div class="sec">
+    <h2>ライト <small>曲を止めずに色を変える</small><span class="curcolor" id="curColor"></span></h2>
+    <div class="looks" id="looks"></div>
+    <div class="swatches" id="swatches"></div>
+    <div class="lightrow">
+      <span>明るさ</span>
+      <input type="range" id="bright" min="10" max="100" value="100">
+      <b id="brightV">100%</b>
+    </div>
+  </div>
+
+  <!-- STEMS -->
+  <div class="sec">
+    <h2>音のパート <small>次の発火に適用</small></h2>
+    <div class="stems" id="stems"></div>
+  </div>
+
+  <div class="foot">
+    ▶ 発火・NEXT は全端末でサンプル精度同期。MUTEは端末を止めず無音化（解除で位相そのまま）。<br>
+    音源の権利確認は未了。外部公開・配布は別承認。
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const KEY_STORE = 'booth_ok';
+let KEY = 'dj42';                       // 既定キー(主催者が変えたら ?key=... で渡す)
+let tracks = [], curIdx = -1, playing = false;
+let stem = 'full';
+let pollTimer = null;
+let opts = { audio:true, light:true, video:false };
+let light = { pattern:'pulse', colors:['#d4af37','#d7c98f'], brightness:1.0 };
+let lastCue = null, serverOffsetMs = 0;
+
+const STEM_LABEL = {full:'全体', drums:'ドラム', bass:'ベース', other:'その他', vocals:'ボーカル'};
+const PATTERNS = [['pulse','パルス'],['beat','ビート'],['wave','ウェーブ'],['solid','単色'],['plasma','プラズマ'],['audio','音連動'],['strobe','ストロボ']];
+const COLORS = [
+  ['#d4af37','金'],['#7fc9a2','緑'],['#c8d3e6','月白'],['#f87171','赤'],
+  ['#7cc4ff','青'],['#c084fc','紫'],['#ffffff','白'],['#fb923c','橙']
+];
+
+// ---- toast ----
+function toast(msg, err){
+  const t = $('toast'); t.textContent = msg; t.classList.toggle('err', !!err);
+  t.classList.add('show'); clearTimeout(t._h);
+  t._h = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// ---- auth ----
+function unlock(){
+  $('gate').style.display='none'; $('app').style.display='block';
+  buildStatic();
+  loadShow();
+  poll(); pollTimer = setInterval(poll, 2500);
+  requestWakeLock();
+}
+
+// 画面スリープ防止(対応端末のみ)。DJ中に画面が消えない。
+let wakeLock = null;
+async function requestWakeLock(){
+  try{
+    if ('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); }
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', ()=>{
+  if (document.visibilityState==='visible' && $('app').style.display==='block') requestWakeLock();
+});
+$('go').onclick = ()=>{
+  const v = ($('key').value||'').trim().toLowerCase();
+  if (!v){ $('gateErr').textContent='キーを入力してください'; return; }
+  KEY = v;
+  try{ localStorage.setItem(KEY_STORE, v); }catch(e){}
+  unlock();
+};
+$('key').addEventListener('keydown', e=>{ if (e.key==='Enter') $('go').click(); });
+// 招待リンク ?key=... で開いたら保存
+const qk = new URLSearchParams(location.search).get('key');
+if (qk){ KEY = qk.trim().toLowerCase(); try{ localStorage.setItem(KEY_STORE, KEY); }catch(e){}
+  history.replaceState(null,'',location.pathname); }
+try{ const saved = localStorage.getItem(KEY_STORE); if (saved){ KEY = saved; unlock(); } }catch(e){}
+
+// ---- static UI (looks / swatches / stems) ----
+function buildStatic(){
+  const lk = $('looks');
+  PATTERNS.forEach(([p,label])=>{
+    const b = document.createElement('button');
+    b.className='look'+(p===light.pattern?' on':''); b.textContent=label; b.dataset.p=p;
+    b.onclick = ()=>{ light.pattern=p; markLooks(); sendLight(); };
+    lk.appendChild(b);
+  });
+  const sw = $('swatches');
+  COLORS.forEach(([c,label])=>{
+    const b = document.createElement('button');
+    b.className='sw'+(c===light.colors[0]?' on':''); b.style.background=c; b.style.color=c;
+    b.title=label; b.dataset.c=c;
+    b.onclick = ()=>{ light.colors=[c, light.colors[1]]; markSwatches(); sendLight(); };
+    sw.appendChild(b);
+  });
+  const st = $('stems');
+  ['full','drums','bass','other','vocals'].forEach(s=>{
+    const b=document.createElement('button');
+    b.className='stem'+(s===stem?' on':''); b.textContent=STEM_LABEL[s]; b.dataset.s=s;
+    b.onclick=()=>{ stem=s; markStems(); toast('次の発火: '+(s==='full'?'全体':STEM_LABEL[s])); };
+    st.appendChild(b);
+  });
+  $('bright').oninput = ()=>{ light.brightness = $('bright').value/100; $('brightV').textContent=$('bright').value+'%'; };
+  $('bright').onchange = ()=> sendLight();
+  // toggles
+  $('tgAudio').onclick = ()=> toggle('audio');
+  $('tgLight').onclick = ()=> toggle('light');
+  $('tgVideo').onclick = ()=> toggle('video');
+  $('nextBtn').onclick = ()=> fireNext();
+  $('muteBtn').onclick = ()=> toggleMute();
+  $('stopBtn').onclick = ()=> stopAll();
+  markLooks(); markSwatches(); markStems();
+}
+function markLooks(){ document.querySelectorAll('.look').forEach(b=>b.classList.toggle('on', b.dataset.p===light.pattern)); }
+function markSwatches(){ document.querySelectorAll('.sw').forEach(b=>b.classList.toggle('on', b.dataset.c===light.colors[0]));
+  const cc=$('curColor'); if (cc) cc.style.background = light.colors[0]; }
+function markStems(){ document.querySelectorAll('.stem').forEach(b=>b.classList.toggle('on', b.dataset.s===stem)); }
+function toggle(k){ opts[k]=!opts[k]; const el=$('tg'+k[0].toUpperCase()+k.slice(1));
+  el.classList.toggle('on', opts[k]); el.dataset.on = opts[k]?'1':'0'; }
+
+// ---- API ----
+async function api(body){
+  const r = await fetch('/api/dj42', {method:'POST', headers:{'content-type':'application/json'},
+    body: JSON.stringify({key:KEY, ch:'festival', ...body})});
+  if (r.status===403){ toast('キーが違います', true); throw new Error('forbidden'); }
+  if (!r.ok){ let t=''; try{ t=await r.text(); }catch(e){} toast('失敗: '+r.status+(t?' '+t:''), true); throw new Error(r.status); }
+  return r.json();
+}
+
+// ---- setlist ----
+async function loadShow(){
+  try{
+    const d = await (await fetch('/api/show?ch=festival')).json();
+    tracks = (d.show && d.show.steps) || d.steps || [];
+  }catch(e){ tracks=[]; }
+  renderList();
+}
+function fmt(s){ s=Math.max(0,Math.floor(s||0)); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function renderList(){
+  const list = $('list');
+  if (!tracks.length){ list.innerHTML='<p style="color:var(--dim);padding:8px 4px">セットリストが未投入です。</p>'; return; }
+  list.innerHTML='';
+  tracks.forEach((s,i)=>{
+    const el=document.createElement('div'); el.className='track'; el.dataset.i=i;
+    const hasStems = s.stems && Object.keys(s.stems).length;
+    el.innerHTML=`<div class="no">${i+1}</div>
+      <div class="t"><b>${s.label||('曲'+(i+1))}</b><span>${s.video?'音+光+映像':'音+光'}${hasStems?' · ステム有':''}</span></div>
+      <div class="dur">${fmt(s.dur)}</div>`;
+    el.onclick=()=>fire(i);
+    list.appendChild(el);
+  });
+}
+function markList(idx, isPlaying){
+  curIdx = idx;
+  document.querySelectorAll('.track').forEach(el=>{
+    const i=Number(el.dataset.i);
+    el.classList.toggle('on', i===idx);
+    el.classList.toggle('playing', i===idx && isPlaying);
+  });
+}
+
+// ---- fire ----
+async function fire(i){
+  if (!tracks[i]) return;
+  const parts=[opts.audio?'音'+(stem!=='full'?'('+STEM_LABEL[stem]+')':''):null, opts.light?'光':null, opts.video?'映像':null].filter(Boolean);
+  if (!parts.length){ toast('音・光・映像のどれかをONにしてください', true); return; }
+  markList(i, false);
+  toast(`「${tracks[i].label}」を${parts.join('+')}で配信`);
+  try{
+    const d = await api({action:'play', i, stem, ...opts});
+    if (d.listeners!==undefined) $('nListeners').textContent=d.listeners;
+    poll();
+  }catch(e){}
+}
+let nextArmed = 0, nextTimer = null;
+async function fireNext(){
+  const parts=[opts.audio?'音':null, opts.light?'光':null, opts.video?'映像':null].filter(Boolean);
+  if (!parts.length){ toast('音・光・映像のどれかをONにしてください', true); return; }
+  // 誤タップで曲が飛ばないよう二度押しで確定(2.5秒以内)
+  const t = Date.now();
+  if (t - nextArmed > 2500){
+    nextArmed = t;
+    $('nextBtn').classList.add('armed');
+    $('nextLabel').textContent = 'もう一度押すと次の曲へ';
+    clearTimeout(nextTimer);
+    nextTimer = setTimeout(()=>{ nextArmed=0; $('nextBtn').classList.remove('armed'); poll(); }, 2500);
+    return;
+  }
+  nextArmed = 0; clearTimeout(nextTimer);
+  $('nextBtn').classList.remove('armed');
+  toast('次の曲へ');
+  try{
+    const d = await api({action:'next', ...opts});
+    if (d.done){ toast('セットリストの最後です'); }
+    if (d.listeners!==undefined) $('nListeners').textContent=d.listeners;
+    poll();
+  }catch(e){}
+}
+
+// ---- light ----
+async function sendLight(){
+  try{
+    await api({action:'light', pattern:light.pattern, colors:light.colors, brightness:light.brightness});
+    toast('ライト: '+ (PATTERNS.find(p=>p[0]===light.pattern)||['',''])[1]);
+  }catch(e){}
+}
+
+// ---- mute ----
+let muted=false;
+async function toggleMute(){
+  muted=!muted;
+  $('muteBtn').classList.toggle('on', muted);
+  $('muteTxt').textContent = muted?'UNMUTE':'MUTE';
+  const wasPlaying = $('nowCard').classList.contains('playing');
+  if (wasPlaying) $('nowState').textContent = muted?'ミュート中':'LIVE';
+  try{ await api({action:'mute', on:muted}); toast(muted?'ミュート（無音）':'ミュート解除'); }
+  catch(e){ muted=!muted; $('muteBtn').classList.toggle('on',muted); $('muteTxt').textContent=muted?'UNMUTE':'MUTE';
+    if (wasPlaying) $('nowState').textContent = muted?'ミュート中':'LIVE'; }
+}
+
+// ---- emergency stop: 音も光も止める ----
+async function stopAll(){
+  toast('全停止');
+  try{ await api({action:'stop'}); muted=false;
+    $('muteBtn').classList.remove('on'); $('muteTxt').textContent='MUTE';
+    $('nowCard').classList.remove('playing'); $('nowState').textContent='停止';
+    $('nowTitle').textContent='—'; $('nowBar').style.width='0%';
+    document.querySelectorAll('.track').forEach(el=>el.classList.remove('playing'));
+    poll();
+  }catch(e){}
+}
+
+// ---- poll status ----
+function nowMs(){ return Date.now() + serverOffsetMs; }
+async function poll(){
+  try{
+    const s = await (await fetch('/status')).json();
+    $('conn').className='conn ok'; $('conn').textContent='●';
+    if (s.server_epoch_ms) serverOffsetMs = s.server_epoch_ms - Date.now();
+    const c = (s.channels && s.channels.festival) || {};
+    const n = c.listeners||0;
+    $('nListeners').textContent = n;
+    $('dot').classList.toggle('on', !!c.cue);
+    // 配信中なのに0台なら警告色(誰も聴いていない)
+    const live = $('nListeners').parentElement;
+    live.classList.toggle('warn', !!c.cue && n===0);
+    muted = !!c.mute;
+    $('muteBtn').classList.toggle('on', muted);
+    $('muteTxt').textContent = muted?'UNMUTE':'MUTE';
+
+    const show = c.show || {};
+    const idx = (show.i>0)? show.i-1 : -1;
+    playing = !!c.cue;
+    if (idx>=0) markList(idx, playing);
+
+    // now playing
+    const card=$('nowCard');
+    card.classList.toggle('playing', playing);
+    if (c.cue){
+      const cue=c.cue;
+      $('nowState').textContent = muted?'ミュート中':'LIVE';
+      $('nowTitle').textContent = (cue.id||'').replace(/^show\d+-/,'') || '—';
+      const dur = (show.durs && show.durs[idx]) || 0;
+      const elapsed = Math.max(0, (nowMs()/1000) - (cue.at||0));
+      $('nowElapsed').textContent = fmt(elapsed);
+      if (dur>0){
+        const rem=Math.max(0, dur-elapsed);
+        $('nowRemain').textContent = '-'+fmt(rem);
+        $('nowBar').style.width = Math.min(100, (elapsed/dur)*100)+'%';
+      } else {
+        $('nowRemain').textContent = cue.loop?'LOOP':'—';
+        $('nowBar').style.width='0%';
+      }
+    } else {
+      $('nowState').textContent = n? '待機中':'参加者なし';
+      $('nowTitle').textContent = '—';
+      $('nowElapsed').textContent='0:00'; $('nowRemain').textContent='—'; $('nowBar').style.width='0%';
+    }
+    // next label
+    const nx = show.next;
+    $('nextLabel').textContent = nx ? ('次: '+nx) : (tracks.length? 'セットリスト最後':'—');
+  }catch(e){
+    $('conn').className='conn bad'; $('conn').textContent='●';
+  }
+}
+</script>
+</body>
+</html>
