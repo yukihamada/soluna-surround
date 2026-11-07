@@ -120,6 +120,28 @@
   #dim.on{display:flex}
   #dim small{display:block;margin-top:8px;font-size:.7rem;letter-spacing:.1em;color:rgba(242,231,211,.3)}
   @media (max-height:700px){ .orb{width:132px;height:132px} .zone{font-size:3rem} body{gap:12px} }
+  /* share: 友達にQRを見せる */
+  .share{appearance:none;background:transparent;border:1px solid rgba(212,175,55,.32);color:var(--gold);
+       border-radius:99px;padding:11px 22px;font-size:.84rem;font-family:var(--sans);cursor:pointer;letter-spacing:.04em;
+       transition:background .2s,border-color .2s}
+  .share:active{transform:scale(.96)}
+  #shareModal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;
+       background:rgba(6,3,5,.86);backdrop-filter:blur(10px);animation:fadein .25s}
+  #shareModal[hidden]{display:none}
+  .sharecard{position:relative;width:min(100%,380px);background:linear-gradient(180deg,rgba(28,20,14,.98),rgba(14,9,7,.98));
+       border:1px solid rgba(212,175,55,.35);border-radius:22px;padding:26px 22px 22px;text-align:center;
+       box-shadow:0 24px 70px rgba(0,0,0,.6)}
+  .sharex{position:absolute;top:12px;right:14px;background:transparent;border:none;color:var(--dim);font-size:1.2rem;cursor:pointer;padding:6px}
+  .sharet{font-family:var(--serif);color:var(--gold2);font-size:1rem;font-weight:700;letter-spacing:.04em;line-height:1.5}
+  .qrbox{margin:18px auto 10px;width:min(78vw,260px);aspect-ratio:1;background:#fff;border-radius:16px;padding:12px;
+       box-shadow:0 6px 24px rgba(0,0,0,.4)}
+  .qrbox img{width:100%;height:100%;display:block}
+  .shareurl{font-family:var(--mono);font-size:.64rem;color:var(--dim);word-break:break-all;margin:6px 0 14px;line-height:1.5}
+  .shareacts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .shareacts button{appearance:none;border:1px solid rgba(212,175,55,.4);background:rgba(212,175,55,.08);color:var(--gold);
+       border-radius:99px;padding:12px 20px;font-size:.86rem;font-family:var(--sans);cursor:pointer;font-weight:600}
+  .shareacts button:active{transform:scale(.95)}
+  .sharenote{margin-top:16px;font-size:.68rem;color:rgba(242,231,211,.45);line-height:1.6}
 </style>
 </head>
 <body>
@@ -129,6 +151,7 @@
   <div class="orb"><div class="zone" id="zoneBig">A</div></div>
   <div class="picker" id="picker"></div>
   <button class="main" id="btn">▶ 参加する</button>
+  <button class="share" id="shareBtn" type="button" data-i18n="share">📤 友達にシェア</button>
   <div class="statusrow"><span class="dot" id="dot"></span><b id="st">停止中</b></div>
   <div id="netHint" hidden></div>
   <div class="vol">🔉 <input type="range" id="vol" min="0" max="100" value="80"> 🔊</div>
@@ -157,6 +180,19 @@
     <div class="hint privacy" style="text-align:center"><a href="/about" style="color:var(--gold2);opacity:.8">SOLUNA Sound とは / about ›</a></div>
   </div>
   <div id="dim"><div id="dimTxt">SOLUNA · SOUND<br><small data-i18n="dimTap">タップで表示</small></div></div>
+  <div id="shareModal" hidden>
+    <div class="sharecard">
+      <button class="sharex" id="shareClose" aria-label="close">✕</button>
+      <div class="sharet">このQRを友達に見せて、一緒に参加しよう</div>
+      <div class="qrbox"><img id="shareQr" alt="参加QR"></div>
+      <div class="shareurl" id="shareUrl"></div>
+      <div class="shareacts">
+        <button id="shareNative" type="button">📤 シェア</button>
+        <button id="shareCopy" type="button">🔗 リンクをコピー</button>
+      </div>
+      <div class="sharenote">同じゾーンで開くと、会場全体で音がそろいます</div>
+    </div>
+  </div>
 
   <video id="videoLayer" playsinline webkit-playsinline preload="auto"></video>
   <div id="vHint">🔇 タップで音を出す</div>
@@ -189,7 +225,7 @@ const I18N = {
         netWifi:'📶 このゾーンは会場Wi-Fi「{ssid}」に接続すると同期が良くなります', netLte:'📶 このゾーンはモバイル回線のままでOK(会場Wi-Fiは前方ゾーン専用)',
         privacy:'位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。',
         gainL:'音量補正(機種差)', batL:'電池', dimTap:'タップで表示',
-        waiting:'つながっています — 音を待っています', playing:'♪ 再生中' },
+        waiting:'つながっています — 音を待っています', playing:'♪ 再生中', share:'📤 友達にシェア' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
         hint:'🚩 Pick the zone on the flag nearest to you and the whole venue plays in phase. Keep your screen on.',
@@ -204,7 +240,7 @@ const I18N = {
         netWifi:'📶 In this zone, join venue Wi-Fi "{ssid}" for tighter sync', netLte:'📶 In this zone, stay on mobile data (venue Wi-Fi is for the front zones)',
         privacy:'Your location is used only on this device to compute the distance to the stage. Only the nearest zone letter is sent — never coordinates.',
         gainL:'LEVEL TRIM (device)', batL:'BATTERY', dimTap:'tap to show',
-        waiting:'connected — waiting for sound', playing:'♪ playing' },
+        waiting:'connected — waiting for sound', playing:'♪ playing', share:'📤 SHARE' },
 };
 const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
 const T = I18N[LANG];
@@ -408,7 +444,6 @@ function onGeoFix(pos){
     if (z && z !== ZONE){ ZONE = z;
       if (ws && ws.readyState===1) ws.send(JSON.stringify({t:'zone', zone:ZONE}));
     }
-    renderZones();
     if (cueBuf && lastCueId) armCue();             // 新しい遅延で曲中同期し直す
   }
 }
@@ -963,6 +998,52 @@ document.addEventListener('visibilitychange', async ()=>{      // 画面復帰�
   }
 });
 renderZones();
+
+// ---- SHARE: 友達にQRを見せる ------------------------------------------------
+(function(){
+  const modal = $('shareModal'), qrImg = $('shareQr'), urlEl = $('shareUrl');
+  let shareWake = null;
+  function buildUrl(){
+    const ch = qs.get('ch') || 'festival';
+    const p = new URLSearchParams();
+    if (ch && ch !== 'festival') p.set('ch', ch);
+    // 今のゾーン(手動/自動)を渡す。GPS自動の人はGPSが優先されるので害はない
+    if (ZONE && /^[A-Z]$/.test(ZONE)) p.set('zone', ZONE);
+    const q = p.toString();
+    return location.origin + '/' + (q ? '?' + q : '');
+  }
+  function open(){
+    const url = buildUrl();
+    const ch = qs.get('ch') || 'festival';
+    const qrp = new URLSearchParams({ ch });
+    if (ZONE && /^[A-Z]$/.test(ZONE)) qrp.set('zone', ZONE);
+    qrImg.src = '/api/qr?' + qrp.toString();
+    urlEl.textContent = url;
+    modal.hidden = false;
+    if (navigator.wakeLock) navigator.wakeLock.request('screen').then(w=>{ shareWake = w; }).catch(()=>{});
+  }
+  function close(){ modal.hidden = true; try{ shareWake && shareWake.release(); }catch(e){} shareWake=null; }
+  $('shareBtn').onclick = open;
+  $('shareClose').onclick = close;
+  modal.addEventListener('click', e=>{ if (e.target === modal) close(); });
+  $('shareCopy').onclick = async ()=>{
+    const url = buildUrl();
+    try{ await navigator.clipboard.writeText(url); $('shareCopy').textContent = '✓ コピーしました'; }
+    catch(e){ $('shareCopy').textContent = 'コピーできません'; }
+    setTimeout(()=>{ $('shareCopy').textContent = '🔗 リンクをコピー'; }, 1600);
+  };
+  $('shareNative').onclick = async ()=>{
+    const url = buildUrl();
+    if (navigator.share){
+      try{ await navigator.share({ title:'SOLUNA SOUND', text:'一緒に会場の音になろう', url }); }
+      catch(e){ /* キャンセルは無視 */ }
+    } else {
+      try{ await navigator.clipboard.writeText(url); $('shareNative').textContent = '✓ コピーしました'; }
+      catch(e){}
+      setTimeout(()=>{ $('shareNative').textContent = '📤 シェア'; }, 1600);
+    }
+  };
+})();
 </script>
 </body>
 </html>

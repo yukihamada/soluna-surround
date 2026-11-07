@@ -46,6 +46,7 @@ import struct
 import subprocess
 import time
 import os
+from urllib.parse import quote
 from aiohttp import web, WSMsgType
 import showctl          # OSC in / timecode / Art-Net・sACN out(依存ゼロ)
 
@@ -1209,6 +1210,37 @@ def _qr_svg_dataurl(url, box=8, border=2):
         return None
 
 
+async def api_qr(request):
+    """観客が友達にシェアする用のQR(SVG)を返す。
+    URLはサーバが自前で組み立てる(ゾーン/チャンネルのみ受ける)ので任意URLの
+    QR生成には使えない。認証不要=参加者全員が自分の画面で出せる。"""
+    ch = request.query.get("ch", "festival")
+    zone = (request.query.get("zone") or "").upper()
+    gate = request.query.get("gate") == "1"
+    base = f"https://{request.host}"
+    q = []
+    if gate:
+        q.append("gate=1")
+    if ch and ch != "festival":
+        q.append("ch=" + quote(ch))
+    if zone and zone in _chan(ch)["zones"]:
+        q.append("zone=" + quote(zone))
+    url = base + "/" + ("?" + "&".join(q) if q else "")
+    try:
+        import io
+        import qrcode
+        import qrcode.image.svg
+        img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage,
+                          box_size=10, border=2)
+        buf = io.BytesIO()
+        img.save(buf)
+        return web.Response(body=buf.getvalue(), content_type="image/svg+xml",
+                            headers={"Cache-Control": "public, max-age=300",
+                                     "X-QR-URL": url})
+    except Exception as e:
+        raise web.HTTPServiceUnavailable(text=f"qr unavailable: {e}")
+
+
 async def guide_page(request):
     """全URL・使い方・QR・本番手順を1枚にまとめた案内ページ。
     トークン付きURLのQRは管理トークンで開いた時だけ出す(?token=… or ヘッダ)。"""
@@ -2051,6 +2083,7 @@ def main():
         web.get("/api/timecode", api_timecode),
         web.post("/api/timecode", api_timecode),
         web.get("/flags", flags_page),
+        web.get("/api/qr", api_qr),          # 観客シェア用QR(SVG)
         web.get("/guide", guide_page),      # 全URL・使い方・QRを1枚にまとめた案内
         web.get("/api/assets", api_assets),
         web.post("/api/upload", api_upload),
