@@ -1191,6 +1191,202 @@ async def flags_page(request):
     return web.Response(text=html, content_type="text/html")
 
 
+def _qr_svg_dataurl(url, box=8, border=2):
+    """URLをQRのSVG data URLにする(依存が無ければNone)。"""
+    try:
+        import io
+        import base64
+        import qrcode
+        import qrcode.image.svg
+        img = qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage,
+                          box_size=box, border=border)
+        buf = io.BytesIO()
+        img.save(buf)
+        svg = buf.getvalue().decode()
+        b64 = base64.b64encode(svg.encode()).decode()
+        return f"data:image/svg+xml;base64,{b64}"
+    except Exception:
+        return None
+
+
+async def guide_page(request):
+    """全URL・使い方・QR・本番手順を1枚にまとめた案内ページ。
+    トークン付きURLのQRは管理トークンで開いた時だけ出す(?token=… or ヘッダ)。"""
+    base = request.query.get("base") or f"https://{request.host}"
+    ch = request.query.get("ch", "festival")
+    zones = list(_chan(ch)["zones"].keys())
+
+    # トークンは本人がURLで渡した時だけ使う(公開ページに漏らさない)
+    qtok = request.query.get("token") or ""
+    is_admin = _admin_ok(request) or (bool(os.environ.get("SOLUNA_ADMIN")) and qtok == os.environ.get("SOLUNA_ADMIN"))
+    dj_tok = os.environ.get("SOLUNA_DJ_TOKEN") or ""
+    admin_tok = os.environ.get("SOLUNA_ADMIN") or ""
+
+    def qr(url, label, sub="", cls=""):
+        src = _qr_svg_dataurl(url)
+        img = (f'<img class="qr" src="{src}" alt="{label}のQR">' if src
+               else f'<div class="qr-fallback">{url}</div>')
+        return f'''<div class="qcard {cls}">
+  <div class="qtop"><b>{label}</b>{f'<span class="qsub">{sub}</span>' if sub else ''}</div>
+  {img}
+  <a class="qurl" href="{url}" target="_blank" rel="noopener">{url}</a>
+</div>'''
+
+    join_url = f"{base}/"
+    gate_url = f"{base}/?gate=1" + (f"&ch={ch}" if ch != "festival" else "")
+    screen_url = f"{base}/screen"
+    dj_url = f"{base}/dj"
+    admin_url = f"{base}/admin"
+    connect_url = f"{base}/connect"
+    about_url = f"{base}/about"
+    flags_url = f"{base}/flags" + (f"?ch={ch}" if ch != "festival" else "")
+    gateflags_url = f"{base}/flags?gate=1" + (f"&ch={ch}" if ch != "festival" else "")
+
+    zone_cards = "".join(
+        qr(f"{base}/?zone={z}" + (f"&ch={ch}" if ch != "festival" else ""),
+           f"ゾーン {z}", "この旗の近くで読み取る") for z in zones)
+
+    # 秘密トークン付きURL(管理トークンで開いた時だけ表示)
+    secret_block = ""
+    if is_admin:
+        dj_secret = f"{dj_url}?token={dj_tok}" if dj_tok else ""
+        admin_secret = f"{admin_url}?token={admin_tok}" if admin_tok else ""
+        rows = []
+        if dj_secret:
+            rows.append(qr(dj_secret, "DJ 配信元(キー付き)", "DJ本人だけに渡す", "secret"))
+        if admin_secret:
+            rows.append(qr(admin_secret, "管理画面(キー付き)", "主催者・音響だけに渡す", "secret"))
+        if rows:
+            secret_block = f'''
+<section class="blk">
+  <h2>🔑 キー付きURL<span class="hint">このページを管理トークンで開いた時だけ表示・本人以外に共有しない</span></h2>
+  <div class="qgrid">{"".join(rows)}</div>
+</section>'''
+
+    html = f'''<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SOLUNA Sound — URL・使い方まとめ</title>
+<meta name="description" content="SOLUNA Sound の全URL・QR・使い方・本番手順を1枚に。観客・DJ・FOH・投影・接続ガイド。">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  .hero{{padding:44px 0 10px;text-align:center}}
+  .hero h1{{font-family:var(--serif);font-size:clamp(1.8rem,5.5vw,2.8rem);line-height:1.2;margin:14px 0 10px;text-wrap:balance}}
+  .hero p{{color:var(--dim);font-size:1rem;max-width:36em;margin:0 auto}}
+  section.blk{{margin-top:48px}}
+  section.blk>h2{{font-family:var(--mono);font-size:.72rem;letter-spacing:.28em;color:var(--gold);margin:0 0 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}}
+  section.blk>h2::after{{content:"";flex:1;height:1px;background:var(--line)}}
+  section.blk>h2 .hint{{letter-spacing:0;font-family:var(--sans);color:var(--dim);font-size:.72rem;font-weight:400}}
+  .qgrid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px}}
+  .qcard{{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}}
+  .qcard.secret{{border-color:rgba(212,175,55,.55);box-shadow:0 0 0 3px rgba(212,175,55,.12)}}
+  .qtop{{display:flex;flex-direction:column;gap:2px}}
+  .qtop b{{font-size:.95rem;color:var(--txt)}}
+  .qsub{{font-size:.7rem;color:var(--dim)}}
+  .qr{{width:150px;height:150px;background:#fff;border-radius:10px;padding:8px;display:block}}
+  .qr-fallback{{font-family:var(--mono);font-size:.7rem;color:var(--dim);word-break:break-all;background:#0e0709;border:1px dashed var(--line2);border-radius:10px;padding:12px;width:150px;min-height:150px;display:grid;place-items:center}}
+  .qurl{{font-family:var(--mono);font-size:.68rem;color:var(--gold2);word-break:break-all}}
+  .steps{{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}}
+  .step{{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px}}
+  .step b.k{{display:block;font-family:var(--serif);font-size:1.5rem;color:var(--gold);line-height:1;margin-bottom:8px}}
+  .step h3{{margin:0 0 6px;font-size:1rem}}
+  .step p{{margin:0;color:var(--dim);font-size:.88rem;line-height:1.6}}
+  .step ol{{margin:6px 0 0;padding-left:1.2em;color:var(--dim);font-size:.85rem;line-height:1.7}}
+  table.s-table{{width:100%;border-collapse:collapse;font-size:.86rem}}
+  table.s-table td,table.s-table th{{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}}
+  table.s-table th{{color:var(--dim);font-weight:500;font-size:.72rem;letter-spacing:.1em}}
+  table.s-table td:first-child{{color:var(--gold2);white-space:nowrap;font-family:var(--mono);font-size:.8rem}}
+  .note{{border-left:2px solid var(--gold);padding-left:12px;color:var(--dim);font-size:.85rem;margin-top:12px;line-height:1.7}}
+  .note b{{color:var(--txt)}}
+  .setlist{{display:flex;flex-wrap:wrap;gap:8px}}
+  .setlist span{{font-family:var(--mono);font-size:.78rem;color:var(--txt);background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:5px 12px}}
+  footer{{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);font-size:.78rem;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between}}
+  @media print{{ body{{background:#fff;color:#000}} .qr{{width:120px;height:120px}} section.blk{{page-break-inside:avoid}} }}
+</style></head>
+<body>
+<div class="s-wrap">
+  <div class="s-bar"><div class="s-brand"><span class="mark"></span>SOLUNA · SOUND <small>URL &amp; GUIDE</small></div>
+    <div style="margin-left:auto;display:flex;gap:8px"><a class="s-btn ghost" href="{about_url}">紹介</a><a class="s-btn ghost" href="{connect_url}">接続ガイド</a></div></div>
+
+  <div class="hero">
+    <h1>全部のURLと、使い方。</h1>
+    <p>会場ごと、ひとつの時計で鳴る。観客は読み取って▶、DJはON AIR、主催者はFOH。下のQRからそのまま開けます。</p>
+  </div>
+
+  <section class="blk">
+    <h2>🎧 参加・視聴<span class="hint">来場者に配るQR</span></h2>
+    <div class="qgrid">
+      {qr(join_url, "観客(参加)", "スマホで開いて ▶")}
+      {qr(gate_url, "入場QR", "並んでいる間に音源を先読み")}
+      {qr(screen_url, "全画面投影", "プロジェクター/LEDに")}
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>📍 ゾーン別QR<span class="hint">旗に印刷して客席に置く</span></h2>
+    <div class="qgrid">{zone_cards}</div>
+    <div class="note">印刷は <a href="{flags_url}">/flags</a>(ゾーン旗) と <a href="{gateflags_url}">/flags?gate=1</a>(入場QR) からA4で。印刷ダイアログで「背景のグラフィック」をON。</div>
+  </section>
+
+  <section class="blk">
+    <h2>🎚 運営<span class="hint">DJ・主催者・音響</span></h2>
+    <div class="qgrid">
+      {qr(dj_url, "DJ 配信元", "トークンはDJ本人から")}
+      {qr(admin_url, "管理画面(FOH)", "トークンは主催者から")}
+      {qr(connect_url, "接続ガイド", "Dante/AES67/OSC/灯体")}
+    </div>
+  </section>
+  {secret_block}
+
+  <section class="blk">
+    <h2>▶ 使い方<span class="hint">役割ごとに3ステップ</span></h2>
+    <div class="steps">
+      <div class="step"><b class="k">観客</b><h3>読み取って ▶ だけ</h3>
+        <ol><li>QRか {base} を開く</li><li>ゾーンを選ぶ(旗の近くなら自動)</li><li>「▶ 参加する」でその端末がスピーカーに</li></ol></div>
+      <div class="step"><b class="k">DJ</b><h3>ON AIR で会場へ</h3>
+        <ol><li>DJトークン付きURLを開く(自動保存)</li><li>マイク/ライン/ファイルを選ぶ</li><li>ON AIR。MUTEは即停止</li></ol></div>
+      <div class="step"><b class="k">主催者</b><h3>曲を入れてAUTO</h3>
+        <ol><li>管理トークンで /admin</li><li>曲アップ→セットリスト→光の見た目</li><li>AUTOをON。NEXTで次へ</li></ol></div>
+    </div>
+  </section>
+
+  <section class="blk">
+    <h2>🎪 本番の流れ<span class="hint">FOH担当の当日手順</span></h2>
+    <div class="steps">
+      <div class="step"><b class="k">1</b><h3>準備</h3><p>曲アップ→セットリスト→各曲に光。Pi箱を客席15m格子で配置・電源ON(1分で自動集合)。</p></div>
+      <div class="step"><b class="k">2</b><h3>音を入れる</h3><p>既存PAに足すなら卓のaux/matrix→USB I/F→<span class="mono">source.py --input</span>。ゾーンを距離で設定。</p></div>
+      <div class="step"><b class="k">3</b><h3>位相合わせ</h3><p>クリックを流し、ALIGNの±msでフラム(二重打ち)が消えるまで追い込む。ここが品質の要。</p></div>
+      <div class="step"><b class="k">4</b><h3>本番</h3><p>AUTOをON→夜が自動進行。NEXTで次へ、MUTEで停止。1台死んでも15〜20秒で継続。</p></div>
+    </div>
+    <div class="note"><b>正直な注記:</b> 屋外GPS実精度・実iPhone多台数の一晩・実Dante/LTC/照明卓/灯体は合成信号でのみ検証。大規模本番前に会場でリハーサル(ALIGN含む)を1回推奨。</div>
+  </section>
+
+  <section class="blk">
+    <h2>📊 数字<span class="hint">measured, not promised</span></h2>
+    <table class="s-table">
+      <tr><th>項目</th><th>値</th></tr>
+      <tr><td>同期精度</td><td>LAN ±1〜3ms / LTE ±10〜20ms / Pi箱内 ±0.5ms</td></tr>
+      <tr><td>自己復旧</td><td>サーバ強制終了から6秒 / 1台停止から15〜20秒で継続</td></tr>
+      <tr><td>同時接続</td><td>Pi1台で45,000・CUE到達100%</td></tr>
+      <tr><td>本番帯域</td><td>音は先に配る。鳴らす合図だけ配るので5,000台でも増えない</td></tr>
+    </table>
+  </section>
+
+  <section class="blk">
+    <h2>🎵 セットリスト<span class="hint">現在 6曲</span></h2>
+    <div class="setlist"><span>Aetheria</span><span>40Hz VIP Sovereignty</span><span>Emotional Gravity</span><span>We Got the AURA</span><span>Quantum Afro-Amapiano</span><span>PRADA (Mainstage Techno Overdrive)</span></div>
+  </section>
+
+  <footer><span>SOLUNA Sound · MIT · github.com/yukihamada/soluna-surround</span><span>位置情報は端末の中だけで使い、送信しません。</span></footer>
+</div>
+</body></html>'''
+    return web.Response(text=html, content_type="text/html")
+
+
 async def api_geo(request):
     """ステージ位置(緯度経度)を登録 → 端末はGPS距離からゾーンを自動選択できる。
     body: {lat, lng} or {clear:true}。FOHが舞台前で「現在地を登録」する運用。"""
@@ -1855,6 +2051,7 @@ def main():
         web.get("/api/timecode", api_timecode),
         web.post("/api/timecode", api_timecode),
         web.get("/flags", flags_page),
+        web.get("/guide", guide_page),      # 全URL・使い方・QRを1枚にまとめた案内
         web.get("/api/assets", api_assets),
         web.post("/api/upload", api_upload),
         web.static("/assets", ASSETS),
