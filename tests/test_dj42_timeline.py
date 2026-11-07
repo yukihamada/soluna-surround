@@ -163,6 +163,37 @@ async def main():
             r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "stop"})
             check("stop 200", r.status == 200 and (await r.json()).get("stopped"))
 
+            # --- 8) ブース: オート進行 ON/OFF と曲間ギャップ ---
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "auto", "on": True, "gap": 2.5})
+            body = await r.json()
+            check("auto on: 200", r.status == 200 and body.get("auto") is True, str(body))
+            check("auto on: gap=2.5", body.get("gap") == 2.5, str(body.get("gap")))
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "auto", "on": False})
+            body = await r.json()
+            check("auto off: 200", r.status == 200 and body.get("auto") is False, str(body))
+
+            # --- 9) ブース: 先読み(preload) ---
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "preload", "i": 0})
+            body = await r.json()
+            check("preload: 200", r.status == 200 and body.get("preloaded"), str(body))
+            pm = await recv_json(lambda d: d.get("t") == "preload", timeout=2)
+            check("preload: preload 配信", pm is not None and pm.get("url") == "/assets/x.mp3", str(pm))
+
+            # --- 10) ブース: 現在曲のループ/ゲイン(retune) ---
+            r = await s.post(f"{BASE}/api/dj42",
+                             json={"key": "dj42", "action": "play", "i": 0, "audio": True, "light": True})
+            await r.json()
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "retune", "loop": True, "gain": 0.8})
+            body = await r.json()
+            check("retune: 200", r.status == 200 and body.get("ok"), str(body))
+            check("retune: loop=True", body.get("loop") is True, str(body))
+            check("retune: gain=0.8", abs((body.get("gain") or 0) - 0.8) < 1e-6, str(body.get("gain")))
+
+            # --- 10b) retune: 再生中でなければ400 ---
+            await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "stop"})
+            r = await s.post(f"{BASE}/api/dj42", json={"key": "dj42", "action": "retune", "loop": True})
+            check("retune: 停止中は400", r.status == 400, str(r.status))
+
             await ws.close()
 
     print(f"\n== PASS {len(ok)} / FAIL {len(ng)} ==")

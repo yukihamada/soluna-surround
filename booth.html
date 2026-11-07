@@ -58,6 +58,13 @@
   .now .pos{font-family:var(--mono);font-size:.78rem;color:var(--dim);display:flex;justify-content:space-between;margin-top:12px}
   .now .bar{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:8px}
   .now .bar i{display:block;height:100%;width:0%;border-radius:3px;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .4s linear}
+  .trackctl{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .mini{display:flex;align-items:center;gap:6px;padding:9px 14px;border:1px solid var(--line);border-radius:11px;
+       background:rgba(255,255,255,.02);color:var(--dim);font-size:.78rem;font-weight:600;cursor:pointer;font-family:var(--sans);transition:.15s}
+  .mini.on{border-color:var(--gold);background:rgba(212,175,55,.14);color:var(--gold2)}
+  .gainwrap{flex:1;display:flex;align-items:center;gap:9px;font-size:.74rem;color:var(--dim)}
+  .gainwrap input{flex:1}
+  .gainwrap b{color:var(--txt);font-family:var(--mono);min-width:44px;text-align:right}
 
   /* ---- transport ---- */
   .transport{display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:12px}
@@ -81,6 +88,31 @@
        display:flex;align-items:center;justify-content:center;gap:8px}
   .stopall:active{transform:scale(.99)}
   .stopall .ic{font-size:.9rem}
+
+  /* ---- auto-advance ---- */
+  .autorow{display:flex;gap:10px;margin-bottom:12px;align-items:stretch}
+  .auto{flex:none;min-width:132px;display:flex;align-items:center;justify-content:center;gap:7px;padding:12px 14px;
+        border:1px solid var(--line);border-radius:14px;background:var(--panel);color:var(--dim);font-weight:600;
+        font-size:.82rem;cursor:pointer;font-family:var(--sans);transition:.15s}
+  .auto.on{border-color:var(--ok);background:rgba(74,222,128,.12);color:var(--ok)}
+  .auto .ic{font-size:1.05rem}
+  .gapwrap{flex:1;display:flex;align-items:center;gap:10px;padding:0 14px;border:1px solid var(--line);border-radius:14px;
+        background:var(--panel);font-size:.78rem;color:var(--dim)}
+  .gapwrap input{flex:1}
+  .gapwrap b{color:var(--txt);font-family:var(--mono);min-width:38px;text-align:right}
+
+  /* ---- device health + level ---- */
+  .health{display:flex;align-items:center;gap:6px;margin-bottom:14px;padding:12px;border:1px solid var(--line);
+        border-radius:16px;background:var(--panel);overflow-x:auto}
+  .health .hcell{display:flex;flex-direction:column;align-items:center;min-width:52px;padding:2px 4px}
+  .health .hcell b{font-family:var(--mono);font-size:1.15rem;color:var(--txt);line-height:1.1}
+  .health .hcell span{font-size:.6rem;color:var(--dim);letter-spacing:.05em;white-space:nowrap}
+  .health .hcell.warn b{color:var(--mute)} .health .hcell.warn.hot b{color:var(--bad)}
+  .meterwrap{flex:1;min-width:80px;display:flex;flex-direction:column;align-items:flex-end;gap:4px;padding-left:6px}
+  .meter{width:100%;height:10px;border-radius:5px;background:rgba(255,255,255,.08);overflow:hidden}
+  .meter i{display:block;height:100%;width:0%;border-radius:5px;
+        background:linear-gradient(90deg,var(--ok),var(--warn) 75%,var(--bad));transition:width .12s linear}
+  .mlabel{font-size:.56rem;color:var(--mute);letter-spacing:.2em;font-family:var(--mono)}
 
   /* ---- toggles ---- */
   .toggles{display:flex;gap:8px;margin-bottom:12px}
@@ -168,10 +200,14 @@
 
   <!-- NOW PLAYING -->
   <div class="now" id="nowCard">
-    <div class="k"><span class="rec"></span><span id="nowState">待機中</span></div>
+    <div class="k"><span class="rec"></span><span id="nowState">待機中</span><span id="nowMeta" style="margin-left:auto;color:var(--dim);letter-spacing:.05em"></span></div>
     <div class="title" id="nowTitle">—</div>
     <div class="pos"><span id="nowElapsed">0:00</span><span id="nowRemain">—</span></div>
     <div class="bar"><i id="nowBar"></i></div>
+    <div class="trackctl">
+      <button class="mini" id="loopBtn" data-on="0"><span>🔁</span>ループ</button>
+      <div class="gainwrap"><span>音量</span><input type="range" id="gain" min="0" max="150" value="100"><b id="gainV">0dB</b></div>
+    </div>
   </div>
 
   <!-- TRANSPORT -->
@@ -192,12 +228,32 @@
     <button class="tg" id="tgVideo" data-on="0"><span class="ic">🎬</span>映像</button>
   </div>
 
+  <!-- AUTO-ADVANCE -->
+  <div class="autorow">
+    <button class="auto" id="autoBtn" data-on="0"><span class="ic">⏭</span><span id="autoTxt">オート進行 OFF</span></button>
+    <div class="gapwrap"><span>曲間</span><input type="range" id="gap" min="0" max="10" step="0.5" value="1"><b id="gapV">1.0s</b></div>
+  </div>
+
   <!-- EMERGENCY STOP -->
   <button class="stopall" id="stopBtn"><span class="ic">■</span> 全停止（音も光も止める）</button>
 
+  <!-- DEVICE HEALTH + LEVEL -->
+  <div class="health" id="health">
+    <div class="hcell"><b id="hPlaying">0</b><span>再生中</span></div>
+    <div class="hcell"><b id="hPre">0</b><span>準備済</span></div>
+    <div class="hcell"><b id="hIdle">0</b><span>待機</span></div>
+    <div class="hcell warn" id="hFailCell"><b id="hFail">0</b><span>失敗</span></div>
+    <div class="hcell warn" id="hBatCell"><b id="hBat">0</b><span>電池少</span></div>
+    <div class="meterwrap" title="FOH入力レベル">
+      <div class="meter"><i id="meterFill"></i></div><span class="mlabel">LEVEL</span>
+    </div>
+  </div>
+
   <!-- SETLIST -->
   <div class="sec">
-    <h2>セットリスト <small>タップで即発火 / NEXTで順送り</small></h2>
+    <h2>セットリスト <small>タップで即発火 / NEXTで順送り</small>
+      <button class="mini" id="preloadBtn" style="margin-left:auto"><span>⬇</span>次を先読み</button>
+    </h2>
     <div class="list" id="list"></div>
   </div>
 
@@ -318,6 +374,15 @@ function buildStatic(){
   $('nextBtn').onclick = ()=> fireNext();
   $('muteBtn').onclick = ()=> toggleMute();
   $('stopBtn').onclick = ()=> stopAll();
+  // auto-advance
+  $('autoBtn').onclick = ()=> toggleAuto();
+  $('gap').oninput = ()=>{ $('gapV').textContent = parseFloat($('gap').value).toFixed(1)+'s'; };
+  $('gap').onchange = ()=> sendGap();
+  // per-track loop / gain
+  $('loopBtn').onclick = ()=> toggleLoop();
+  $('gain').oninput = ()=>{ $('gainV').textContent = gainDbLabel($('gain').value); };
+  $('gain').onchange = ()=> sendGain();
+  $('preloadBtn').onclick = ()=> doPreload();
   markLooks(); markSwatches(); markStems();
 }
 function markLooks(){ document.querySelectorAll('.look').forEach(b=>b.classList.toggle('on', b.dataset.p===light.pattern)); }
@@ -439,6 +504,59 @@ async function stopAll(){
   }catch(e){}
 }
 
+// ---- auto-advance ----
+let autoOn = false;
+async function toggleAuto(){
+  autoOn = !autoOn;
+  $('autoBtn').classList.toggle('on', autoOn); $('autoBtn').dataset.on = autoOn?'1':'0';
+  $('autoTxt').textContent = autoOn?'オート進行 ON':'オート進行 OFF';
+  try{
+    await api({action:'auto', on:autoOn, gap:parseFloat($('gap').value)});
+    toast(autoOn?'オート進行 ON（自動で次へ）':'オート進行 OFF');
+    poll();
+  }catch(e){ autoOn=!autoOn; $('autoBtn').classList.toggle('on',autoOn);
+    $('autoTxt').textContent=autoOn?'オート進行 ON':'オート進行 OFF'; }
+}
+async function sendGap(){
+  const g = parseFloat($('gap').value);
+  try{ await api({action:'auto', gap:g}); toast('曲間 '+g.toFixed(1)+'s'); }catch(e){}
+}
+
+// ---- per-track loop / gain ----
+function gainDbLabel(v){ const g=v/100; if(g<=0.001) return '-∞'; return (20*Math.log10(g)).toFixed(1).replace(/\.0$/,'')+'dB'; }
+let loopOn = false;
+async function toggleLoop(){
+  loopOn = !loopOn;
+  $('loopBtn').classList.toggle('on', loopOn); $('loopBtn').dataset.on = loopOn?'1':'0';
+  try{ await api({action:'retune', loop:loopOn}); toast(loopOn?'ループ ON':'ループ OFF'); }
+  catch(e){ loopOn=!loopOn; $('loopBtn').classList.toggle('on',loopOn); }
+}
+async function sendGain(){
+  const gain = parseFloat($('gain').value)/100;
+  try{ await api({action:'retune', gain}); toast('音量 '+gainDbLabel($('gain').value)); }catch(e){}
+}
+
+// ---- preload next ----
+async function doPreload(){
+  try{ const d = await api({action:'preload'}); toast('先読み: '+(d.preloaded||'次の曲')); }catch(e){}
+}
+
+// ---- device health + level ----
+function renderHealth(c){
+  const dev = c.devices || {};
+  $('hPlaying').textContent = dev.playing||0;
+  $('hPre').textContent = dev.preloaded||0;
+  $('hIdle').textContent = (dev.idle||0)+(dev.unknown||0);
+  $('hFail').textContent = dev.failed||0;
+  $('hBat').textContent = dev.low_battery||0;
+  $('hFailCell').classList.toggle('hot', (dev.failed||0)>0);
+  $('hBatCell').classList.toggle('hot', (dev.low_battery||0)>0);
+  const lv = c.level;
+  let pct = 0;
+  if (lv && lv.peak_dbfs != null){ pct = Math.max(0, Math.min(100, (lv.peak_dbfs + 60) / 60 * 100)); }
+  $('meterFill').style.width = pct+'%';
+}
+
 // ---- poll status ----
 function nowMs(){ return Date.now() + serverOffsetMs; }
 async function poll(){
@@ -461,6 +579,32 @@ async function poll(){
     const idx = (show.i>0)? show.i-1 : -1;
     playing = !!c.cue;
     if (idx>=0) markList(idx, playing);
+
+    // device health + level meter
+    renderHealth(c);
+
+    // auto-advance state sync
+    autoOn = !!show.auto;
+    $('autoBtn').classList.toggle('on', autoOn); $('autoBtn').dataset.on = autoOn?'1':'0';
+    $('autoTxt').textContent = autoOn?'オート進行 ON':'オート進行 OFF';
+    if (show.gap != null && document.activeElement!==$('gap')){
+      $('gap').value = show.gap; $('gapV').textContent = parseFloat(show.gap).toFixed(1)+'s';
+    }
+
+    // per-track loop/gain sync from current step
+    const curLoop = (idx>=0 && show.loops) ? !!show.loops[idx] : false;
+    const curGain = (idx>=0 && show.gains) ? show.gains[idx] : 1.0;
+    if (idx>=0){
+      loopOn = curLoop;
+      $('loopBtn').classList.toggle('on', loopOn); $('loopBtn').dataset.on = loopOn?'1':'0';
+      if (document.activeElement!==$('gain')){
+        const g = Math.round(curGain*100);
+        $('gain').value = g; $('gainV').textContent = gainDbLabel(g);
+      }
+      $('nowMeta').textContent = (curLoop?'🔁 ':'') + gainDbLabel(Math.round(curGain*100));
+    } else {
+      $('nowMeta').textContent = '';
+    }
 
     // now playing
     const card=$('nowCard');

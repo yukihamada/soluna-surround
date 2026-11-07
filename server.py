@@ -1068,6 +1068,50 @@ async def api_dj42(request):
             await _broadcast_text(state, json.dumps({"t": "mute", "on": state["mute"]}))
             return web.json_response({"ok": True, "mute": state["mute"],
                                       "listeners": len(state["listeners"])})
+        # 自動進行の ON/OFF と曲間ギャップ(誰もNEXTを押さなくても一晩回る)
+        if action == "auto":
+            if "on" in body:
+                state["show_auto"] = bool(body["on"])
+                if not state["show_auto"]:
+                    _auto_cancel(state)
+            if body.get("gap") is not None:
+                state["show_gap"] = max(0.0, min(60.0, float(body["gap"])))
+            # 再生中にONへ切り替えたら、その曲の終わりに次を予約する
+            if state.get("show_auto") and state.get("cue") and state.get("show_next_at") is None:
+                show = state.get("show") or []
+                i = state.get("show_i", -1)
+                if 0 <= i < len(show):
+                    at = float(state["cue"].get("at") or now())
+                    _auto_schedule(state, at, show[i], i)
+            _save_state()
+            return web.json_response({"ok": True, "auto": bool(state.get("show_auto")),
+                                      "gap": state.get("show_gap"),
+                                      "next_at": state.get("show_next_at"),
+                                      "listeners": len(state["listeners"])})
+        # 事前配布: 次の曲を全端末がDL/デコードだけ済ませる(本番のFIREが頭から揃う)
+        if action == "preload":
+            show = state.get("show") or []
+            i = int(body.get("i", state.get("show_i", -1) + 1))
+            if i < 0 or i >= len(show) or not show[i].get("url"):
+                raise web.HTTPBadRequest(text="no track to preload")
+            r = await do_cue(state, {"preload": True, "url": show[i]["url"]})
+            return web.json_response({"ok": True, "preloaded": show[i]["label"],
+                                      **r, "listeners": len(state["listeners"])})
+        # 現在の曲のループ/ゲインを変える(次回発火から反映)
+        if action == "retune":
+            show = state.get("show") or []
+            i = state.get("show_i", -1)
+            if i < 0 or i >= len(show) or not state.get("cue"):
+                raise web.HTTPBadRequest(text="nothing playing")
+            step = show[i]
+            if body.get("loop") is not None:
+                step["loop"] = bool(body["loop"])
+            if body.get("gain") is not None:
+                step["gain"] = max(0.0, min(2.0, float(body["gain"])))
+            _save_state()
+            return web.json_response({"ok": True, "loop": bool(step.get("loop")),
+                                      "gain": float(step.get("gain", 1.0)),
+                                      "listeners": len(state["listeners"])})
         # play: 指定トラックを発火(0始まり)
         show = state.get("show") or []
         i = int(body.get("i", 0))
@@ -1883,6 +1927,8 @@ async def status(request):
                      "gap": st.get("show_gap", 1.0),
                      "next_at": st.get("show_next_at"),
                      "durs": [x.get("dur") for x in (st.get("show") or [])],
+                     "loops": [bool(x.get("loop")) for x in (st.get("show") or [])],
+                     "gains": [float(x.get("gain", 1.0)) for x in (st.get("show") or [])],
                      "next": ((st.get("show") or [])[st.get("show_i", -1) + 1]["label"]
                               if st.get("show") and st.get("show_i", -1) + 1 < len(st["show"])
                               else None)},
