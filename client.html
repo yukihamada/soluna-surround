@@ -371,7 +371,9 @@ function geoToPolling(){
   geoPollTimer = setInterval(()=>{ if (autoZone && stageGeo && active)
     navigator.geolocation.getCurrentPosition(onGeoFix, ()=>{}, {enableHighAccuracy:true, maximumAge:30000, timeout:20000}); }, 60000);
 }
-let autoZone = !qs.get('zone') && !qs.get('pos');
+// GPS自動を既定ON。旗QR(?zone=)はGPS不可/拒否時のフォールバックとして残す。
+// スタッフ用の ?pos= と ?d=(距離直指定) は自動を止める。
+let autoZone = !qs.get('pos') && !customD;
 function havM(a,b){
   const R=6371000, r=x=>x*Math.PI/180;
   const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
@@ -436,10 +438,10 @@ function renderZones(){
     };
     p.appendChild(b);
   }
-  if (stageGeo && navigator.geolocation){       // 📍 = GPSで遅延を自動計算(ゾーン不要)
+  if (navigator.geolocation){       // 📍 = GPSで位置からゾーン/遅延を自動計算
     const b = document.createElement('button');
     b.textContent = '📍';
-    b.title = T.autoZone;
+    b.title = stageGeo ? T.autoZone : 'GPS自動: 主催者がステージ位置を登録すると有効';
     if (autoZone) b.classList.add('on');
     b.onclick = ()=>{ autoZone=true; geoStableFixes=0; renderZones(); startGeoWatch(); };
     p.appendChild(b);
@@ -447,6 +449,15 @@ function renderZones(){
   $('zoneBig').textContent = customD ? customD+'m'
     : (autoZone && autoDist!==null) ? `📍${autoDist.toFixed(0)}m` : ZONE;
   $('dly').textContent = delayMs().toFixed(1)+'ms';
+  // GPS自動の状態を1行で伝える(未登録/権限拒否/測位中/自動選択中)
+  const gh = $('gateHint');
+  if (gh && !GATE){
+    if (geoInfo===T.geoDenied){ gh.hidden=false; gh.textContent='📍 位置情報がオフのため手動選択です（ゾーンをタップ）'; }
+    else if (!stageGeo){ gh.hidden=false; gh.textContent='📍 GPS自動: 主催者がステージ位置を登録すると、近くのゾーンを自動で選びます'; }
+    else if (autoZone && autoDist===null){ gh.hidden=false; gh.textContent='📍 位置情報から近くのゾーンを自動選択中…'; }
+    else if (autoZone && autoDist!==null){ gh.hidden=false; gh.textContent=`📍 位置情報で自動選択中（ステージまで ${autoDist.toFixed(0)}m）`; }
+    else { gh.hidden=true; }
+  }
 }
 
 // ---- VIDEO CUE: 映像をクロックへドリフト補正で追従 ----------------------------
