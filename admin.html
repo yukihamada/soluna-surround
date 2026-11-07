@@ -398,6 +398,10 @@
 <script>
 const $=id=>document.getElementById(id);
 const HAAS=15, C=343;
+// 招待リンク(/admin?token=…)で開いたらトークンを保存 → 以後は素のURLでもOK
+const qtok = new URLSearchParams(location.search).get('token');
+if (qtok){ sessionStorage.setItem('soluna_admin', qtok); localStorage.setItem('soluna_admin', qtok);
+  history.replaceState(null,'',location.pathname); }   // URLからは消す
 // トークン: 既定はタブを閉じると消える(sessionStorage)。「この端末に記憶」時だけlocalStorage
 $('tok').value = sessionStorage.getItem('soluna_admin') || localStorage.getItem('soluna_admin') || '';
 $('remember').checked = !!localStorage.getItem('soluna_admin');
