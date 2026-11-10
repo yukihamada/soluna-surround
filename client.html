@@ -96,6 +96,15 @@
        border:1px solid rgba(255,120,120,.35);padding:7px 16px;border-radius:999px;font-size:.82rem;backdrop-filter:blur(8px)}
   #lightLayer{position:fixed;inset:0;z-index:99;display:none;background:#000;transition:none;touch-action:manipulation}
   #lightLayer.on{display:block}
+  /* マイク反応カラー: 端末のマイクで会場の音を拾い、色が変わる(既定)。出力へは繋がない */
+  #micLayer{position:fixed;inset:0;z-index:99;display:none;pointer-events:none;background:#000;transition:background .12s linear}
+  #micLayer.on{display:block}
+  .sensebtn{appearance:none;border:1px solid var(--line2);background:var(--ink);color:var(--dim);
+       border-radius:99px;padding:6px 12px;font-size:.72rem;font-family:var(--sans);cursor:pointer;min-height:32px}
+  .sensebtn.on{border-color:var(--gold);background:rgba(212,175,55,.14);color:var(--gold2);font-weight:700}
+  #senseRow{position:relative;z-index:101}   /* 会場ライト(z:99)より手前に置き、切替を常に押せる */
+  #senseHint{position:relative;z-index:101;font-size:.74rem;color:var(--gold);border:1px solid rgba(212,175,55,.35);background:rgba(212,175,55,.08);
+       border-radius:12px;padding:8px 14px;max-width:360px;line-height:1.6}
   #videoLayer{position:fixed;inset:0;z-index:98;display:none;width:100%;height:100%;background:#000;object-fit:contain}
   #videoLayer.on{display:block}
   body.screen #videoLayer{object-fit:cover}
@@ -153,6 +162,11 @@
   <button class="main" id="btn">▶ 参加する</button>
   <button class="share" id="shareBtn" type="button" data-i18n="share">📤 友達にシェア</button>
   <div class="statusrow"><span class="dot" id="dot"></span><b id="st">停止中</b></div>
+  <div id="senseRow" style="display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap">
+    <button class="sensebtn on" id="senseMic" type="button">🎤 マイクで色が変わる</button>
+    <button class="sensebtn" id="senseSync" type="button">💡 会場と同期</button>
+  </div>
+  <div id="senseHint" hidden></div>
   <div id="netHint" hidden></div>
   <div class="vol">🔉 <input type="range" id="vol" min="0" max="100" value="80"> 🔊</div>
   <details class="s-fold">
@@ -197,6 +211,7 @@
   <video id="videoLayer" playsinline webkit-playsinline preload="auto"></video>
   <div id="vHint">🔇 タップで音を出す</div>
   <div id="lightLayer"></div>
+  <div id="micLayer"></div>
   <div id="imageLayer"></div>
   <div id="nowPlaying" hidden><small data-i18n="npL">NOW PLAYING</small><b id="npTitle"></b><span id="npArtist"></span></div>
   <div id="muteBanner" hidden>🔇 <span data-i18n="muted">FOHにより一時ミュート中</span></div>
@@ -225,6 +240,10 @@ const I18N = {
         netWifi:'📶 このゾーンは会場Wi-Fi「{ssid}」に接続すると同期が良くなります', netLte:'📶 このゾーンはモバイル回線のままでOK(会場Wi-Fiは前方ゾーン専用)',
         privacy:'位置情報は端末の中でステージまでの距離を計算するためだけに使い、サーバーには最寄りゾーンの記号しか送りません。緯度経度は送信・保存しません。',
         gainL:'音量補正(機種差)', batL:'電池', dimTap:'タップで表示',
+        senseMic:'🎤 マイクで色が変わる', senseSync:'💡 会場と同期',
+        senseOn:'🎤 マイクの音に合わせて画面の色が変わります(この端末だけ・音は出しません)',
+        senseDenied:'🎤 マイクが使えないため、会場の同期ライトに切り替えました',
+        senseUnsupported:'🎤 この端末はマイク非対応のため、会場の同期ライトに切り替えました',
         waiting:'つながっています — 音を待っています', playing:'♪ 再生中', share:'📤 友達にシェア' },
   en: { zoneLabel:'YOUR ZONE (flag near you)', status:'STATUS', zoneDelay:'ZONE DELAY',
         clock:'SYNC ACCURACY', cueL:'CUE', liveL:'LIVE FRAMES',
@@ -240,6 +259,10 @@ const I18N = {
         netWifi:'📶 In this zone, join venue Wi-Fi "{ssid}" for tighter sync', netLte:'📶 In this zone, stay on mobile data (venue Wi-Fi is for the front zones)',
         privacy:'Your location is used only on this device to compute the distance to the stage. Only the nearest zone letter is sent — never coordinates.',
         gainL:'LEVEL TRIM (device)', batL:'BATTERY', dimTap:'tap to show',
+        senseMic:'🎤 Color from mic', senseSync:'💡 Sync with venue',
+        senseOn:'🎤 The screen color follows the sound around you (this device only — no sound is played)',
+        senseDenied:'🎤 Mic unavailable — switched to the venue-synced light',
+        senseUnsupported:'🎤 No mic on this device — switched to the venue-synced light',
         waiting:'connected — waiting for sound', playing:'♪ playing', share:'📤 SHARE' },
 };
 const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
@@ -306,6 +329,7 @@ let dimTimer=null;
 function armDim(){
   clearTimeout(dimTimer);
   if (!active || SCREEN) return;
+  if (senseMode === 'mic'){ $('dim').classList.remove('on'); return; }  // マイク中は色を消さない
   dimTimer = setTimeout(()=>{ if (active && !light) $('dim').classList.add('on'); }, DIM_AFTER_MS);
 }
 function undim(){ $('dim').classList.remove('on'); armDim(); }
@@ -816,8 +840,13 @@ function lightLoop(){
   lightRAF = requestAnimationFrame(lightLoop);
 }
 function onLight(m){
+  lastLightMsg = m || null;
   if (m && Array.isArray(m.zones) && m.zones.length && !m.zones.includes(ZONE)){
     if (light) onLightStop();                 // 他ゾーン宛→点いていれば消す(暗転のまま)
+    return;
+  }
+  if (senseMode === 'mic'){                   // マイク反応中は会場ライトを重ねない(色はマイク優先)
+    light = m || null;
     return;
   }
   lightStopping = false;
@@ -838,6 +867,7 @@ function onLight(m){
   if (!lightRAF) lightLoop();
 }
 function onLightStop(fadeMs){
+  lastLightMsg = null;
   $('lightHud').classList.remove('show');
   const dur = Math.max(0, Number(fadeMs) || 0);
   if (light && dur > 0){                       // fade_ms 指定時は 1→0 に落としてから隠す
@@ -865,6 +895,104 @@ $('lightFull').onclick = e=>{ e.stopPropagation(); toggleFull(); };
 document.addEventListener('keydown', e=>{
   if (e.key==='f' && light) toggleFull();
 });
+
+// ---- マイク反応カラー(既定) ------------------------------------------------
+// 端末のマイクで「いま会場で鳴っている音」を拾い、画面の色をそれに合わせる。
+// 音は一切再生しない(解析のみ・この端末の中だけ)。マイクが使えない/拒否された時は
+// 自動で「会場と同期」(サーバのライト)へ切り替える。
+let senseMode = 'mic';                 // 'mic' | 'sync'
+let micStream=null, micCtx=null, micAnalyser=null, micRAF=0, micFreq=null, micTime=null;
+let micHue=200, micSat=0.6, micLit=0, micPeak=0;
+let lastLightMsg=null;                 // syncへ切り替えた時に最新ライトを再適用するため保持
+const micLayer = $('micLayer');
+
+function senseHint(msg){ const el=$('senseHint'); if(!msg){ el.hidden=true; el.textContent=''; return; } el.hidden=false; el.textContent=msg; }
+function renderSense(){
+  $('senseMic').classList.toggle('on', senseMode==='mic');
+  $('senseSync').classList.toggle('on', senseMode==='sync');
+  $('senseMic').textContent = T.senseMic;
+  $('senseSync').textContent = T.senseSync;
+}
+function stopMicSense(){
+  if (micRAF){ cancelAnimationFrame(micRAF); micRAF=0; }
+  if (micStream){ micStream.getTracks().forEach(t=>{ try{t.stop()}catch(e){} }); micStream=null; }
+  if (micCtx){ try{ micCtx.close(); }catch(e){} micCtx=null; }
+  micAnalyser=null; micFreq=null; micTime=null;
+  micLayer.classList.remove('on');
+  micLayer.style.background = '';
+}
+function micLoop(){
+  if (!micAnalyser){ micRAF=0; return; }
+  micAnalyser.getFloatFrequencyData(micFreq);     // dBFS
+  micAnalyser.getFloatTimeDomainData(micTime);
+  // RMS(時間波形)→明るさ。無音は深く沈める
+  let s=0; for (let i=0;i<micTime.length;i+=2) s += micTime[i]*micTime[i];
+  const rms = Math.sqrt(s/(micTime.length/2));
+  const lvl = Math.min(1, Math.max(0, (20*Math.log10(rms+1e-6)+60)/60));   // -60..0dB → 0..1
+  // スペクトル重心 → 色相(低音=赤寄り/高音=青寄り)。会場の音色で色が動く
+  let num=0, den=0;
+  const n = micFreq.length, binHz = (micCtx ? micCtx.sampleRate : 48000)/2 / n;
+  for (let i=1;i<n;i++){ const mag = Math.pow(10, micFreq[i]/20); num += mag*i*binHz; den += mag; }
+  const centroid = den>1e-9 ? num/den : 0;                  // Hz
+  const hue = Math.max(0, Math.min(360, 200 - Math.min(200, centroid/26)));  // 8kHz→0(赤) 0Hz→200(青)
+  // 平滑化(急な点滅を避け、3Hz上限の趣旨を守る)
+  micLit += (lvl - micLit) * 0.18;
+  micHue += (hue - micHue) * 0.10;
+  const sat = 0.55 + 0.35*Math.min(1, micLit*1.6);
+  let light = Math.min(1, Math.pow(micLit, 1.15));
+  if (REDUCED_MOTION) light = 0.10 + 0.28*light;   // 点滅を抑える(明るさの振れ幅を小さく)
+  micLayer.style.background = `hsl(${micHue.toFixed(0)} ${(sat*100).toFixed(0)}% ${(4 + 46*light).toFixed(1)}%)`;
+  micRAF = requestAnimationFrame(micLoop);
+}
+async function startMicSense(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    return fallbackToSync(T.senseUnsupported);
+  }
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
+  }catch(e){
+    return fallbackToSync(T.senseDenied);
+  }
+  try{
+    // 解析専用のAudioContext(出力には繋がない)。参加用ctxとは別でも良い
+    micCtx = new (window.AudioContext||window.webkitAudioContext)();
+    await micCtx.resume();
+    const src = micCtx.createMediaStreamSource(micStream);
+    micAnalyser = micCtx.createAnalyser();
+    micAnalyser.fftSize = 2048;
+    micAnalyser.smoothingTimeConstant = 0.5;
+    micFreq = new Float32Array(micAnalyser.frequencyBinCount);
+    micTime = new Float32Array(micAnalyser.fftSize);
+    src.connect(micAnalyser);                 // destinationへは繋がない=無音
+    micLayer.classList.add('on');
+    $('dim').classList.remove('on');          // マイク中は省電力暗転を出さない(色を見せる)
+    if (lightRAF){ cancelAnimationFrame(lightRAF); lightRAF=0; }  // 同期ライトの描画を止める
+    $('lightLayer').classList.remove('on');   // マイク中は同期ライトを隠す
+    senseHint(T.senseOn);
+    if (!micRAF) micLoop();
+    senseMode='mic'; renderSense();
+  }catch(e){
+    return fallbackToSync(T.senseUnsupported);
+  }
+}
+function fallbackToSync(msg){
+  stopMicSense();
+  senseMode='sync'; renderSense();
+  senseHint(msg || T.senseDenied);
+  if (lastLightMsg){ onLight(lastLightMsg); }   // 直近の会場ライトがあれば即反映
+}
+function useMic(){ senseHint(''); startMicSense(); }
+function useSync(){
+  stopMicSense();
+  senseMode='sync'; renderSense();
+  senseHint('');
+  if (lastLightMsg) onLight(lastLightMsg);
+  else $('lightLayer').classList.remove('on');
+}
+$('senseMic').onclick = ()=> useMic();
+$('senseSync').onclick = ()=> useSync();
+renderSense();
 
 // ---- LIVE MODE (SL2 PCM) — スピーカーノード/近距離WiFi向け ------------------
 function onFrame(buf){
@@ -954,6 +1082,7 @@ async function start(){
   try { wakeLock = await navigator.wakeLock?.request('screen'); } catch(e){}
   active = true; frames=0; $('fr').textContent=0; devState='idle';
   connect(); armDim();
+  if (senseMode === 'mic') startMicSense();    // 既定: マイクで色が変わる(不可なら同期へ自動)
   if (stageGeo && autoZone) startGeoWatch();   // 参加タップ=ユーザー起点で位置許可を出す
   if (SCREEN){
     document.body.classList.add('started');
@@ -963,6 +1092,7 @@ async function start(){
 function stop(){
   active=false; clearTimeout(dimTimer); $('dim').classList.remove('on');
   onCueStop(); onLightStop(); stopGeoWatch();
+  stopMicSense();
   if(ws){try{ws.close()}catch(e){}}
   if(ctx){try{ctx.close()}catch(e){}} ctx=null;
   try{ wakeLock?.release(); }catch(e){}
