@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SOLUNA Sound — 本番運用ガイド / Production runbook</title>
+<meta name="description" content="SOLUNA Sound を本番で使う制作チーム向けの運用ガイド。役割・持ち物・設営・サウンドチェック・本番・終演後・トラブル対応・正直な制約まで、当日の順番どおりに1枚で。">
+<meta name="robots" content="noindex">
+<link rel="icon" href="/favicon.ico"><link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="/ui/soluna.css">
+<style>
+  .hero{padding:46px 0 8px}
+  .hero h1{font-family:var(--serif);font-size:clamp(1.8rem,5vw,2.9rem);line-height:1.22;margin:14px 0 10px;text-wrap:balance}
+  .hero p{color:var(--dim);font-size:1rem;max-width:42em;margin:0 0 6px;line-height:1.7}
+  .en{display:block;font-size:.8rem;color:var(--dim);font-weight:400;letter-spacing:0;font-family:var(--sans)}
+  .toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  .toc a{font-size:.8rem;border:1px solid var(--line2);border-radius:999px;padding:7px 13px;color:var(--txt);background:var(--panel2)}
+  .toc a:hover{border-color:var(--gold);text-decoration:none}
+  section.blk{margin-top:56px;scroll-margin-top:80px}
+  section.blk>h2{font-family:var(--mono);font-size:.72rem;letter-spacing:.3em;color:var(--gold);margin:0 0 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  section.blk>h2::after{content:"";flex:1;height:1px;background:var(--line)}
+  section.blk>h2 .hint{letter-spacing:0;font-family:var(--sans);color:var(--dim);font-size:.72rem;font-weight:400}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px}
+  .step b.k{display:block;font-family:var(--serif);font-size:1.5rem;color:var(--gold);line-height:1;margin-bottom:8px}
+  .step h3{margin:0 0 6px;font-size:1rem}
+  .step p{margin:0;color:var(--dim);font-size:.9rem;line-height:1.65}
+  .step ul,.step ol{margin:8px 0 0;padding-left:1.2em;color:var(--dim);font-size:.88rem;line-height:1.7}
+  .step li{margin:3px 0}
+  .step li b{color:var(--txt)}
+  .lead{font-size:1.02rem;max-width:40em;color:var(--txt);line-height:1.75}
+  .lead b{color:var(--gold2)}
+  .note{border-left:2px solid var(--gold);padding-left:12px;color:var(--dim);font-size:.86rem;margin-top:14px;line-height:1.7}
+  .note b{color:var(--txt)}
+  .warn{border-left:2px solid var(--bad);padding-left:12px;color:var(--dim);font-size:.86rem;margin-top:14px;line-height:1.7}
+  .warn b{color:#ff9a9a}
+  pre{background:#000;color:#e8dcc4;font-family:var(--mono);font-size:.76rem;line-height:1.6;padding:12px 14px;border-radius:10px;overflow-x:auto;margin:12px 0 0;border:1px solid var(--line)}
+  pre .c{color:#8a7d6a}
+  table.s-table{width:100%;border-collapse:collapse;font-size:.86rem}
+  table.s-table td,table.s-table th{border-bottom:1px solid var(--line);padding:9px 8px;text-align:left;vertical-align:top}
+  table.s-table th{color:var(--dim);font-weight:500;font-size:.72rem;letter-spacing:.1em}
+  table.s-table td:first-child{color:var(--gold2);white-space:nowrap;font-family:var(--mono);font-size:.8rem}
+  .scroll{overflow-x:auto}
+  .check{list-style:none;padding:0;margin:0;display:grid;gap:6px}
+  .check li{display:grid;grid-template-columns:1.5em 1fr;gap:8px;font-size:.9rem;line-height:1.6}
+  .check li::before{content:"☐";color:var(--gold);font-size:1rem;line-height:1.4}
+  .urls{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(210px,1fr))}
+  .urls a{display:block;background:var(--panel2);border:1px solid var(--line2);border-radius:12px;padding:11px 13px;font-size:.85rem}
+  .urls a b{display:block;font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;color:var(--gold);margin-bottom:3px;font-weight:700}
+  .urls a span{color:var(--dim);font-size:.78rem}
+  .lang{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden;font-family:var(--mono);font-size:.7rem}
+  .lang button{background:transparent;border:0;color:var(--dim);padding:5px 10px;cursor:pointer;font:inherit}
+  .lang button[aria-pressed=true]{background:var(--gold);color:#1a1206;font-weight:700}
+  footer{margin-top:64px;padding-top:18px;border-top:1px solid var(--line);font-size:.8rem;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap;justify-content:space-between}
+  @media print{
+    body{background:#fff;color:#000} body::before{display:none}
+    .s-bar,.toc,.lang,footer .noprint{display:none!important}
+    .step,.urls a{background:#fff;border-color:#bbb}
+    .step p,.step ul,.step ol,.note,.warn,.lead{color:#222}
+    a{color:#000} pre{background:#f4f4f4;color:#111;border-color:#ccc}
+    section.blk{page-break-inside:avoid}
+  }
+</style></head><body>
+<div class="s-wrap">
+  <nav class="s-bar"><span class="s-brand"><span class="mark"></span>SOLUNA · SOUND <small>PRODUCTION</small></span>
+    <span style="margin-left:auto;display:flex;gap:14px;align-items:center;font-size:.82rem">
+      <a href="/about" data-i18n="nav_about">サイト</a><a href="/connect" data-i18n="nav_connect">🔌 つなぐ</a><a href="/admin" data-i18n="nav_foh">🎚 FOH</a><a href="/guide" data-i18n="nav_guide">📋 URL集</a><a href="https://github.com/yukihamada/soluna-surround">GitHub</a>
+      <span class="lang" role="group" aria-label="language"><button id="langJa" aria-pressed="true">日本語</button><button id="langEn" aria-pressed="false">EN</button></span>
+    </span></nav>
+
+  <header class="hero">
+    <div class="s-brand"><span class="mark"></span><span data-i18n="brand">PRODUCTION RUNBOOK · 制作チーム用</span></div>
+    <h1 data-i18n="h1">当日、この順番で動かす。</h1>
+    <p data-i18n="lead">設営から終演まで、制作チームが実際にやることを1枚に。誰が・何を・どの順番で・どこを見て判断するか。<b>迷ったらこのページの順番どおりに。</b></p>
+    <div class="toc">
+      <a href="#roles" data-i18n="toc_roles">役割と持ち物</a>
+      <a href="#prep" data-i18n="toc_prep">事前準備</a>
+      <a href="#build" data-i18n="toc_build">設営</a>
+      <a href="#check" data-i18n="toc_check">サウンドチェック</a>
+      <a href="#show" data-i18n="toc_show">開場・本番</a>
+      <a href="#after" data-i18n="toc_after">終演後</a>
+      <a href="#trouble" data-i18n="toc_trouble">トラブル早見</a>
+      <a href="#limits" data-i18n="toc_limits">正直な制約</a>
+      <a href="#urls" data-i18n="toc_urls">URL集</a>
+    </div>
+  </header>
+
+  <section class="blk" id="roles">
+    <h2 data-i18n="h_roles">役割と持ち物 <span class="hint" data-i18n="hint_roles">誰が何を持つか</span></h2>
+    <p class="lead" data-i18n="roles_lead">SOLUNA は<b>既存のPA・照明を置き換えない</b>。卓から1本もらい、客席のスマホと Pi スピーカーを同じ時計に乗せる。だから役割は「新しい操作卓を増やす」ではなく「いつもの担当に1つ持ち場を足す」。</p>
+    <div class="grid">
+      <div class="step"><b class="k">P</b><h3 data-i18n="r1h">プロダクション / 主催</h3>
+        <ul><li data-i18n="r1a">管理トークン(<code>SOLUNA_ADMIN</code>)の保管と、誰に渡すかの判断</li><li data-i18n="r1b">セットリスト・曲・映像・ライトの最終確定</li><li data-i18n="r1c">ゾーン旗・入場QRの印刷(<code>/flags</code>)</li><li data-i18n="r1d">終演後の数字(<code>/api/stats</code>)をスポンサー/レポートへ</li></ul></div>
+      <div class="step"><b class="k">F</b><h3 data-i18n="r2h">FOH / 音響</h3>
+        <ul><li data-i18n="r2a">サーバのノートPC(またはPi)と会場LAN</li><li data-i18n="r2b">卓のaux/matrix 1本 → USB I/F → <code>source.py</code></li><li data-i18n="r2c"><b>ALIGN</b> で位相を追い込む(品質の要)</li><li data-i18n="r2d">本番は NEXT と MUTE、DEVICES の「鳴っている数」監視</li></ul></div>
+      <div class="step"><b class="k">L</b><h3 data-i18n="r3h">照明 / 映像 / 制御</h3>
+        <ul><li data-i18n="r3a">OSC で cue(<code>/soluna/cue</code> <code>/go</code> <code>/light</code>)</li><li data-i18n="r3b">LTC / タイムコードで発火時刻を固定</li><li data-i18n="r3c">Art-Net / sACN で灯体を同じ時計に</li><li data-i18n="r3d"><code>/screen</code> のノートをHDMIで投影</li></ul></div>
+      <div class="step"><b class="k">C</b><h3 data-i18n="r4h">ステージクルー</h3>
+        <ul><li data-i18n="r4a">Pi 箱の配置・電源・DAC/スピーカー接続</li><li data-i18n="r4b">箱のWi-Fi「SOLUNA」で <code>/setup</code>(SSH不要)</li><li data-i18n="r4c">ゾーン割当は FOH の NODES から(箱に保存される)</li><li data-i18n="r4d">「箱が点かない/鳴らない」の一次切り分け</li></ul></div>
+    </div>
+    <div class="scroll" style="margin-top:16px"><table class="s-table">
+      <tr><th data-i18n="k_h1">持ち物</th><th data-i18n="k_h2">数</th><th data-i18n="k_h3">メモ</th></tr>
+      <tr><td data-i18n="kit1">Pi 箱</td><td data-i18n="k1c">6–9 / 1ステージ</td><td data-i18n="k1">客席15m格子。1台が自動で時計の親、残りはスピーカー</td></tr>
+      <tr><td data-i18n="kit2">PoE スイッチ + LAN</td><td data-i18n="k2c">1式</td><td data-i18n="k2">有線が最良(±1〜3ms)。箱同士のWi-Fiでも小規模なら可</td></tr>
+      <tr><td data-i18n="kit3">FOH ノート</td><td data-i18n="k3c">1–2</td><td data-i18n="k3">サーバ兼。予備は開演前に STATE を EXPORT しておく</td></tr>
+      <tr><td data-i18n="kit4">USB オーディオI/F</td><td data-i18n="k4c">1</td><td data-i18n="k4">入力1chで十分。Dante なら DVS / AVIO / AES67 モード</td></tr>
+      <tr><td data-i18n="kit5">印刷物</td><td data-i18n="k5c">ゾーン数+入場</td><td data-i18n="k5"><code>/flags</code> と <code>/flags?gate=1</code> からA4。背景グラフィックON</td></tr>
+      <tr><td data-i18n="kit6">電源</td><td data-i18n="k6c">箱ごと</td><td data-i18n="k6">停電しても箱は勝手に復帰する(設定は箱に残る)</td></tr>
+    </table></div>
+  </section>
+
+  <section class="blk" id="prep">
+    <h2 data-i18n="h_prep">事前準備 <span class="hint" data-i18n="hint_prep">前日まで</span></h2>
+    <div class="grid">
+      <div class="step"><b class="k">1</b><h3 data-i18n="p1h">素材を入れる</h3>
+        <ul><li data-i18n="p1a">曲(mp3/aac)・映像(mp4)・音声(mp3)を <code>/admin</code> からアップ</li><li data-i18n="p1b">各曲の長さを測って保存(自動進行の基準)</li><li data-i18n="p1c">大きな会場は <code>SOLUNA_ASSET_BASE</code> にCDN/R2を指定し <code>tools/r2-sync.sh</code> で同期</li></ul></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="p2h">セットリストを組む</h3>
+        <ul><li data-i18n="p2a">1ステップ = 曲 + 映像 + ライトの束</li><li data-i18n="p2b">各ステップに光の見た目(パターン・2色・BPM)</li><li data-i18n="p2c">DJ 交代は <code>/dj</code> のトークン付きリンクを本人だけに渡す</li></ul></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="p3h">箱を焼く</h3>
+        <ul><li data-i18n="p3a"><code>tools/pi-flash.sh</code> で SD を焼く(設定不要)</li><li data-i18n="p3b">FOH ノートを必ず親にするなら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定</li><li data-i18n="p3c">DAC は刺せば自動(USB &gt; I2S &gt; 内蔵)</li></ul></div>
+      <div class="step"><b class="k">4</b><h3 data-i18n="p4h">ネットワークを決める</h3>
+        <ul><li data-i18n="p4a">箱は有線PoE、観客は LTE + クラウド or 会場Wi-Fi</li><li data-i18n="p4b">箱の自前APは約20–30台まで=スタッフ・DJ用</li><li data-i18n="p4c">Dante/AES67 を使うなら IGMP が通る VLAN の空きポートを1本</li></ul></div>
+      <div class="step"><b class="k">5</b><h3 data-i18n="p5h">印刷</h3>
+        <ul><li data-i18n="p5a">ゾーン旗 <code>/flags</code>、入場QR <code>/flags?gate=1</code></li><li data-i18n="p5b">旗は客席に置く位置とゾーン名を一致させる</li><li data-i18n="p5c">入場QRは列の早い位置に(並んでいる間に音源を先読み)</li></ul></div>
+      <div class="step"><b class="k">6</b><h3 data-i18n="p6h">リハーサル</h3>
+        <ul><li data-i18n="p6a">会場で ALIGN・ウォークテストを1回(実機の初回は必須)</li><li data-i18n="p6b">回線が不安なら <code>docs/field-test.md</code> の3キャリアテスト</li><li data-i18n="p6c">予備Macへ STATE を EXPORT しておく</li></ul></div>
+    </div>
+  </section>
+
+  <section class="blk" id="build">
+    <h2 data-i18n="h_build">設営 <span class="hint" data-i18n="hint_build">開場3時間前まで</span></h2>
+    <div class="grid">
+      <div class="step"><b class="k">1</b><h3 data-i18n="b1h">箱を置く</h3>
+        <p data-i18n="b1p">客席に15m格子で6–9台。ステージから遠い列ほど後ろへ。電源を入れ、約1分待つ。1台が自動で時計の親になり、残りはスピーカーになる。</p></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="b2h">サーバを立てる</h3>
+        <p data-i18n="b2p">FOH ノートでサーバを起動し <code>/admin</code> を開く。Pi が親になる運用なら、どの箱の <code>.local:8900/admin</code> でも同じ画面。</p>
+        <pre><span class="c"># FOH laptop (LAN production)</span>
+SOLUNA_ADMIN=&lt;secret&gt; PORT=8900 python3 server.py
+<span class="c"># optional bridges (LAN only, off by default)</span>
+SOLUNA_OSC_PORT=9000 SOLUNA_ARTNET=192.168.1.255:0 python3 server.py</pre></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="b3h">ゾーンを割り当てる</h3>
+        <p data-i18n="b3p"><code>/admin</code> → NODES で各箱にゾーン(A=ステージ前 … F=最後方)、L/C/R、ゲインを ASSIGN。設定は箱に保存され、再接続でも再送される。</p></div>
+      <div class="step"><b class="k">4</b><h3 data-i18n="b4h">距離を入れる</h3>
+        <p data-i18n="b4p">ZONES に各ゾーンのステージ距離(m)を実測で入力。遅延は「距離÷343 + 15ms」で自動。またはステージ前で「現在地をステージに設定」→ 来場者はGPSで自動。</p></div>
+    </div>
+  </section>
+
+  <section class="blk" id="check">
+    <h2 data-i18n="h_check">サウンドチェック <span class="hint" data-i18n="hint_check">開場90分前</span></h2>
+    <div class="grid">
+      <div class="step"><b class="k">1</b><h3 data-i18n="c1h">音を入れる</h3>
+        <p data-i18n="c1p">卓の aux/matrix を1本、USB I/F 経由で <code>source.py</code> へ。融合は <code>--lead 0.08</code>(約80ms)。Dante は DVS/AVIO か AES67 モード。</p>
+        <pre>python3 source.py --input "Scarlett 2i2" --lead 0.08 --server ws://127.0.0.1:8900
+<span class="c"># AES67 / Dante(AES67 mode)</span>
+python3 source.py --sap
+python3 source.py --aes67 auto --lead 0.08</pre></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="c2h">位相を合わせる(要)</h3>
+        <p data-i18n="c2p">クリック/リムショットを会場PAとグリッドの両方から出し、<b>フラム(二重打ち)が消えるまで ALIGN を ±5 → ±1ms で追い込む</b>。ここが音の品質を決める。全端末に即時反映。</p></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="c3h">歩いて確かめる</h3>
+        <p data-i18n="c3p">ZONES の 🔊 でゾーン単体を鳴らし、歩いて確認。遠いゾーンが小さいなら gain(dB) で持ち上げる。機種差は来場者側の ±12dB スライダー。</p></div>
+      <div class="step"><b class="k">4</b><h3 data-i18n="c4h">先読みする</h3>
+        <p data-i18n="c4p">開演30分前までに PRELOAD。DEVICES の <b>preloaded</b> が来場者数に近づくのを見る。FIRE 時のダウンロード集中をゼロにする。</p></div>
+    </div>
+    <div class="note" data-i18n="check_note"><b>判断の目安:</b> 同期は LAN ±1〜3ms / LTE ±10〜20ms / Pi箱内 ±0.5ms。スマホは演出・光・映像まで。主音響は有線の Pi ノードが担う。</div>
+  </section>
+
+  <section class="blk" id="show">
+    <h2 data-i18n="h_show">開場・本番 <span class="hint" data-i18n="hint_show">ドアオープンから終演まで</span></h2>
+    <div class="grid">
+      <div class="step"><b class="k">1</b><h3 data-i18n="s1h">入場</h3>
+        <p data-i18n="s1p">入場QRを列の早い位置に。並んでいる間に音源が届き、中では通信なしで鳴る。観客は旗の近くでQRを読むだけ。</p></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="s2h">進行は NEXT だけ</h3>
+        <p data-i18n="s2p">SHOW パネルで <b>NEXT</b> を押すと全端末・全Piが同時に次のステップへ。AUTO をONにすれば曲が終わると自動で進む。単発は FIRE / LIGHT で割り込み。</p></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="s3h">止めるのは1操作</h3>
+        <p data-i18n="s3p"><b>MUTE</b> がキルスイッチ。全端末が即無音になり、解除で元のゲインへ戻る(位相は保たれる)。ハードカットは STOP。</p></div>
+      <div class="step"><b class="k">4</b><h3 data-i18n="s4h">見る数字を決める</h3>
+        <p data-i18n="s4p">DEVICES で <b>playing</b>(実際に鳴っている台数)/ <b>failed</b> / <b>ctx suspended</b>(ロック・サイレントで無音の可能性)/ <b>battery&lt;20%</b>。接続数ではなく「鳴っている数」を見る。</p></div>
+    </div>
+    <div class="warn" data-i18n="show_warn"><b>iOS の注意:</b> Web版は画面ロックで音が止まる。観客には「画面はつけたまま」を案内し、放置時は自動暗転(45秒)で節電する。止まった端末は ctx suspended に出る。</div>
+  </section>
+
+  <section class="blk" id="after">
+    <h2 data-i18n="h_after">終演後 <span class="hint" data-i18n="hint_after">片付けと記録</span></h2>
+    <div class="grid">
+      <div class="step"><b class="k">1</b><h3 data-i18n="a1h">数字を残す</h3>
+        <p data-i18n="a1p"><code>/api/stats</code> でピーク端末数・ゾーン別ピーク・発火したcue数・稼働時間。スポンサーやレポートにそのまま使える実測値。</p></div>
+      <div class="step"><b class="k">2</b><h3 data-i18n="a2h">状態を控える</h3>
+        <p data-i18n="a2p">STATE を EXPORT。次回同じ構成で始められる。別会場へ移すときは IMPORT で再配信。</p></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="a3h">片付ける</h3>
+        <p data-i18n="a3p">箱の電源を落とすだけ。設定はSDに残る。DAC・スピーカー・LANケーブルを箱ごとにまとめて戻す。</p></div>
+    </div>
+  </section>
+
+  <section class="blk" id="trouble">
+    <h2 data-i18n="h_trouble">トラブル早見 <span class="hint" data-i18n="hint_trouble">症状 → 原因 → 一手</span></h2>
+    <div class="scroll"><table class="s-table">
+      <tr><th data-i18n="tr_h1">症状</th><th data-i18n="tr_h2">よくある原因</th><th data-i18n="tr_h3">一手</th></tr>
+      <tr><td data-i18n="tr1s">音が二重に聞こえる(フラム)</td><td data-i18n="tr1c">ゾーン距離が実際と違う / ALIGN 未調整</td><td data-i18n="tr1a">距離を実測で入れ直し、クリックで ALIGN を ±1ms まで</td></tr>
+      <tr><td data-i18n="tr2s">接続は増えるが鳴らない</td><td data-i18n="tr2c">端末の AudioContext が suspended(タップ前・サイレント・ロック)</td><td data-i18n="tr2a">観客に ▶ を促す。DEVICES の ctx suspended を数える</td></tr>
+      <tr><td data-i18n="tr3s">一部の箱が鳴らない</td><td data-i18n="tr3c">DAC未検出 / ゾーン未割当 / 箱がstale</td><td data-i18n="tr3a">NODES で stale と音声デバイスを確認 → ASSIGN し直す</td></tr>
+      <tr><td data-i18n="tr4s">サーバが落ちた</td><td data-i18n="tr4c">ノートPCのスリープ・電源・クラッシュ</td><td data-i18n="tr4a">Pi運用なら15〜20秒で自動引継ぎ。ノート運用なら予備で STATE IMPORT</td></tr>
+      <tr><td data-i18n="tr5s">スマホが繋がらない</td><td data-i18n="tr5c">箱のAPの上限(約20–30台)</td><td data-i18n="tr5a">観客は LTE+クラウド or 会場Wi-Fiへ。箱のAPはスタッフ用</td></tr>
+      <tr><td data-i18n="tr6s">Dante の音が来ない</td><td data-i18n="tr6c">AES67モードOFF / IGMP未許可 / 別VLAN</td><td data-i18n="tr6a"><code>--sap</code> で見えるか確認。見えなければネットワーク担当へ</td></tr>
+      <tr><td data-i18n="tr7s">OSC が効かない</td><td data-i18n="tr7c"><code>SOLUNA_OSC_PORT</code> 未設定 / 別VLAN / 宛先違い</td><td data-i18n="tr7a">環境変数付きで再起動。卓の宛先IP:portを確認</td></tr>
+      <tr><td data-i18n="tr8s">灯体が動かない</td><td data-i18n="tr8c">Art-Net/sACN未設定 / universe違い / パッチ違い</td><td data-i18n="tr8a"><code>SOLUNA_ARTNET</code>/<code>SOLUNA_SACN</code> と <code>SOLUNA_DMX_FIXTURES</code> を合わせる</td></tr>
+      <tr><td data-i18n="tr9s">映像がずれる</td><td data-i18n="tr9c">音と映像を1ファイルで再生している</td><td data-i18n="tr9a">音=mp3 / 映像=mp4(ミュート)の2ファイル構成にする</td></tr>
+    </table></div>
+  </section>
+
+  <section class="blk" id="limits">
+    <h2 data-i18n="h_limits">正直な制約 <span class="hint" data-i18n="hint_limits">できないこと・未検証のこと</span></h2>
+    <p class="lead" data-i18n="limits_lead">本番で期待値を外さないために、<b>できないこと</b>を先に共有する。</p>
+    <div class="grid">
+      <div class="step"><b class="k">!</b><h3 data-i18n="l1h">音質は箱とスピーカー次第</h3><p data-i18n="l1p">15m格子の小型SPは「どこでも明瞭」。20kWのサブウォールではない。低音の量が必要なら既存PAと併用する。</p></div>
+      <div class="step"><b class="k">!</b><h3 data-i18n="l2h">iOS はロックで止まる</h3><p data-i18n="l2p">Web版は画面ロックで音が止まる(ネイティブ版は継続)。観客には画面オンを案内。</p></div>
+      <div class="step"><b class="k">!</b><h3 data-i18n="l3h">LTE は主音響に粗い</h3><p data-i18n="l3p">±10〜20ms。主音響は有線の Pi ノード、スマホは演出・光・映像に使う。</p></div>
+      <div class="step"><b class="k">!</b><h3 data-i18n="l4h">実機の初回は未検証の領域がある</h3><p data-i18n="l4p">Dante/LTC/照明卓/灯体は合成信号で検証済みだが実機接続は初回。屋外GPS精度・実iPhone多台数も未実施。初回は余裕のある lead で。</p></div>
+    </div>
+    <div class="note" data-i18n="limits_note"><b>規模の目安:</b> Pi 4 1台で 5,000 接続・CUE到達100%(開始ばらつき3.3秒 → その規模では lead ≥5秒)。2,000台なら0.9秒。LAN単一プロセスでは 10,000台を17秒で接続し、ばらつき791ms/猶予8秒。上限はサーバではなく<b>無線</b>。</div>
+  </section>
+
+  <section class="blk" id="urls">
+    <h2 data-i18n="h_urls">URL集 <span class="hint" data-i18n="hint_urls">当日使う画面</span></h2>
+    <div class="urls">
+      <a href="/admin"><b>FOH</b><span data-i18n="u_admin">管理画面。トークンで操作</span></a>
+      <a href="/dj"><b>DJ</b><span data-i18n="u_dj">配信元。トークンはDJ本人へ</span></a>
+      <a href="/screen"><b>SCREEN</b><span data-i18n="u_screen">投影用。1クリックで全画面</span></a>
+      <a href="/connect"><b>CONNECT</b><span data-i18n="u_connect">卓・Dante・OSC・灯体の繋ぎ方</span></a>
+      <a href="/guide"><b>GUIDE</b><span data-i18n="u_guide">全URL・QR・当日手順</span></a>
+      <a href="/flags"><b>FLAGS</b><span data-i18n="u_flags">ゾーン旗(A4)</span></a>
+      <a href="/flags?gate=1"><b>GATE</b><span data-i18n="u_gate">入場QR(A4)</span></a>
+      <a href="https://github.com/yukihamada/soluna-surround/tree/master/docs"><b>DOCS</b><span data-i18n="u_docs">standalone / integration / show-control / pi-box / field-test</span></a>
+    </div>
+    <div class="note" data-i18n="urls_note"><b>共有の線引き:</b> 管理トークン付きURLは主催・音響だけに。DJトークンはDJ本人だけに。<code>/preview</code> は音源の権利確認が済むまでの内部確認用で、外部に共有しない。</div>
+  </section>
+
+  <footer><span>SOLUNA Sound · MIT · <a href="https://github.com/yukihamada/soluna-surround">github.com/yukihamada/soluna-surround</a></span><span data-i18n="foot">位置情報は端末の中だけで使い、送信しません。</span></footer>
+</div>
+<script>
+const I18N = {
+  ja: {
+    title: 'SOLUNA Sound — 本番運用ガイド',
+    nav_about: 'サイト', nav_connect: '🔌 つなぐ', nav_foh: '🎚 FOH', nav_guide: '📋 URL集',
+    h1: '当日、この順番で動かす。',
+    lead: '設営から終演まで、制作チームが実際にやることを1枚に。誰が・何を・どの順番で・どこを見て判断するか。<b>迷ったらこのページの順番どおりに。</b>',
+    toc_roles: '役割と持ち物', toc_prep: '事前準備', toc_build: '設営', toc_check: 'サウンドチェック',
+    toc_show: '開場・本番', toc_after: '終演後', toc_trouble: 'トラブル早見', toc_limits: '正直な制約', toc_urls: 'URL集',
+    h_roles: '役割と持ち物 <span class="hint">誰が何を持つか</span>', hint_roles: '誰が何を持つか',
+    roles_lead: 'SOLUNA は<b>既存のPA・照明を置き換えない</b>。卓から1本もらい、客席のスマホと Pi スピーカーを同じ時計に乗せる。だから役割は「新しい操作卓を増やす」ではなく「いつもの担当に1つ持ち場を足す」。',
+    r1h: 'プロダクション / 主催',
+    r1a: '管理トークン(<code>SOLUNA_ADMIN</code>)の保管と、誰に渡すかの判断', r1b: 'セットリスト・曲・映像・ライトの最終確定',
+    r1c: 'ゾーン旗・入場QRの印刷(<code>/flags</code>)', r1d: '終演後の数字(<code>/api/stats</code>)をスポンサー/レポートへ',
+    r2h: 'FOH / 音響',
+    r2a: 'サーバのノートPC(またはPi)と会場LAN', r2b: '卓のaux/matrix 1本 → USB I/F → <code>source.py</code>',
+    r2c: '<b>ALIGN</b> で位相を追い込む(品質の要)', r2d: '本番は NEXT と MUTE、DEVICES の「鳴っている数」監視',
+    r3h: '照明 / 映像 / 制御',
+    r3a: 'OSC で cue(<code>/soluna/cue</code> <code>/go</code> <code>/light</code>)', r3b: 'LTC / タイムコードで発火時刻を固定',
+    r3c: 'Art-Net / sACN で灯体を同じ時計に', r3d: '<code>/screen</code> のノートをHDMIで投影',
+    r4h: 'ステージクルー',
+    r4a: 'Pi 箱の配置・電源・DAC/スピーカー接続', r4b: '箱のWi-Fi「SOLUNA」で <code>/setup</code>(SSH不要)',
+    r4c: 'ゾーン割当は FOH の NODES から(箱に保存される)', r4d: '「箱が点かない/鳴らない」の一次切り分け',
+    k_h1: '持ち物', k_h2: '数', k_h3: 'メモ',
+    k1c: '6–9 / 1ステージ', k1: '客席15m格子。1台が自動で時計の親、残りはスピーカー',
+    k2c: '1式', k2: '有線が最良(±1〜3ms)。箱同士のWi-Fiでも小規模なら可',
+    k3c: '1–2', k3: 'サーバ兼。予備は開演前に STATE を EXPORT しておく',
+    k4c: '1', k4: '入力1chで十分。Dante なら DVS / AVIO / AES67 モード',
+    k5c: 'ゾーン数+入場', k5: '<code>/flags</code> と <code>/flags?gate=1</code> からA4。背景グラフィックON',
+    k6c: '箱ごと', k6: '停電しても箱は勝手に復帰する(設定は箱に残る)',
+    h_prep: '事前準備 <span class="hint">前日まで</span>', hint_prep: '前日まで',
+    p1h: '素材を入れる',
+    p1a: '曲(mp3/aac)・映像(mp4)・音声(mp3)を <code>/admin</code> からアップ', p1b: '各曲の長さを測って保存(自動進行の基準)',
+    p1c: '大きな会場は <code>SOLUNA_ASSET_BASE</code> にCDN/R2を指定し <code>tools/r2-sync.sh</code> で同期',
+    p2h: 'セットリストを組む',
+    p2a: '1ステップ = 曲 + 映像 + ライトの束', p2b: '各ステップに光の見た目(パターン・2色・BPM)',
+    p2c: 'DJ 交代は <code>/dj</code> のトークン付きリンクを本人だけに渡す',
+    p3h: '箱を焼く',
+    p3a: '<code>tools/pi-flash.sh</code> で SD を焼く(設定不要)', p3b: 'FOH ノートを必ず親にするなら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定',
+    p3c: 'DAC は刺せば自動(USB &gt; I2S &gt; 内蔵)',
+    p4h: 'ネットワークを決める',
+    p4a: '箱は有線PoE、観客は LTE + クラウド or 会場Wi-Fi', p4b: '箱の自前APは約20–30台まで=スタッフ・DJ用',
+    p4c: 'Dante/AES67 を使うなら IGMP が通る VLAN の空きポートを1本',
+    p5h: '印刷',
+    p5a: 'ゾーン旗 <code>/flags</code>、入場QR <code>/flags?gate=1</code>', p5b: '旗は客席に置く位置とゾーン名を一致させる',
+    p5c: '入場QRは列の早い位置に(並んでいる間に音源を先読み)',
+    p6h: 'リハーサル',
+    p6a: '会場で ALIGN・ウォークテストを1回(実機の初回は必須)', p6b: '回線が不安なら <code>docs/field-test.md</code> の3キャリアテスト',
+    p6c: '予備Macへ STATE を EXPORT しておく',
+    h_build: '設営 <span class="hint">開場3時間前まで</span>', hint_build: '開場3時間前まで',
+    b1h: '箱を置く', b1p: '客席に15m格子で6–9台。ステージから遠い列ほど後ろへ。電源を入れ、約1分待つ。1台が自動で時計の親になり、残りはスピーカーになる。',
+    b2h: 'サーバを立てる', b2p: 'FOH ノートでサーバを起動し <code>/admin</code> を開く。Pi が親になる運用なら、どの箱の <code>.local:8900/admin</code> でも同じ画面。',
+    b3h: 'ゾーンを割り当てる', b3p: '<code>/admin</code> → NODES で各箱にゾーン(A=ステージ前 … F=最後方)、L/C/R、ゲインを ASSIGN。設定は箱に保存され、再接続でも再送される。',
+    b4h: '距離を入れる', b4p: 'ZONES に各ゾーンのステージ距離(m)を実測で入力。遅延は「距離÷343 + 15ms」で自動。またはステージ前で「現在地をステージに設定」→ 来場者はGPSで自動。',
+    h_check: 'サウンドチェック <span class="hint">開場90分前</span>', hint_check: '開場90分前',
+    c1h: '音を入れる', c1p: '卓の aux/matrix を1本、USB I/F 経由で <code>source.py</code> へ。融合は <code>--lead 0.08</code>(約80ms)。Dante は DVS/AVIO か AES67 モード。',
+    c2h: '位相を合わせる(要)', c2p: 'クリック/リムショットを会場PAとグリッドの両方から出し、<b>フラム(二重打ち)が消えるまで ALIGN を ±5 → ±1ms で追い込む</b>。ここが音の品質を決める。全端末に即時反映。',
+    c3h: '歩いて確かめる', c3p: 'ZONES の 🔊 でゾーン単体を鳴らし、歩いて確認。遠いゾーンが小さいなら gain(dB) で持ち上げる。機種差は来場者側の ±12dB スライダー。',
+    c4h: '先読みする', c4p: '開演30分前までに PRELOAD。DEVICES の <b>preloaded</b> が来場者数に近づくのを見る。FIRE 時のダウンロード集中をゼロにする。',
+    check_note: '<b>判断の目安:</b> 同期は LAN ±1〜3ms / LTE ±10〜20ms / Pi箱内 ±0.5ms。スマホは演出・光・映像まで。主音響は有線の Pi ノードが担う。',
+    h_show: '開場・本番 <span class="hint">ドアオープンから終演まで</span>', hint_show: 'ドアオープンから終演まで',
+    s1h: '入場', s1p: '入場QRを列の早い位置に。並んでいる間に音源が届き、中では通信なしで鳴る。観客は旗の近くでQRを読むだけ。',
+    s2h: '進行は NEXT だけ', s2p: 'SHOW パネルで <b>NEXT</b> を押すと全端末・全Piが同時に次のステップへ。AUTO をONにすれば曲が終わると自動で進む。単発は FIRE / LIGHT で割り込み。',
+    s3h: '止めるのは1操作', s3p: '<b>MUTE</b> がキルスイッチ。全端末が即無音になり、解除で元のゲインへ戻る(位相は保たれる)。ハードカットは STOP。',
+    s4h: '見る数字を決める', s4p: 'DEVICES で <b>playing</b>(実際に鳴っている台数)/ <b>failed</b> / <b>ctx suspended</b>(ロック・サイレントで無音の可能性)/ <b>battery&lt;20%</b>。接続数ではなく「鳴っている数」を見る。',
+    show_warn: '<b>iOS の注意:</b> Web版は画面ロックで音が止まる。観客には「画面はつけたまま」を案内し、放置時は自動暗転(45秒)で節電する。止まった端末は ctx suspended に出る。',
+    h_after: '終演後 <span class="hint">片付けと記録</span>', hint_after: '片付けと記録',
+    a1h: '数字を残す', a1p: '<code>/api/stats</code> でピーク端末数・ゾーン別ピーク・発火したcue数・稼働時間。スポンサーやレポートにそのまま使える実測値。',
+    a2h: '状態を控える', a2p: 'STATE を EXPORT。次回同じ構成で始められる。別会場へ移すときは IMPORT で再配信。',
+    a3h: '片付ける', a3p: '箱の電源を落とすだけ。設定はSDに残る。DAC・スピーカー・LANケーブルを箱ごとにまとめて戻す。',
+    h_trouble: 'トラブル早見 <span class="hint">症状 → 原因 → 一手</span>', hint_trouble: '症状 → 原因 → 一手',
+    tr_h1: '症状', tr_h2: 'よくある原因', tr_h3: '一手',
+    tr1s: '音が二重に聞こえる(フラム)', tr1c: 'ゾーン距離が実際と違う / ALIGN 未調整', tr1a: '距離を実測で入れ直し、クリックで ALIGN を ±1ms まで',
+    tr2s: '接続は増えるが鳴らない', tr2c: '端末の AudioContext が suspended(タップ前・サイレント・ロック)', tr2a: '観客に ▶ を促す。DEVICES の ctx suspended を数える',
+    tr3s: '一部の箱が鳴らない', tr3c: 'DAC未検出 / ゾーン未割当 / 箱がstale', tr3a: 'NODES で stale と音声デバイスを確認 → ASSIGN し直す',
+    tr4s: 'サーバが落ちた', tr4c: 'ノートPCのスリープ・電源・クラッシュ', tr4a: 'Pi運用なら15〜20秒で自動引継ぎ。ノート運用なら予備で STATE IMPORT',
+    tr5s: 'スマホが繋がらない', tr5c: '箱のAPの上限(約20–30台)', tr5a: '観客は LTE+クラウド or 会場Wi-Fiへ。箱のAPはスタッフ用',
+    tr6s: 'Dante の音が来ない', tr6c: 'AES67モードOFF / IGMP未許可 / 別VLAN', tr6a: '<code>--sap</code> で見えるか確認。見えなければネットワーク担当へ',
+    tr7s: 'OSC が効かない', tr7c: '<code>SOLUNA_OSC_PORT</code> 未設定 / 別VLAN / 宛先違い', tr7a: '環境変数付きで再起動。卓の宛先IP:portを確認',
+    tr8s: '灯体が動かない', tr8c: 'Art-Net/sACN未設定 / universe違い / パッチ違い', tr8a: '<code>SOLUNA_ARTNET</code>/<code>SOLUNA_SACN</code> と <code>SOLUNA_DMX_FIXTURES</code> を合わせる',
+    tr9s: '映像がずれる', tr9c: '音と映像を1ファイルで再生している', tr9a: '音=mp3 / 映像=mp4(ミュート)の2ファイル構成にする',
+    h_limits: '正直な制約 <span class="hint">できないこと・未検証のこと</span>', hint_limits: 'できないこと・未検証のこと',
+    limits_lead: '本番で期待値を外さないために、<b>できないこと</b>を先に共有する。',
+    l1h: '音質は箱とスピーカー次第', l1p: '15m格子の小型SPは「どこでも明瞭」。20kWのサブウォールではない。低音の量が必要なら既存PAと併用する。',
+    l2h: 'iOS はロックで止まる', l2p: 'Web版は画面ロックで音が止まる(ネイティブ版は継続)。観客には画面オンを案内。',
+    l3h: 'LTE は主音響に粗い', l3p: '±10〜20ms。主音響は有線の Pi ノード、スマホは演出・光・映像に使う。',
+    l4h: '実機の初回は未検証の領域がある', l4p: 'Dante/LTC/照明卓/灯体は合成信号で検証済みだが実機接続は初回。屋外GPS精度・実iPhone多台数も未実施。初回は余裕のある lead で。',
+    limits_note: '<b>規模の目安:</b> Pi 4 1台で 5,000 接続・CUE到達100%(開始ばらつき3.3秒 → その規模では lead ≥5秒)。2,000台なら0.9秒。LAN単一プロセスでは 10,000台を17秒で接続し、ばらつき791ms/猶予8秒。上限はサーバではなく<b>無線</b>。',
+    h_urls: 'URL集 <span class="hint">当日使う画面</span>', hint_urls: '当日使う画面',
+    u_admin: '管理画面。トークンで操作', u_dj: '配信元。トークンはDJ本人へ', u_screen: '投影用。1クリックで全画面',
+    u_connect: '卓・Dante・OSC・灯体の繋ぎ方', u_guide: '全URL・QR・当日手順', u_flags: 'ゾーン旗(A4)', u_gate: '入場QR(A4)',
+    u_docs: 'standalone / integration / show-control / pi-box / field-test',
+    urls_note: '<b>共有の線引き:</b> 管理トークン付きURLは主催・音響だけに。DJトークンはDJ本人だけに。<code>/preview</code> は音源の権利確認が済むまでの内部確認用で、外部に共有しない。',
+    brand: 'PRODUCTION RUNBOOK · 制作チーム用',
+    kit1: 'Pi 箱', kit2: 'PoE スイッチ + LAN', kit3: 'FOH ノート', kit4: 'USB オーディオI/F', kit5: '印刷物', kit6: '電源',
+    foot: '位置情報は端末の中だけで使い、送信しません。'
+  },
+  en: {
+    title: 'SOLUNA Sound — Production runbook',
+    nav_about: 'Site', nav_connect: '🔌 Connect', nav_foh: '🎚 FOH', nav_guide: '📋 URLs',
+    h1: 'On the day, run it in this order.',
+    lead: 'Everything the production team actually does, from load-in to load-out, on one page: who, what, in which order, and which number to watch. <b>If in doubt, follow the order here.</b>',
+    toc_roles: 'Roles & kit', toc_prep: 'Prep', toc_build: 'Load-in', toc_check: 'Sound check',
+    toc_show: 'Doors & show', toc_after: 'Load-out', toc_trouble: 'Troubleshooting', toc_limits: 'Honest limits', toc_urls: 'URLs',
+    h_roles: 'Roles & kit <span class="hint">who carries what</span>', hint_roles: 'who carries what',
+    roles_lead: 'SOLUNA <b>does not replace your PA or lighting</b>. It takes one feed from the desk and puts the crowd’s phones and the Pi speakers on the same clock. So the job is not “add another console” — it is “add one station to the crew you already have”.',
+    r1h: 'Production / promoter',
+    r1a: 'Hold the admin token (<code>SOLUNA_ADMIN</code>) and decide who gets it', r1b: 'Final sign-off on setlist, tracks, video, light',
+    r1c: 'Print zone flags and entrance QR (<code>/flags</code>)', r1d: 'Take the after-show numbers (<code>/api/stats</code>) into the sponsor report',
+    r2h: 'FOH / sound',
+    r2a: 'The server laptop (or Pi) and the venue LAN', r2b: 'One aux/matrix from the desk → USB I/F → <code>source.py</code>',
+    r2c: 'Dial phase with <b>ALIGN</b> (this is the quality)', r2d: 'On the night: NEXT and MUTE; watch “how many are really sounding” in DEVICES',
+    r3h: 'Lighting / video / show control',
+    r3a: 'Fire cues over OSC (<code>/soluna/cue</code> <code>/go</code> <code>/light</code>)', r3b: 'Lock fire times to LTC / timecode',
+    r3c: 'Put fixtures on the same clock via Art-Net / sACN', r3d: 'Project <code>/screen</code> from a laptop over HDMI',
+    r4h: 'Stage crew',
+    r4a: 'Place the Pi boxes, power, DAC and speaker', r4b: 'Join the box’s Wi-Fi “SOLUNA” → <code>/setup</code> (no SSH)',
+    r4c: 'Assign zones from NODES in FOH (saved on the box)', r4d: 'First-line triage for “box won’t boot / won’t sound”',
+    k_h1: 'Kit', k_h2: 'Count', k_h3: 'Notes',
+    k1c: '6–9 per stage', k1: 'A 15 m grid over the audience. One box becomes the clock, the rest are speakers',
+    k2c: '1 set', k2: 'Wired is best (±1–3 ms). Box-to-box Wi-Fi is fine for a small field',
+    k3c: '1–2', k3: 'Also the server. EXPORT STATE on the spare before doors',
+    k4c: '1', k4: 'One input channel is enough. Dante via DVS / AVIO / AES67 mode',
+    k5c: 'zones + gate', k5: 'A4 from <code>/flags</code> and <code>/flags?gate=1</code>. Turn on background graphics',
+    k6c: 'per box', k6: 'A power cut heals itself; settings stay on the box',
+    h_prep: 'Prep <span class="hint">before the day</span>', hint_prep: 'before the day',
+    p1h: 'Load the assets',
+    p1a: 'Upload tracks (mp3/aac), video (mp4), audio (mp3) in <code>/admin</code>', p1b: 'Measure and save each track’s length (drives auto-advance)',
+    p1c: 'For a big field set <code>SOLUNA_ASSET_BASE</code> to a CDN/R2 and sync with <code>tools/r2-sync.sh</code>',
+    p2h: 'Build the setlist',
+    p2a: 'One step = track + video + light', p2b: 'A light look per step (pattern, two colors, BPM)',
+    p2c: 'For a guest DJ, hand the tokenised <code>/dj</code> link to that person only',
+    p3h: 'Flash the boxes',
+    p3a: 'Flash SD cards with <code>tools/pi-flash.sh</code> (no config)', p3b: 'To always keep the FOH laptop as clock, pin <code>SERVER=ws://&lt;ip&gt;:8900</code>',
+    p3c: 'Any DAC is picked up automatically (USB &gt; I2S &gt; built-in)',
+    p4h: 'Decide the network',
+    p4a: 'Boxes on wired PoE; crowd on LTE + cloud or venue Wi-Fi', p4b: 'A box’s own AP holds ~20–30 devices — crew and DJ only',
+    p4c: 'For Dante/AES67, one free port on a VLAN where IGMP passes',
+    p5h: 'Print',
+    p5a: 'Zone flags <code>/flags</code>, entrance QR <code>/flags?gate=1</code>', p5b: 'Match each flag to where it sits and its zone name',
+    p5c: 'Put the entrance QR early in the queue (tracks download while people wait)',
+    p6h: 'Rehearse',
+    p6a: 'One ALIGN + walk-test at the venue (mandatory on first real rig)', p6b: 'If the network worries you, run the 3-carrier test in <code>docs/field-test.md</code>',
+    p6c: 'EXPORT STATE to the spare Mac',
+    h_build: 'Load-in <span class="hint">up to 3 h before doors</span>', hint_build: 'up to 3 h before doors',
+    b1h: 'Place the boxes', b1p: 'Six to nine boxes on a 15 m grid, farther rows farther back. Power on, wait ~1 min. One becomes the clock; the rest are speakers.',
+    b2h: 'Start the server', b2p: 'Start the server on the FOH laptop and open <code>/admin</code>. If a Pi is the clock, any box’s <code>.local:8900/admin</code> is the same console.',
+    b3h: 'Assign zones', b3p: 'In <code>/admin</code> → NODES, ASSIGN each box a zone (A = front … F = back), L/C/R and gain. It is saved on the box and re-sent on reconnect.',
+    b4h: 'Enter distances', b4p: 'In ZONES, enter each zone’s measured distance (m). Delay is “distance ÷ 343 + 15 ms” automatically. Or set the stage position once and let phones use GPS.',
+    h_check: 'Sound check <span class="hint">90 min before doors</span>', hint_check: '90 min before doors',
+    c1h: 'Feed it audio', c1p: 'One aux/matrix from the desk through a USB I/F into <code>source.py</code>. Fusion lead <code>--lead 0.08</code> (~80 ms). Dante via DVS/AVIO or AES67 mode.',
+    c2h: 'Align the phase (critical)', c2p: 'Play a click/rimshot through both the house PA and the grid, then <b>dial ALIGN from ±5 to ±1 ms until the flam disappears</b>. This sets the sound quality. It applies to every device at once.',
+    c3h: 'Walk it', c3p: 'Use 🔊 in ZONES to sound one zone, and walk it. Raise a far zone with gain (dB). Phone-to-phone differences are handled by the crowd-side ±12 dB slider.',
+    c4h: 'Preload', c4p: 'PRELOAD by 30 min before doors. Watch <b>preloaded</b> in DEVICES approach the crowd size. That removes the download spike at FIRE.',
+    check_note: '<b>What to expect:</b> sync is ±1–3 ms on a LAN, ±10–20 ms over LTE, ±0.5 ms inside a Pi box. Phones carry effects, light and video; wired Pi nodes carry the main sound.',
+    h_show: 'Doors & show <span class="hint">from doors to last track</span>', hint_show: 'from doors to last track',
+    s1h: 'Doors', s1p: 'Put the entrance QR early in the queue. Tracks arrive while people wait and play inside with zero traffic. The crowd just scans the flag nearest them.',
+    s2h: 'Advance with NEXT', s2p: 'Press <b>NEXT</b> in SHOW and every phone and Pi switches to the next step at once. Turn AUTO on and it advances when a track ends. One-offs: FIRE / LIGHT.',
+    s3h: 'One-action stop', s3p: '<b>MUTE</b> is the kill switch: silence everywhere at once, and release restores the exact gain (phase kept). Hard cut is STOP.',
+    s4h: 'Watch the right number', s4p: 'In DEVICES: <b>playing</b> (actually sounding) / <b>failed</b> / <b>ctx suspended</b> (locked or silent, may be mute) / <b>battery&lt;20%</b>. Watch “sounding”, not “connected”.',
+    show_warn: '<b>iOS note:</b> the web app stops audio when the screen locks. Tell the crowd to keep the screen on; idle screens auto-dim after 45 s to save battery. A stopped device shows up as ctx suspended.',
+    h_after: 'Load-out <span class="hint">pack down and record</span>', hint_after: 'pack down and record',
+    a1h: 'Keep the numbers', a1p: '<code>/api/stats</code> gives peak devices, peak per zone, cues fired and uptime — measured figures you can put straight into a sponsor report.',
+    a2h: 'Save the state', a2p: 'EXPORT STATE. Start the next show from the same setup; IMPORT re-broadcasts it at another venue.',
+    a3h: 'Pack down', a3p: 'Just power the boxes off; settings stay on the SD card. Coil each box’s DAC, speaker and LAN cable together.',
+    h_trouble: 'Troubleshooting <span class="hint">symptom → cause → first move</span>', hint_trouble: 'symptom → cause → first move',
+    tr_h1: 'Symptom', tr_h2: 'Usual cause', tr_h3: 'First move',
+    tr1s: 'Sound is doubled (flam)', tr1c: 'Zone distance wrong / ALIGN not dialled', tr1a: 'Re-enter measured distances; ALIGN to ±1 ms with a click',
+    tr2s: 'Connections rise but no sound', tr2c: 'Device AudioContext suspended (before tap, silent mode, locked)', tr2a: 'Prompt the crowd to tap ▶. Count ctx suspended in DEVICES',
+    tr3s: 'Some boxes are silent', tr3c: 'No DAC / zone unassigned / box stale', tr3a: 'Check stale and audio device in NODES → ASSIGN again',
+    tr4s: 'The server died', tr4c: 'Laptop sleep, power, crash', tr4a: 'On a Pi setup it takes over in 15–20 s; on a laptop, STATE IMPORT on the spare',
+    tr5s: 'Phones won’t connect', tr5c: 'Box AP limit (~20–30 devices)', tr5a: 'Crowd goes to LTE + cloud or venue Wi-Fi; the box AP is for crew',
+    tr6s: 'No audio from Dante', tr6c: 'AES67 mode off / IGMP blocked / wrong VLAN', tr6a: 'Check with <code>--sap</code>; if it is not listed, go to the network tech',
+    tr7s: 'OSC does nothing', tr7c: '<code>SOLUNA_OSC_PORT</code> unset / wrong VLAN / wrong destination', tr7a: 'Restart with the env var; check the console’s destination IP:port',
+    tr8s: 'Fixtures do nothing', tr8c: 'Art-Net/sACN unset / wrong universe / wrong patch', tr8a: 'Match <code>SOLUNA_ARTNET</code>/<code>SOLUNA_SACN</code> and <code>SOLUNA_DMX_FIXTURES</code>',
+    tr9s: 'Video drifts', tr9c: 'Audio and video in one file', tr9a: 'Use two files: audio = mp3, video = mp4 (muted)',
+    h_limits: 'Honest limits <span class="hint">what it cannot do, what is unverified</span>', hint_limits: 'what it cannot do, what is unverified',
+    limits_lead: 'So nobody expects the wrong thing on the night, here is <b>what it cannot do</b>, up front.',
+    l1h: 'Sound is the boxes and speakers', l1p: 'A 15 m grid of small speakers is clarity everywhere — not a 20 kW sub wall. If you need low-end weight, run it alongside the house PA.',
+    l2h: 'iOS stops on lock', l2p: 'The web app stops audio when the screen locks (the native app keeps going). Tell the crowd to keep the screen on.',
+    l3h: 'LTE is too loose for main sound', l3p: '±10–20 ms. Main sound is wired Pi nodes; phones do effects, light and video.',
+    l4h: 'Some first-rig things are unverified', l4p: 'Dante/LTC/lighting desks/fixtures are verified against synthetic signals but not yet on real hardware. Outdoor GPS accuracy and many real iPhones are untested. Start the first rig with a generous lead.',
+    limits_note: '<b>Scale:</b> one Pi 4 held 5,000 connections with 100% cue reach (3.3 s spread → use lead ≥5 s at that size); 2,000 → 0.9 s. A single LAN process connected 10,000 in 17 s with a 791 ms spread against an 8 s lead. The ceiling is the <b>radio</b>, not the server.',
+    h_urls: 'URLs <span class="hint">screens used on the day</span>', hint_urls: 'screens used on the day',
+    u_admin: 'FOH console. Operate with the token', u_dj: 'Broadcast source. Token goes to the DJ only', u_screen: 'Projection. One click, fullscreen',
+    u_connect: 'Desk, Dante, OSC, fixtures — how to connect', u_guide: 'All URLs, QR codes, day-of steps', u_flags: 'Zone flags (A4)', u_gate: 'Entrance QR (A4)',
+    u_docs: 'standalone / integration / show-control / pi-box / field-test',
+    urls_note: '<b>Who gets what:</b> tokenised admin URLs go to production and sound only; the DJ token to the DJ only. <code>/preview</code> is an internal check page until music rights are cleared — do not share it externally.',
+    brand: 'PRODUCTION RUNBOOK · for the crew',
+    kit1: 'Pi boxes', kit2: 'PoE switch + LAN', kit3: 'FOH laptop', kit4: 'USB audio I/F', kit5: 'Printouts', kit6: 'Power',
+    foot: 'Location is used only on your device and never sent.'
+  }
+};
+const qs = new URLSearchParams(location.search);
+let LANG = qs.get('lang') || localStorage.getItem('soluna_lang') || ((navigator.language||'ja').startsWith('ja') ? 'ja' : 'en');
+function apply(lang){
+  LANG = I18N[lang] ? lang : 'ja'; const T = I18N[LANG];
+  document.documentElement.lang = LANG; document.title = T.title;
+  document.querySelectorAll('[data-i18n]').forEach(el => { const k = el.dataset.i18n; if (T[k] != null) el.innerHTML = T[k]; });
+  document.getElementById('langJa').setAttribute('aria-pressed', LANG==='ja'); document.getElementById('langEn').setAttribute('aria-pressed', LANG==='en');
+  try { localStorage.setItem('soluna_lang', LANG); } catch(e) {}
+  const u = new URL(location); u.searchParams.set('lang', LANG); history.replaceState(null, '', u);
+}
+document.getElementById('langJa').onclick = () => apply('ja');
+document.getElementById('langEn').onclick = () => apply('en');
+apply(LANG);
+</script>
+<script defer src="https://enabler-analytics.fly.dev/t.js"></script>
+</body></html>
