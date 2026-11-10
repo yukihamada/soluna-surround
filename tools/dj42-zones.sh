@@ -3,7 +3,7 @@
 # 既定は Echoa Ridge の暫定距離。実区画図(site plan)が届いたら ZONES_M を書き換える。
 #
 # 使い方:
-#   SOLUNA_ADMIN=xxx BASE=https://soluna-sound.fly.dev ./tools/dj42-zones.sh
+#   SOLUNA_ADMIN=xxx BASE=https://sound.solun.art ./tools/dj42-zones.sh
 #   # 距離を上書き:
 #   SOLUNA_ADMIN=xxx BASE=... ZONES_M='{"A":0,"B":12,"C":26,"D":42,"E":60,"F":82}' ./tools/dj42-zones.sh
 set -euo pipefail

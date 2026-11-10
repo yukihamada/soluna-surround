@@ -13,10 +13,10 @@ devices on a LAN** (cloud path measured to ~3k from a single test IP).
 </p>
 
 <p align="center">
-  <a href="https://soluna-sound.fly.dev/?zone=A"><b>▶ Live demo</b></a> ·
-  <a href="https://soluna-sound.fly.dev/dj">DJ from your device</a> ·
-  <a href="https://soluna-sound.fly.dev/admin">FOH console</a> ·
-  <a href="https://soluna-sound.fly.dev/screen">Projector screen</a>
+  <a href="https://sound.solun.art/?zone=A"><b>▶ Live demo</b></a> ·
+  <a href="https://sound.solun.art/dj">DJ from your device</a> ·
+  <a href="https://sound.solun.art/admin">FOH console</a> ·
+  <a href="https://sound.solun.art/screen">Projector screen</a>
   <br><sub>MIT · one Python server process (aiohttp) · zero-dependency web clients · ja/en · PWA</sub>
 </p>
 
@@ -229,7 +229,7 @@ One design system for every surface — night sky, gold sun / pale moon, one obv
 <p align="center">
   <img src="docs/screens/connect-en.png" width="720" alt="/connect — how to plug SOLUNA into what you already run: chooser + 9 scenario cards with signal-flow diagrams, steps and commands">
 </p>
-<p align="center"><sub><a href="https://soluna-sound.fly.dev/connect">/connect</a> — pick your desk, cue source and fixtures; get the diagram, the steps and the exact commands (ja/en)</sub></p>
+<p align="center"><sub><a href="https://sound.solun.art/connect">/connect</a> — pick your desk, cue source and fixtures; get the diagram, the steps and the exact commands (ja/en)</sub></p>
 
 ## The three faces
 

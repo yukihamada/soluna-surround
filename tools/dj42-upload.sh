@@ -3,7 +3,7 @@
 # ローカルの assets/ は .gitignore 対象なので、本番はこのアップロードで届ける。
 #
 # 使い方:
-#   SOLUNA_ADMIN=xxx BASE=https://soluna-sound.fly.dev ./tools/dj42-upload.sh
+#   SOLUNA_ADMIN=xxx BASE=https://sound.solun.art ./tools/dj42-upload.sh
 set -euo pipefail
 BASE="${BASE:-http://127.0.0.1:8080}"
 ADMIN="${SOLUNA_ADMIN:?SOLUNA_ADMIN を設定してください}"
