@@ -66,6 +66,9 @@ STATE_FILE = os.path.join(DATA_DIR, "state.json")   # クラッシュセーフ: 
 # 音源のCDN/R2前置き: 設定すると端末は /assets/x を <ASSET_BASE>/x から取る
 # (5000台のPRELOADバーストを単一VMに当てない)。サーバ自身の /assets/ も残る。
 ASSET_BASE = (os.environ.get("SOLUNA_ASSET_BASE") or "").rstrip("/")
+# 公開URLの正本: QRや案内ページに載せるドメイン。未設定なら request.host(fly.dev等)。
+# 会場で配るQRが別ドメイン(fly.dev)を指す事故を防ぐため、本番は sound.solun.art を固定する。
+PUBLIC_BASE = (os.environ.get("SOLUNA_PUBLIC_BASE") or "").rstrip("/")
 STARTED_AT = time.time()
 VERSION = "v7"
 
@@ -176,11 +179,17 @@ def _pos_index(state, pos):
     return 0
 
 
+def _public_base(request):
+    """QR・案内ページに載せる公開URL。SOLUNA_PUBLIC_BASE があればそれを正とする。"""
+    return PUBLIC_BASE or f"https://{request.host}"
+
+
 def _config_msg(state):
     return json.dumps({"t": "config", "zones": state["zones"], "sr": state["sr"],
                        "base_ms": state["base_ms"], "geo": state["geo"],
                        "zone_gain_db": state.get("zone_gain_db") or {},
-                       "asset_base": ASSET_BASE or None, "ver": VERSION,
+                       "asset_base": ASSET_BASE or None, "public_base": PUBLIC_BASE or None,
+                       "ver": VERSION,
                        "net": state.get("net"), "preload": state.get("preload"),
                        "server_ms": now() * 1000.0})
 
@@ -1112,7 +1121,7 @@ async def api_dj42(request):
 async def flags_page(request):
     """A4印刷用のゾーン旗: 大きなゾーン文字+そのゾーン直行のQR。1ゾーン=1ページ。?gate=1 で入場QR。"""
     ch = request.query.get("ch", "festival")
-    base = request.query.get("base") or f"https://{request.host}"
+    base = request.query.get("base") or _public_base(request)
     zones = list(_chan(ch)["zones"].keys())
     try:
         import io
@@ -1233,7 +1242,7 @@ async def api_qr(request):
     ch = request.query.get("ch", "festival")
     zone = (request.query.get("zone") or "").upper()
     gate = request.query.get("gate") == "1"
-    base = f"https://{request.host}"
+    base = _public_base(request)
     q = []
     if gate:
         q.append("gate=1")
@@ -1260,7 +1269,7 @@ async def api_qr(request):
 async def guide_page(request):
     """全URL・使い方・QR・本番手順を1枚にまとめた案内ページ。
     トークン付きURLのQRは管理トークンで開いた時だけ出す(?token=… or ヘッダ)。"""
-    base = request.query.get("base") or f"https://{request.host}"
+    base = request.query.get("base") or _public_base(request)
     ch = request.query.get("ch", "festival")
     zones = list(_chan(ch)["zones"].keys())
 

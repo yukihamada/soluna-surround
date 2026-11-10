@@ -336,6 +336,7 @@ function undim(){ $('dim').classList.remove('on'); armDim(); }
 $('dim').addEventListener('click', undim);
 ['touchstart','pointerdown','keydown'].forEach(ev => document.addEventListener(ev, ()=>{ if (active) armDim(); }, {passive:true}));
 let cueSrc=null, cueGainNode=null, cueBuf=null, cueBufUrl=null, pendingCue=null, muted=false, liveGain=null;
+let publicBase=null;   // サーバconfigの公開URL(QR/シェアの正本)。未設定なら location.origin
 let cueSrcs=[], cueBufs=[];   // 方式C: 複数パート同時再生(ドラム+ベース等)のソース/バッファ
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;   // アクセシビリティ: 点滅/うねりを穏やかに
 
@@ -1037,6 +1038,7 @@ function connect(){
       if (m.t==='pong') onPong(m);
       else if (m.t==='config'){ zones=m.zones||zones; baseMs=m.base_ms||0;
         srvSr=m.sr||48000; stageGeo=m.geo||null; assetBase=m.asset_base||null;
+        publicBase=m.public_base||null;   // QR/シェアに載せる公開ドメイン(正本)
         zoneGainDb=m.zone_gain_db||{}; netInfo=m.net||null; renderZones(); renderNetHint();
         if (cueGainNode && pendingCue) cueGainNode.gain.value = (pendingCue.gain??1) * ($('vol').value/100) * levelGain();
         if (stageGeo && autoZone) startGeoWatch();
@@ -1140,7 +1142,7 @@ renderZones();
     // 今のゾーン(手動/自動)を渡す。GPS自動の人はGPSが優先されるので害はない
     if (ZONE && /^[A-Z]$/.test(ZONE)) p.set('zone', ZONE);
     const q = p.toString();
-    return location.origin + '/' + (q ? '?' + q : '');
+    return (publicBase || location.origin) + '/' + (q ? '?' + q : '');
   }
   function open(){
     const url = buildUrl();

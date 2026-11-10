@@ -6,6 +6,9 @@ primary_region = "lax"
 [env]
   # 音源とstate.jsonは volume(/data) へ → 再デプロイで曲もサウンドチェックも消えない
   SOLUNA_DATA_DIR = "/data"
+  # QR・案内ページ(/guide /flags /api/qr)に載せる公開ドメイン。
+  # 未設定だと request.host(fly.dev)になり、会場で配るQRが別ドメインを指す。
+  SOLUNA_PUBLIC_BASE = "https://sound.solun.art"
 
 [[mounts]]
   source = "soluna_data"
