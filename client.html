@@ -265,11 +265,32 @@ const I18N = {
         senseUnsupported:'🎤 No mic on this device — switched to the venue-synced light',
         waiting:'connected — waiting for sound', playing:'♪ playing', share:'📤 SHARE' },
 };
-const LANG = (qs.get('lang') || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
+const LANG_KEY = 'soluna_lang';
+const savedLang = (()=>{ try{ return localStorage.getItem(LANG_KEY); }catch(e){ return null; } })();
+const LANG = (qs.get('lang') || savedLang || navigator.language || 'ja').startsWith('ja') ? 'ja' : 'en';
+try { localStorage.setItem(LANG_KEY, LANG); } catch(e){}
 const T = I18N[LANG];
+document.documentElement.lang = LANG;
 document.querySelectorAll('[data-i18n]').forEach(el => {
   el.textContent = T[el.dataset.i18n] || el.textContent;
 });
+// 言語切替(全ページ共通の soluna_lang を更新して再読込)
+(()=>{
+  const b = document.createElement('button');
+  b.type = 'button'; b.setAttribute('aria-label','Language / 言語');
+  b.textContent = LANG === 'en' ? '🌐 日本語' : '🌐 English';
+  b.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:2147483000;'+
+    'padding:9px 14px;border-radius:999px;border:1px solid rgba(212,175,55,.5);'+
+    'background:rgba(20,12,16,.82);color:#f0d47a;font:600 13px/1 "IBM Plex Mono",ui-monospace,monospace;'+
+    'letter-spacing:.06em;cursor:pointer;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);'+
+    'box-shadow:0 6px 20px rgba(0,0,0,.35)';
+  b.onclick = ()=>{
+    const next = LANG === 'en' ? 'ja' : 'en';
+    try { localStorage.setItem(LANG_KEY, next); } catch(e){}
+    const u = new URL(location.href); u.searchParams.set('lang', next); location.href = u.toString();
+  };
+  document.body.appendChild(b);
+})();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(()=>{});
 
 // ---- スクリーンモード(/screen): プロジェクター/LEDウォール向け ----------------

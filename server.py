@@ -1210,9 +1210,10 @@ async def flags_page(request):
     @page{{size:A4 portrait;margin:0}}
   }}
 </style></head><body>
-<div class="toolbar"><div><b>SOLUNA · {title}</b> &nbsp; {n} 枚 · A4 縦 · 印刷ダイアログで「背景のグラフィック」をON</div>
+<div class="toolbar"><div><b>SOLUNA · {title}</b> &nbsp; {n} <span class="tb-help">枚 · A4 縦 · 印刷ダイアログで「背景のグラフィック」をON</span></div>
   <button onclick="window.print()">🖨 印刷 / Print</button></div>
 <div class="sheet">{"".join(f'<div class="slot">{pg}</div>' for pg in pages)}</div>
+<script src="/ui/i18n.js"></script>
 </body></html>'''
     return web.Response(text=html, content_type="text/html")
 
