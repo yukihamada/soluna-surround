@@ -1429,7 +1429,7 @@ async def guide_page(request):
       <tr><th>項目</th><th>値</th></tr>
       <tr><td>同期精度</td><td>LAN ±1〜3ms / LTE ±10〜20ms / Pi箱内 ±0.5ms</td></tr>
       <tr><td>自己復旧</td><td>サーバ強制終了から6秒 / 1台停止から15〜20秒で継続</td></tr>
-      <tr><td>同時接続</td><td>Pi1台で45,000・CUE到達100%</td></tr>
+      <tr><td>同時接続</td><td>LAN単一プロセスで10,000台(到達100%・開始一致) / Pi 4 1台で5,000台</td></tr>
       <tr><td>本番帯域</td><td>音は先に配る。鳴らす合図だけ配るので5,000台でも増えない</td></tr>
     </table>
   </section>
@@ -1914,6 +1914,10 @@ async def connect_page(request):
     return web.FileResponse(os.path.join(HERE, "connect.html"))
 
 
+async def production_page(request):
+    return web.FileResponse(os.path.join(HERE, "production.html"))
+
+
 async def admin_page(request):
     return web.FileResponse(os.path.join(HERE, "admin.html"))
 
@@ -2084,6 +2088,7 @@ def main():
         web.get("/admin", admin_page),
         web.get("/about", about_page),      # 製品サイト(何か・画面・つなぎ方・箱・数字)
         web.get("/connect", connect_page),  # 既存システムの繋げ方(卓/Dante/AES67/OSC/TC/Art-Net/Pi)
+        web.get("/production", production_page),  # 制作チーム向け本番運用ガイド(日英)
         web.get("/dj", dj_page),
         web.get("/preview", preview_page),  # DJ42セットリストの非公開プレビュー(映像+演出)
         web.get("/dj42", dj42_page),        # キー(dj42)で6曲を再生するスマホ用プレイヤー
