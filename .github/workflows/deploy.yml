@@ -29,6 +29,8 @@ jobs:
         run: python3 tests/test_box.py
       - name: test dj42 timeline + stems
         run: python3 tests/test_dj42_timeline.py
+      - name: test client mic sense (default mic + sync fallback)
+        run: python3 tests/test_client_sense.py
       - name: test Pi mesh
         run: if [ -f tests/test_mesh.py ]; then python3 tests/test_mesh.py; else echo "skip (not yet)"; fi
   deploy:

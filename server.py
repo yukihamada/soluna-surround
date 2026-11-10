@@ -1394,7 +1394,7 @@ async def guide_page(request):
     <h2>▶ 使い方<span class="hint">役割ごとに3ステップ</span></h2>
     <div class="steps">
       <div class="step"><b class="k">観客</b><h3>読み取って ▶ だけ</h3>
-        <ol><li>QRか {base} を開く</li><li>ゾーンを選ぶ(旗の近くなら自動)</li><li>「▶ 参加する」でその端末がスピーカーに</li></ol></div>
+        <ol><li>QRか {base} を開く</li><li>ゾーンを選ぶ(旗の近くなら自動)</li><li>「▶ 参加する」でその端末がスピーカーに</li><li>画面の色はマイクの音に反応(使えなければ会場と同期)</li></ol></div>
       <div class="step"><b class="k">DJ</b><h3>ON AIR で会場へ</h3>
         <ol><li>DJトークン付きURLを開く(自動保存)</li><li>マイク/ライン/ファイルを選ぶ</li><li>ON AIR。MUTEは即停止</li></ol></div>
       <div class="step"><b class="k">主催者</b><h3>曲を入れてAUTO</h3>
