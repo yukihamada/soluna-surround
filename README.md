@@ -46,7 +46,7 @@ same stack runs a festival.
         ▼                 ▼               ▼                  ▼
    audience phones   speaker nodes   /screen (Mac+HDMI)   Koe iOS app
    PWA, no install   play.py on Pi   projector / LED      background audio,
-   sound+light+video  ±1–3ms wired    wall, same clock     lock-screen safe
+   sound+light+video   or any laptop   wall, same clock    lock-screen safe
 ```
 
 **One server process is the single source of time.** Everything else — 10,000

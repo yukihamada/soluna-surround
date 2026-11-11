@@ -34,6 +34,9 @@
   .note b{color:var(--txt)}
   .warn{border-left:2px solid var(--bad);padding-left:12px;color:var(--dim);font-size:.86rem;margin-top:14px;line-height:1.7}
   .warn b{color:#ff9a9a}
+  .opt{display:inline-block;font-family:var(--mono);font-size:.6rem;letter-spacing:.12em;padding:1px 6px;border:1px solid var(--line);border-radius:20px;color:var(--dim);vertical-align:middle;margin-left:4px}
+  .beta{border-left:2px solid #d9a441;background:rgba(217,164,65,.06);padding:10px 12px;margin-top:12px;border-radius:4px;color:var(--dim);font-size:.84rem;line-height:1.7}
+  .beta b{color:#e8c07a}
   pre{background:#000;color:#e8dcc4;font-family:var(--mono);font-size:.76rem;line-height:1.6;padding:12px 14px;border-radius:10px;overflow-x:auto;margin:12px 0 0;border:1px solid var(--line)}
   pre .c{color:#8a7d6a}
   table.s-table{width:100%;border-collapse:collapse;font-size:.86rem}
@@ -88,6 +91,7 @@
   <section class="blk" id="roles">
     <h2 data-i18n="h_roles">役割と持ち物 <span class="hint" data-i18n="hint_roles">誰が何を持つか</span></h2>
     <p class="lead" data-i18n="roles_lead">SOLUNA は<b>既存のPA・照明を置き換えない</b>。卓から1本もらい、客席のスマホと Pi スピーカーを同じ時計に乗せる。だから役割は「新しい操作卓を増やす」ではなく「いつもの担当に1つ持ち場を足す」。</p>
+    <div class="note" data-i18n="roles_pi_note"><b>Pi は必須ではない。</b>サーバはノートPC1台で動き、音声出力のある端末(ノートPC・小型PC・会場のPC)は <code>play.py</code> でスピーカーノードにできる。Pi 箱は「ゼロ設定で自動復帰する客席スピーカー」を増やすための<b>選択肢</b>。Pi なしでも、既存PA ＋ スマホ演出層 ＋ ノート数台のノードで本番は成立する。</div>
     <div class="grid">
       <div class="step"><b class="k">P</b><h3 data-i18n="r1h">プロダクション / 主催</h3>
         <ul><li data-i18n="r1a">管理トークン(<code>SOLUNA_ADMIN</code>)の保管と、誰に渡すかの判断</li><li data-i18n="r1b">セットリスト・曲・映像・ライトの最終確定</li><li data-i18n="r1c">ゾーン旗・入場QRの印刷(<code>/flags</code>)</li><li data-i18n="r1d">終演後の数字(<code>/api/stats</code>)をスポンサー/レポートへ</li></ul></div>
@@ -100,7 +104,8 @@
     </div>
     <div class="scroll" style="margin-top:16px"><table class="s-table">
       <tr><th data-i18n="k_h1">持ち物</th><th data-i18n="k_h2">数</th><th data-i18n="k_h3">メモ</th></tr>
-      <tr><td data-i18n="kit1">Pi 箱</td><td data-i18n="k1c">6–9 / 1ステージ</td><td data-i18n="k1">客席15m格子。1台が自動で時計の親、残りはスピーカー</td></tr>
+      <tr><td data-i18n="kit0">サーバPC(ノート)</td><td data-i18n="k0c">1–2</td><td data-i18n="k0">Pi なし運用の主役。<code>pip install aiohttp</code> だけで起動。予備は STATE EXPORT で温存</td></tr>
+      <tr><td data-i18n="kit1">Pi 箱 <span class="opt" data-i18n="opt_tag">任意</span></td><td data-i18n="k1c">0–9 / 1ステージ</td><td data-i18n="k1">客席15m格子に置くと強い。無くてもノートPC/小型PCを <code>play.py</code> ノードにして鳴らせる</td></tr>
       <tr><td data-i18n="kit2">PoE スイッチ + LAN</td><td data-i18n="k2c">1式</td><td data-i18n="k2">有線が最良(±1〜3ms)。箱同士のWi-Fiでも小規模なら可</td></tr>
       <tr><td data-i18n="kit3">FOH ノート</td><td data-i18n="k3c">1–2</td><td data-i18n="k3">サーバ兼。予備は開演前に STATE を EXPORT しておく</td></tr>
       <tr><td data-i18n="kit4">USB オーディオI/F</td><td data-i18n="k4c">1</td><td data-i18n="k4">入力1chで十分。Dante なら DVS / AVIO / AES67 モード</td></tr>
@@ -116,8 +121,8 @@
         <ul><li data-i18n="p1a">曲(mp3/aac)・映像(mp4)・音声(mp3)を <code>/admin</code> からアップ</li><li data-i18n="p1b">各曲の長さを測って保存(自動進行の基準)</li><li data-i18n="p1c">大きな会場は <code>SOLUNA_ASSET_BASE</code> にCDN/R2を指定し <code>tools/r2-sync.sh</code> で同期</li></ul></div>
       <div class="step"><b class="k">2</b><h3 data-i18n="p2h">セットリストを組む</h3>
         <ul><li data-i18n="p2a">1ステップ = 曲 + 映像 + ライトの束</li><li data-i18n="p2b">各ステップに光の見た目(パターン・2色・BPM)</li><li data-i18n="p2c">DJ 交代は <code>/dj</code> のトークン付きリンクを本人だけに渡す</li></ul></div>
-      <div class="step"><b class="k">3</b><h3 data-i18n="p3h">箱を焼く</h3>
-        <ul><li data-i18n="p3a"><code>tools/pi-flash.sh</code> で SD を焼く(設定不要)</li><li data-i18n="p3b">FOH ノートを必ず親にするなら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定</li><li data-i18n="p3c">DAC は刺せば自動(USB &gt; I2S &gt; 内蔵)</li></ul></div>
+      <div class="step"><b class="k">3</b><h3 data-i18n="p3h">箱を焼く(またはノードPCを用意)</h3>
+        <ul><li data-i18n="p3a"><b>Pi を使う場合:</b> <code>tools/pi-flash.sh</code> で SD を焼く(設定不要)</li><li data-i18n="p3d"><b>Pi なし:</b> 音声出力のあるノート/小型PCに <code>pip install sounddevice websockets numpy</code> ＋ ffmpeg を入れ、<code>python3 play.py C --server ws://&lt;サーバIP&gt;:8900</code> でスピーカーノード化</li><li data-i18n="p3b">FOH ノートを必ず親にするなら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定</li><li data-i18n="p3c">DAC は刺せば自動(USB &gt; I2S &gt; 内蔵)</li></ul></div>
       <div class="step"><b class="k">4</b><h3 data-i18n="p4h">ネットワークを決める</h3>
         <ul><li data-i18n="p4a">箱は有線PoE、観客は LTE + クラウド or 会場Wi-Fi</li><li data-i18n="p4b">箱の自前APは約20–30台まで=スタッフ・DJ用</li><li data-i18n="p4c">Dante/AES67 を使うなら IGMP が通る VLAN の空きポートを1本</li></ul></div>
       <div class="step"><b class="k">5</b><h3 data-i18n="p5h">印刷</h3>
@@ -148,12 +153,9 @@ SOLUNA_OSC_PORT=9000 SOLUNA_ARTNET=192.168.1.255:0 python3 server.py</pre></div>
   <section class="blk" id="check">
     <h2 data-i18n="h_check">サウンドチェック <span class="hint" data-i18n="hint_check">開場90分前</span></h2>
     <div class="grid">
-      <div class="step"><b class="k">1</b><h3 data-i18n="c1h">音を入れる</h3>
-        <p data-i18n="c1p">卓の aux/matrix を1本、USB I/F 経由で <code>source.py</code> へ。融合は <code>--lead 0.08</code>(約80ms)。Dante は DVS/AVIO か AES67 モード。</p>
-        <pre>python3 source.py --input "Scarlett 2i2" --lead 0.08 --server ws://127.0.0.1:8900
-<span class="c"># AES67 / Dante(AES67 mode)</span>
-python3 source.py --sap
-python3 source.py --aes67 auto --lead 0.08</pre></div>
+      <div class="step"><b class="k">1</b><h3 data-i18n="c1h">音を入れる(標準は CUE)</h3>
+        <p data-i18n="c1p"><b>標準は CUE:</b> 曲を事前にアップし、各端末が同じ時計で再生する。帯域は配布時だけで、本番中の音声ストリームは無い。これが最も安定する既定の運用。</p>
+        <div class="beta" data-i18n="live_beta"><b>β・オプション: ライブ配信(LIVE)</b> — 卓の音をリアルタイムに全端末へ流す <code>source.py</code> 経路。1端末あたり約1.5Mbit/s を消費し、有線ノード向け。実機での運用は発展途上なので、必要な時だけ有効化する。<br><code>python3 source.py --input "Scarlett 2i2" --lead 0.08 --server ws://127.0.0.1:8900</code>　Dante は DVS/AVIO か AES67 モード(<code>--sap</code> / <code>--aes67 auto</code>)。</div></div>
       <div class="step"><b class="k">2</b><h3 data-i18n="c2h">位相を合わせる(要)</h3>
         <p data-i18n="c2p">クリック/リムショットを会場PAとグリッドの両方から出し、<b>フラム(二重打ち)が消えるまで ALIGN を ±5 → ±1ms で追い込む</b>。ここが音の品質を決める。全端末に即時反映。</p></div>
       <div class="step"><b class="k">3</b><h3 data-i18n="c3h">歩いて確かめる</h3>
@@ -214,6 +216,7 @@ python3 source.py --aes67 auto --lead 0.08</pre></div>
       <div class="step"><b class="k">!</b><h3 data-i18n="l1h">音質は箱とスピーカー次第</h3><p data-i18n="l1p">15m格子の小型SPは「どこでも明瞭」。20kWのサブウォールではない。低音の量が必要なら既存PAと併用する。</p></div>
       <div class="step"><b class="k">!</b><h3 data-i18n="l2h">iOS はロックで止まる</h3><p data-i18n="l2p">Web版は画面ロックで音が止まる(ネイティブ版は継続)。観客には画面オンを案内。</p></div>
       <div class="step"><b class="k">!</b><h3 data-i18n="l3h">LTE は主音響に粗い</h3><p data-i18n="l3p">±10〜20ms。主音響は有線の Pi ノード、スマホは演出・光・映像に使う。</p></div>
+      <div class="step"><b class="k">!</b><h3 data-i18n="l5h">ライブ配信(LIVE)はβ</h3><p data-i18n="l5p">卓の音をリアルタイム配信する LIVE は発展途上。1端末約1.5Mbit/s を消費するため有線ノード向け。既定は CUE(事前配布)を使い、LIVE は必要時だけオプションで有効化する。</p></div>
       <div class="step"><b class="k">!</b><h3 data-i18n="l4h">実機の初回は未検証の領域がある</h3><p data-i18n="l4p">Dante/LTC/照明卓/灯体は合成信号で検証済みだが実機接続は初回。屋外GPS精度・実iPhone多台数も未実施。初回は余裕のある lead で。</p></div>
     </div>
     <div class="note" data-i18n="limits_note"><b>規模の目安:</b> Pi 4 1台で 5,000 接続・CUE到達100%(開始ばらつき3.3秒 → その規模では lead ≥5秒)。2,000台なら0.9秒。LAN単一プロセスでは 10,000台を17秒で接続し、ばらつき791ms/猶予8秒。上限はサーバではなく<b>無線</b>。</div>
@@ -247,6 +250,7 @@ const I18N = {
     toc_show: '開場・本番', toc_after: '終演後', toc_trouble: 'トラブル早見', toc_limits: '正直な制約', toc_urls: 'URL集',
     h_roles: '役割と持ち物 <span class="hint">誰が何を持つか</span>', hint_roles: '誰が何を持つか',
     roles_lead: 'SOLUNA は<b>既存のPA・照明を置き換えない</b>。卓から1本もらい、客席のスマホと Pi スピーカーを同じ時計に乗せる。だから役割は「新しい操作卓を増やす」ではなく「いつもの担当に1つ持ち場を足す」。',
+    roles_pi_note: '<b>Pi は必須ではない。</b>サーバはノートPC1台で動き、音声出力のある端末(ノートPC・小型PC・会場のPC)は <code>play.py</code> でスピーカーノードにできる。Pi 箱は「ゼロ設定で自動復帰する客席スピーカー」を増やすための<b>選択肢</b>。Pi なしでも、既存PA ＋ スマホ演出層 ＋ ノート数台のノードで本番は成立する。',
     r1h: 'プロダクション / 主催',
     r1a: '管理トークン(<code>SOLUNA_ADMIN</code>)の保管と、誰に渡すかの判断', r1b: 'セットリスト・曲・映像・ライトの最終確定',
     r1c: 'ゾーン旗・入場QRの印刷(<code>/flags</code>)', r1d: '終演後の数字(<code>/api/stats</code>)をスポンサー/レポートへ',
@@ -260,7 +264,8 @@ const I18N = {
     r4a: 'Pi 箱の配置・電源・DAC/スピーカー接続', r4b: '箱のWi-Fi「SOLUNA」で <code>/setup</code>(SSH不要)',
     r4c: 'ゾーン割当は FOH の NODES から(箱に保存される)', r4d: '「箱が点かない/鳴らない」の一次切り分け',
     k_h1: '持ち物', k_h2: '数', k_h3: 'メモ',
-    k1c: '6–9 / 1ステージ', k1: '客席15m格子。1台が自動で時計の親、残りはスピーカー',
+    kit0: 'サーバPC(ノート)', k0c: '1–2', k0: 'Pi なし運用の主役。<code>pip install aiohttp</code> だけで起動。予備は STATE EXPORT で温存',
+    kit1: 'Pi 箱 <span class="opt">任意</span>', opt_tag: '任意', k1c: '0–9 / 1ステージ', k1: '客席15m格子に置くと強い。無くてもノートPC/小型PCを <code>play.py</code> ノードにして鳴らせる',
     k2c: '1式', k2: '有線が最良(±1〜3ms)。箱同士のWi-Fiでも小規模なら可',
     k3c: '1–2', k3: 'サーバ兼。予備は開演前に STATE を EXPORT しておく',
     k4c: '1', k4: '入力1chで十分。Dante なら DVS / AVIO / AES67 モード',
@@ -273,8 +278,8 @@ const I18N = {
     p2h: 'セットリストを組む',
     p2a: '1ステップ = 曲 + 映像 + ライトの束', p2b: '各ステップに光の見た目(パターン・2色・BPM)',
     p2c: 'DJ 交代は <code>/dj</code> のトークン付きリンクを本人だけに渡す',
-    p3h: '箱を焼く',
-    p3a: '<code>tools/pi-flash.sh</code> で SD を焼く(設定不要)', p3b: 'FOH ノートを必ず親にするなら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定',
+    p3h: '箱を焼く(またはノードPCを用意)',
+    p3a: '<b>Pi を使う場合:</b> <code>tools/pi-flash.sh</code> で SD を焼く(設定不要)', p3d: '<b>Pi なし:</b> 音声出力のあるノート/小型PCに <code>pip install sounddevice websockets numpy</code> ＋ ffmpeg を入れ、<code>python3 play.py C --server ws://&lt;サーバIP&gt;:8900</code> でスピーカーノード化', p3b: 'FOH ノートを必ず親にするなら <code>SERVER=ws://&lt;ip&gt;:8900</code> で固定',
     p3c: 'DAC は刺せば自動(USB &gt; I2S &gt; 内蔵)',
     p4h: 'ネットワークを決める',
     p4a: '箱は有線PoE、観客は LTE + クラウド or 会場Wi-Fi', p4b: '箱の自前APは約20–30台まで=スタッフ・DJ用',
@@ -291,7 +296,8 @@ const I18N = {
     b3h: 'ゾーンを割り当てる', b3p: '<code>/admin</code> → NODES で各箱にゾーン(A=ステージ前 … F=最後方)、L/C/R、ゲインを ASSIGN。設定は箱に保存され、再接続でも再送される。',
     b4h: '距離を入れる', b4p: 'ZONES に各ゾーンのステージ距離(m)を実測で入力。遅延は「距離÷343 + 15ms」で自動。またはステージ前で「現在地をステージに設定」→ 来場者はGPSで自動。',
     h_check: 'サウンドチェック <span class="hint">開場90分前</span>', hint_check: '開場90分前',
-    c1h: '音を入れる', c1p: '卓の aux/matrix を1本、USB I/F 経由で <code>source.py</code> へ。融合は <code>--lead 0.08</code>(約80ms)。Dante は DVS/AVIO か AES67 モード。',
+    c1h: '音を入れる(標準は CUE)', c1p: '<b>標準は CUE:</b> 曲を事前にアップし、各端末が同じ時計で再生する。帯域は配布時だけで、本番中の音声ストリームは無い。これが最も安定する既定の運用。',
+    live_beta: '<b>β・オプション: ライブ配信(LIVE)</b> — 卓の音をリアルタイムに全端末へ流す <code>source.py</code> 経路。1端末あたり約1.5Mbit/s を消費し、有線ノード向け。実機での運用は発展途上なので、必要な時だけ有効化する。<br><code>python3 source.py --input "Scarlett 2i2" --lead 0.08 --server ws://127.0.0.1:8900</code>　Dante は DVS/AVIO か AES67 モード(<code>--sap</code> / <code>--aes67 auto</code>)。',
     c2h: '位相を合わせる(要)', c2p: 'クリック/リムショットを会場PAとグリッドの両方から出し、<b>フラム(二重打ち)が消えるまで ALIGN を ±5 → ±1ms で追い込む</b>。ここが音の品質を決める。全端末に即時反映。',
     c3h: '歩いて確かめる', c3p: 'ZONES の 🔊 でゾーン単体を鳴らし、歩いて確認。遠いゾーンが小さいなら gain(dB) で持ち上げる。機種差は来場者側の ±12dB スライダー。',
     c4h: '先読みする', c4p: '開演30分前までに PRELOAD。DEVICES の <b>preloaded</b> が来場者数に近づくのを見る。FIRE 時のダウンロード集中をゼロにする。',
@@ -322,6 +328,7 @@ const I18N = {
     l1h: '音質は箱とスピーカー次第', l1p: '15m格子の小型SPは「どこでも明瞭」。20kWのサブウォールではない。低音の量が必要なら既存PAと併用する。',
     l2h: 'iOS はロックで止まる', l2p: 'Web版は画面ロックで音が止まる(ネイティブ版は継続)。観客には画面オンを案内。',
     l3h: 'LTE は主音響に粗い', l3p: '±10〜20ms。主音響は有線の Pi ノード、スマホは演出・光・映像に使う。',
+    l5h: 'ライブ配信(LIVE)はβ', l5p: '卓の音をリアルタイム配信する LIVE は発展途上。1端末約1.5Mbit/s を消費するため有線ノード向け。既定は CUE(事前配布)を使い、LIVE は必要時だけオプションで有効化する。',
     l4h: '実機の初回は未検証の領域がある', l4p: 'Dante/LTC/照明卓/灯体は合成信号で検証済みだが実機接続は初回。屋外GPS精度・実iPhone多台数も未実施。初回は余裕のある lead で。',
     limits_note: '<b>規模の目安:</b> Pi 4 1台で 5,000 接続・CUE到達100%(開始ばらつき3.3秒 → その規模では lead ≥5秒)。2,000台なら0.9秒。LAN単一プロセスでは 10,000台を17秒で接続し、ばらつき791ms/猶予8秒。上限はサーバではなく<b>無線</b>。',
     h_urls: 'URL集 <span class="hint">当日使う画面</span>', hint_urls: '当日使う画面',
@@ -342,6 +349,7 @@ const I18N = {
     toc_show: 'Doors & show', toc_after: 'Load-out', toc_trouble: 'Troubleshooting', toc_limits: 'Honest limits', toc_urls: 'URLs',
     h_roles: 'Roles & kit <span class="hint">who carries what</span>', hint_roles: 'who carries what',
     roles_lead: 'SOLUNA <b>does not replace your PA or lighting</b>. It takes one feed from the desk and puts the crowd’s phones and the Pi speakers on the same clock. So the job is not “add another console” — it is “add one station to the crew you already have”.',
+    roles_pi_note: '<b>The Pi is not required.</b> The server runs on a single laptop, and any device with an audio output (laptop, mini PC, venue PC) becomes a speaker node via <code>play.py</code>. Pi boxes are an <b>option</b> for adding zero-config, self-healing audience speakers. Without any Pi, a show still works: existing PA + the phone effects layer + a few laptop nodes.',
     r1h: 'Production / promoter',
     r1a: 'Hold the admin token (<code>SOLUNA_ADMIN</code>) and decide who gets it', r1b: 'Final sign-off on setlist, tracks, video, light',
     r1c: 'Print zone flags and entrance QR (<code>/flags</code>)', r1d: 'Take the after-show numbers (<code>/api/stats</code>) into the sponsor report',
@@ -355,7 +363,8 @@ const I18N = {
     r4a: 'Place the Pi boxes, power, DAC and speaker', r4b: 'Join the box’s Wi-Fi “SOLUNA” → <code>/setup</code> (no SSH)',
     r4c: 'Assign zones from NODES in FOH (saved on the box)', r4d: 'First-line triage for “box won’t boot / won’t sound”',
     k_h1: 'Kit', k_h2: 'Count', k_h3: 'Notes',
-    k1c: '6–9 per stage', k1: 'A 15 m grid over the audience. One box becomes the clock, the rest are speakers',
+    kit0: 'Server laptop', k0c: '1–2', k0: 'The star of a Pi-free setup. Runs with just <code>pip install aiohttp</code>. Keep the spare warm with STATE EXPORT',
+    kit1: 'Pi boxes <span class="opt">optional</span>', opt_tag: 'optional', k1c: '0–9 per stage', k1: 'Strongest as a 15 m audience grid. Without them, turn laptops/mini PCs into <code>play.py</code> nodes',
     k2c: '1 set', k2: 'Wired is best (±1–3 ms). Box-to-box Wi-Fi is fine for a small field',
     k3c: '1–2', k3: 'Also the server. EXPORT STATE on the spare before doors',
     k4c: '1', k4: 'One input channel is enough. Dante via DVS / AVIO / AES67 mode',
@@ -368,8 +377,8 @@ const I18N = {
     p2h: 'Build the setlist',
     p2a: 'One step = track + video + light', p2b: 'A light look per step (pattern, two colors, BPM)',
     p2c: 'For a guest DJ, hand the tokenised <code>/dj</code> link to that person only',
-    p3h: 'Flash the boxes',
-    p3a: 'Flash SD cards with <code>tools/pi-flash.sh</code> (no config)', p3b: 'To always keep the FOH laptop as clock, pin <code>SERVER=ws://&lt;ip&gt;:8900</code>',
+    p3h: 'Flash the boxes (or set up laptop nodes)',
+    p3a: '<b>With Pi:</b> flash SD cards with <code>tools/pi-flash.sh</code> (no config)', p3d: '<b>Without Pi:</b> on any laptop/mini PC with an audio output, <code>pip install sounddevice websockets numpy</code> + ffmpeg, then <code>python3 play.py C --server ws://&lt;server-ip&gt;:8900</code> makes it a speaker node', p3b: 'To always keep the FOH laptop as clock, pin <code>SERVER=ws://&lt;ip&gt;:8900</code>',
     p3c: 'Any DAC is picked up automatically (USB &gt; I2S &gt; built-in)',
     p4h: 'Decide the network',
     p4a: 'Boxes on wired PoE; crowd on LTE + cloud or venue Wi-Fi', p4b: 'A box’s own AP holds ~20–30 devices — crew and DJ only',
@@ -386,7 +395,8 @@ const I18N = {
     b3h: 'Assign zones', b3p: 'In <code>/admin</code> → NODES, ASSIGN each box a zone (A = front … F = back), L/C/R and gain. It is saved on the box and re-sent on reconnect.',
     b4h: 'Enter distances', b4p: 'In ZONES, enter each zone’s measured distance (m). Delay is “distance ÷ 343 + 15 ms” automatically. Or set the stage position once and let phones use GPS.',
     h_check: 'Sound check <span class="hint">90 min before doors</span>', hint_check: '90 min before doors',
-    c1h: 'Feed it audio', c1p: 'One aux/matrix from the desk through a USB I/F into <code>source.py</code>. Fusion lead <code>--lead 0.08</code> (~80 ms). Dante via DVS/AVIO or AES67 mode.',
+    c1h: 'Feed it audio (CUE by default)', c1p: '<b>CUE is the default:</b> upload tracks ahead of time and every device plays them on the same clock. Bandwidth is only used at distribution — no audio stream during the show. This is the most reliable operating mode.',
+    live_beta: '<b>Beta · optional: live streaming (LIVE)</b> — the <code>source.py</code> path that streams the desk to every device in real time. It costs ~1.5 Mbit/s per device and is aimed at wired nodes. Real-rig use is still maturing, so enable it only when you need it.<br><code>python3 source.py --input "Scarlett 2i2" --lead 0.08 --server ws://127.0.0.1:8900</code>　Dante via DVS/AVIO or AES67 mode (<code>--sap</code> / <code>--aes67 auto</code>).',
     c2h: 'Align the phase (critical)', c2p: 'Play a click/rimshot through both the house PA and the grid, then <b>dial ALIGN from ±5 to ±1 ms until the flam disappears</b>. This sets the sound quality. It applies to every device at once.',
     c3h: 'Walk it', c3p: 'Use 🔊 in ZONES to sound one zone, and walk it. Raise a far zone with gain (dB). Phone-to-phone differences are handled by the crowd-side ±12 dB slider.',
     c4h: 'Preload', c4p: 'PRELOAD by 30 min before doors. Watch <b>preloaded</b> in DEVICES approach the crowd size. That removes the download spike at FIRE.',
@@ -417,6 +427,7 @@ const I18N = {
     l1h: 'Sound is the boxes and speakers', l1p: 'A 15 m grid of small speakers is clarity everywhere — not a 20 kW sub wall. If you need low-end weight, run it alongside the house PA.',
     l2h: 'iOS stops on lock', l2p: 'The web app stops audio when the screen locks (the native app keeps going). Tell the crowd to keep the screen on.',
     l3h: 'LTE is too loose for main sound', l3p: '±10–20 ms. Main sound is wired Pi nodes; phones do effects, light and video.',
+    l5h: 'Live streaming (LIVE) is beta', l5p: 'LIVE, which streams the desk in real time, is still maturing. It costs ~1.5 Mbit/s per device, so it is aimed at wired nodes. Use CUE (pre-distribution) by default and enable LIVE only as an option when needed.',
     l4h: 'Some first-rig things are unverified', l4p: 'Dante/LTC/lighting desks/fixtures are verified against synthetic signals but not yet on real hardware. Outdoor GPS accuracy and many real iPhones are untested. Start the first rig with a generous lead.',
     limits_note: '<b>Scale:</b> one Pi 4 held 5,000 connections with 100% cue reach (3.3 s spread → use lead ≥5 s at that size); 2,000 → 0.9 s. A single LAN process connected 10,000 in 17 s with a 791 ms spread against an 8 s lead. The ceiling is the <b>radio</b>, not the server.',
     h_urls: 'URLs <span class="hint">screens used on the day</span>', hint_urls: 'screens used on the day',
