@@ -458,13 +458,23 @@ async def run(args):
                 dev = int(dev) if dev is not None else None
             except ValueError:
                 pass
-            with sd.InputStream(samplerate=SR, channels=2, dtype="float32",
+            # 入力ch数は実デバイスに合わせる(モノラルの内蔵マイク等で
+            # channels=2 を強制すると PortAudioError -9998 で落ちる)。
+            try:
+                _info = sd.query_devices(dev, "input")
+                in_ch = max(1, int(_info.get("max_input_channels") or 1))
+            except Exception:
+                in_ch = 2
+            with sd.InputStream(samplerate=SR, channels=in_ch, dtype="float32",
                                 blocksize=FRAME, device=dev, callback=cb):
-                print(f"[source] LIVE input dev={dev or 'default'} "
+                print(f"[source] LIVE input dev={dev or 'default'} ch={in_ch} "
                       f"lead={args.lead or 'server default'} — Ctrl-C to stop.")
                 while True:
                     block2 = await asyncio.to_thread(q.get)
-                    Lc, Rc = block2[:, 0], block2[:, 1]
+                    if in_ch >= 2:
+                        Lc, Rc = block2[:, 0], block2[:, 1]
+                    else:                       # モノラル → L/R 同内容、C は平均
+                        Lc = Rc = block2[:, 0]
                     block = np.stack([Lc, Rc, 0.5 * (Lc + Rc)], axis=1)
                     i16 = (np.clip(block, -1, 1) * 32767).astype(np.int16)
                     await ws.send(pack_frame(seq, i16))
